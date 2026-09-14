@@ -1,0 +1,78 @@
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-anwar_fresh}
+      POSTGRES_USER: ${POSTGRES_USER:-anwar}
+      # Required. Set it in Dokploy's Environment tab (URL-safe characters only).
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: anwar-fresh-web:latest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      TZ: ${TZ:-Asia/Dhaka}
+      DATABASE_URL: postgres://${POSTGRES_USER:-anwar}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-anwar_fresh}
+
+      # Base URL used in password setup/reset emails, e.g. https://fresh.anwargroup.net
+      APP_URL: ${APP_URL:-}
+
+      # First Super Admin. While no active Super Admin exists, each start emails this address a
+      # fresh invitation (and prints the link to the logs). SUPER_ADMIN_PASSWORD (12+ chars)
+      # creates the account directly instead, for servers without email.
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
+      SUPER_ADMIN_NAME: ${SUPER_ADMIN_NAME:-}
+      SUPER_ADMIN_EMPLOYEE_ID: ${SUPER_ADMIN_EMPLOYEE_ID:-}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-}
+      # Hours a staff invitation link stays valid.
+      INVITE_TTL_HOURS: ${INVITE_TTL_HOURS:-72}
+
+      # Legacy: creates a System Admin directly. Prefer SUPER_ADMIN_EMAIL + invitations.
+      BOOTSTRAP_ADMIN_EMPLOYEE_ID: ${BOOTSTRAP_ADMIN_EMPLOYEE_ID:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+
+      # Email: Microsoft Graph if these are set...
+      MS_TENANT_ID: ${MS_TENANT_ID:-}
+      MS_CLIENT_ID: ${MS_CLIENT_ID:-}
+      MS_CLIENT_SECRET: ${MS_CLIENT_SECRET:-}
+      MS_SENDER_MAILBOX: ${MS_SENDER_MAILBOX:-}
+      # ...otherwise SMTP.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-false}
+      # Only for a local test inbox such as Mailpit. Leave false in production.
+      MAIL_CAPTURE: ${MAIL_CAPTURE:-false}
+      MAIL_FROM: ${MAIL_FROM:-no-reply@anwargroup.net}
+
+      # Demo employees, batches, orders and demo sign-in accounts. Keep false in production.
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-}
+    # No host port is published: Dokploy's Traefik routes the domain to port 3000.
+    # For local runs, docker-compose.override.yml publishes it.
+    expose:
+      - "3000"
+
+volumes:
+  db-data:

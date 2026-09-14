@@ -1,0 +1,32 @@
+# Local only: `docker compose up` merges this automatically.
+# Dokploy runs `docker compose -f docker-compose.yml`, so it ignores this file.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-anwar_local_dev}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+
+  # Catches every email the app sends. Inbox: http://localhost:8025
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "${MAILPIT_UI_PORT:-8025}:8025"
+      - "${MAILPIT_SMTP_PORT:-1025}:1025"
+
+  web:
+    depends_on:
+      mailpit:
+        condition: service_started
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-anwar}:${POSTGRES_PASSWORD:-anwar_local_dev}@db:5432/${POSTGRES_DB:-anwar_fresh}
+      APP_URL: http://localhost:${APP_PORT:-3000}
+      SMTP_HOST: mailpit
+      SMTP_PORT: 1025
+      # Mailpit is a test inbox: emails are recorded as "captured", never as delivered.
+      MAIL_CAPTURE: "true"
+      SEED_DEMO_DATA: "true"
+      DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo@12345}
+    ports:
+      - "${APP_PORT:-3000}:3000"
