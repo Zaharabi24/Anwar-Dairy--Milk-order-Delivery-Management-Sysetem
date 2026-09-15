@@ -196,6 +196,18 @@ directly, but new deployments shouldn't need them.
 The `db-data` volume persists across redeploys. Back it up with Dokploy's volume backups, or run
 `docker exec <db-container> pg_dump -U anwar anwar_fresh > backup.sql`.
 
+### Troubleshooting
+
+**`db` logs: "Database is uninitialized and superuser password is not specified"**, repeating as
+the container restarts. `POSTGRES_PASSWORD` isn't set in the **Environment** tab. Dokploy deploys
+only `docker-compose.yml`, which has no default password (the local one lives in
+`docker-compose.override.yml`). Set it (letters, digits, `-`, `_` only), save and redeploy.
+
+Postgres keeps the password from its first successful start. Changing `POSTGRES_PASSWORD` later
+doesn't change it in an existing `db-data` volume, and `web` then fails to connect. Either change
+it inside the database (`ALTER USER anwar PASSWORD '...'`) to match, or remove the volume if it
+holds no data.
+
 ## Environment variables
 
 | Variable | Default | Notes |
