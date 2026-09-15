@@ -1,4 +1,11 @@
-import { createFileRoute, Link, Outlet, redirect, useRouter, useRouterState } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useRouter,
+  useRouterState,
+} from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
@@ -17,7 +24,7 @@ import { getAppSnapshot } from "@/functions/app-data.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { ROLE_HOME, type RoleValue } from "@/lib/auth-constants";
 import { timeShort } from "@/lib/format";
-import logoAsset from "@/assets/anwar-organic-logo.png.asset.json";
+import logoUrl from "@/assets/anwar-organic-logo.png";
 import type { Role } from "@/lib/types";
 
 export const Route = createFileRoute("/app")({
@@ -37,11 +44,14 @@ export const Route = createFileRoute("/app")({
   component: AppLayout,
 });
 
-type NavItem = { label: string; to: string };
+/** `section` starts a labelled group in the sidebar (used for the Super Admin's combined menu). */
+type NavItem = { label: string; to: string; section?: string };
 
 const commonTail: NavItem[] = [{ label: "Notifications", to: "/app/notifications" }];
 
-const systemAdminNav: NavItem[] = [
+const reportsNav: NavItem = { label: "Reports", to: "/app/reports" };
+
+const systemAdminPages: NavItem[] = [
   { label: "Account Requests", to: "/app/admin/account-requests" },
   { label: "Accounts", to: "/app/admin/accounts" },
   { label: "Password Resets", to: "/app/admin/password-resets" },
@@ -50,8 +60,23 @@ const systemAdminNav: NavItem[] = [
   { label: "Delivery points", to: "/app/admin/delivery-points" },
   { label: "Settings", to: "/app/admin/settings" },
   { label: "Audit log", to: "/app/admin/audit-log" },
-  { label: "Reports", to: "/app/reports" },
 ];
+
+const operatorPages: NavItem[] = [
+  { label: "Dashboard", to: "/app/operator" },
+  { label: "New batch", to: "/app/operator/new-batch" },
+  { label: "Publish", to: "/app/operator/publish" },
+];
+
+const coordinatorPages: NavItem[] = [
+  { label: "Orders", to: "/app/orders" },
+  { label: "Fulfillment", to: "/app/fulfillment" },
+  { label: "Coupons", to: "/app/coupons" },
+  { label: "Collections", to: "/app/collections" },
+];
+
+const section = (name: string, items: NavItem[]): NavItem[] =>
+  items.map((item, i) => (i === 0 ? { ...item, section: name } : item));
 
 const navByRole: Record<Role, NavItem[]> = {
   Employee: [
@@ -59,31 +84,28 @@ const navByRole: Record<Role, NavItem[]> = {
     { label: "Book milk", to: "/app/order/new" },
     { label: "My orders", to: "/app/my-orders" },
   ],
-  "Factory Operator": [
-    { label: "Dashboard", to: "/app/operator" },
-    { label: "New batch", to: "/app/operator/new-batch" },
-    { label: "Publish", to: "/app/operator/publish" },
-    { label: "Reports", to: "/app/reports" },
+  "Factory Operator": [...operatorPages, reportsNav],
+  "Head Office Coordinator": [...coordinatorPages, reportsNav],
+  "System Admin": [...systemAdminPages, reportsNav],
+  // Super Admin oversees every staff area: its own team page, plus the System Admin,
+  // Factory Operator and Head Office Coordinator workspaces.
+  "Super Admin": [
+    ...section("Super Admin", [{ label: "Team & invitations", to: "/app/admin/team" }]),
+    ...section("System Admin", systemAdminPages),
+    ...section("Factory Operator", operatorPages),
+    ...section("Head Office Coordinator", coordinatorPages),
+    ...section("Insights", [reportsNav]),
   ],
-  "Head Office Coordinator": [
-    { label: "Orders", to: "/app/orders" },
-    { label: "Fulfillment", to: "/app/fulfillment" },
-    { label: "Coupons", to: "/app/coupons" },
-    { label: "Collections", to: "/app/collections" },
-    { label: "Reports", to: "/app/reports" },
-  ],
-  "System Admin": systemAdminNav,
-  // Super Admin sees everything a System Admin does, plus the staff team.
-  "Super Admin": [{ label: "Team & invitations", to: "/app/admin/team" }, ...systemAdminNav],
 };
 
 // Which active roles each area is for. This is UX only — the server checks permissions on every call.
-const COORDINATOR: RoleValue[] = ["head_office_coordinator"];
+const OPERATOR: RoleValue[] = ["factory_operator", "super_admin"];
+const COORDINATOR: RoleValue[] = ["head_office_coordinator", "super_admin"];
 const ADMINS: RoleValue[] = ["system_admin", "super_admin"];
 const routeRoles: Array<[prefix: string, roles: RoleValue[]]> = [
   ["/app/admin/team", ["super_admin"]],
   ["/app/admin", ADMINS],
-  ["/app/operator", ["factory_operator"]],
+  ["/app/operator", OPERATOR],
   ["/app/orders", COORDINATOR],
   ["/app/fulfillment", COORDINATOR],
   ["/app/coupons", COORDINATOR],
@@ -95,7 +117,9 @@ const routeRoles: Array<[prefix: string, roles: RoleValue[]]> = [
 ];
 
 function rolesFor(pathname: string): RoleValue[] | null {
-  const match = routeRoles.find(([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+  const match = routeRoles.find(
+    ([prefix]) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
   return match ? match[1] : null;
 }
 
@@ -129,7 +153,7 @@ const linkClass =
 function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2 px-2">
-      <img src={logoAsset.url} alt="Anwar Organic" width={40} height={40} className="h-10 w-auto" />
+      <img src={logoUrl} alt="Anwar Organic" width={50} height={48} className="h-12 w-auto" />
       <span className="font-display text-lg font-extrabold">Anwar Fresh</span>
     </Link>
   );
@@ -142,9 +166,16 @@ function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => 
         Home
       </Link>
       {[...items, ...commonTail].map((item) => (
-        <Link key={item.to} to={item.to} className={linkClass} onClick={onNavigate}>
-          {item.label}
-        </Link>
+        <div key={item.to} className="flex flex-col">
+          {item.section ? (
+            <p className="mt-4 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+              {item.section}
+            </p>
+          ) : null}
+          <Link to={item.to} className={linkClass} onClick={onNavigate}>
+            {item.label}
+          </Link>
+        </div>
       ))}
     </nav>
   );
@@ -171,9 +202,11 @@ function AppShell() {
     const warm = () => {
       for (const to of targets) void router.preloadRoute({ to }).catch(() => {});
     };
-    const idle = (window as unknown as {
-      requestIdleCallback?: (cb: () => void) => number;
-    }).requestIdleCallback;
+    const idle = (
+      window as unknown as {
+        requestIdleCallback?: (cb: () => void) => number;
+      }
+    ).requestIdleCallback;
     if (idle) {
       idle(warm);
       return;
@@ -277,9 +310,7 @@ function AppShell() {
                   </div>
                 ))}
                 {notifications.length === 0 ? (
-                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">
-                    Nothing yet
-                  </p>
+                  <p className="px-2 py-4 text-center text-sm text-muted-foreground">Nothing yet</p>
                 ) : null}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
@@ -319,7 +350,11 @@ function AppShell() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.12, ease: "easeOut" }}
           >
-            {permitted ? <Outlet /> : <NotAvailable home={ROLE_HOME[user?.activeRole ?? "employee"]} />}
+            {permitted ? (
+              <Outlet />
+            ) : (
+              <NotAvailable home={ROLE_HOME[user?.activeRole ?? "employee"]} />
+            )}
           </motion.div>
         </main>
       </div>

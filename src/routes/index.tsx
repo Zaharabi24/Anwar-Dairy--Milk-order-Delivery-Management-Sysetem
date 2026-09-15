@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, useInView, animate, useReducedMotion } from "framer-motion";
-import logoAsset from "@/assets/anwar-organic-logo.png.asset.json";
+import logoUrl from "@/assets/anwar-organic-logo.png";
 import { useEffect, useRef, useState } from "react";
 import {
   Factory,
@@ -58,13 +58,7 @@ function Nav() {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-28 max-w-6xl items-center justify-between px-5">
-        <img
-          src={logoAsset.url}
-          alt="Anwar Organic"
-          className="h-20 w-auto"
-          width={78}
-          height={80}
-        />
+        <img src={logoUrl} alt="Anwar Organic" className="h-20 w-auto" width={83} height={80} />
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
           <a href="#how-it-works" className="hover:text-foreground">
             How it works
@@ -144,11 +138,27 @@ function BatchWidget() {
 }
 
 const stages = [
-  { icon: Factory, title: "Factory", copy: "The dairy unit records what was produced this morning." },
-  { icon: Send, title: "Publish", copy: "The operator sets litres, rate and cut-off, then sends it out." },
-  { icon: ShoppingBasket, title: "Book", copy: "Employees pick a quantity; stock drops the moment they confirm." },
+  {
+    icon: Factory,
+    title: "Factory",
+    copy: "The dairy unit records what was produced this morning.",
+  },
+  {
+    icon: Send,
+    title: "Publish",
+    copy: "The operator sets litres, rate and cut-off, then sends it out.",
+  },
+  {
+    icon: ShoppingBasket,
+    title: "Book",
+    copy: "Employees pick a quantity; stock drops the moment they confirm.",
+  },
   { icon: Truck, title: "Deliver", copy: "Orders are packed and grouped by delivery point." },
-  { icon: PackageCheck, title: "Collect", copy: "Collection is marked and the day is reconciled at close." },
+  {
+    icon: PackageCheck,
+    title: "Collect",
+    copy: "Collection is marked and the day is reconciled at close.",
+  },
 ];
 
 function HowItWorks() {
@@ -195,7 +205,11 @@ const roleCards = [
     copy: "Book your litres before the cut-off and see your order code instantly.",
     wide: true,
   },
-  { icon: Factory, title: "Factory Operator", copy: "Publish today's batch and watch it fill up live." },
+  {
+    icon: Factory,
+    title: "Factory Operator",
+    copy: "Publish today's batch and watch it fill up live.",
+  },
   {
     icon: ClipboardList,
     title: "Head Office Coordinator",
@@ -232,7 +246,17 @@ function Capabilities() {
   );
 }
 
-function Stat({ value, suffix, prefix, label }: { value: number; suffix?: string; prefix?: string; label: string }) {
+function Stat({
+  value,
+  suffix,
+  prefix,
+  label,
+}: {
+  value: number;
+  suffix?: string;
+  prefix?: string;
+  label: string;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.6 });
   const v = useCountUp(value, inView);
@@ -286,13 +310,7 @@ function Landing() {
 
       <footer className="border-t border-border py-10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-muted-foreground">
-          <img
-            src={logoAsset.url}
-            alt="Anwar Organic"
-            className="h-16 w-auto"
-            width={62}
-            height={64}
-          />
+          <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
           <span>An Anwar Agro Farms system</span>
           <span>© {new Date().getFullYear()} Anwar Group of Industries</span>
         </div>

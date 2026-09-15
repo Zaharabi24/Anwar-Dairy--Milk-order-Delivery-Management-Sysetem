@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import logoAsset from "@/assets/anwar-organic-logo.png.asset.json";
+import logoUrl from "@/assets/anwar-organic-logo.png";
 
 /** Centred auth card with the Anwar Organic logo above it. */
 export function AuthShell({
@@ -15,13 +15,7 @@ export function AuthShell({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-12">
       <Link to="/" className="mb-6 flex items-center gap-2">
-        <img
-          src={logoAsset.url}
-          alt="Anwar Organic"
-          width={56}
-          height={56}
-          className="h-14 w-auto"
-        />
+        <img src={logoUrl} alt="Anwar Organic" width={83} height={80} className="h-20 w-auto" />
         <span className="font-display text-xl font-extrabold">Anwar Fresh</span>
       </Link>
       <motion.div
@@ -39,11 +33,11 @@ export function AuthShell({
   );
 }
 
-export function AuthHeading({ title, description }: { title: string; description: string }) {
+export function AuthHeading({ title, description }: { title: string; description?: string }) {
   return (
     <div className="mb-6">
       <h1 className="font-display text-2xl font-bold">{title}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">{description}</p>
+      {description ? <p className="mt-2 text-sm text-muted-foreground">{description}</p> : null}
     </div>
   );
 }

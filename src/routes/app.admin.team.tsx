@@ -50,6 +50,7 @@ import {
   isStaffRole,
   roleLabel,
   type InvitableRole,
+  type RoleValue,
 } from "@/lib/auth-constants";
 import type {
   AccountStatus,
@@ -61,6 +62,7 @@ import type {
 import { validateCompanyEmail, validateEmployeeId } from "@/lib/auth-validation";
 import { dateTime } from "@/lib/format";
 import { deliveryNotice } from "@/lib/mail-delivery";
+import { cn } from "@/lib/utils";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/app/admin/team")({
@@ -87,6 +89,20 @@ const accountTone: Record<AccountStatus, "success" | "pending" | "danger" | "mut
 };
 const capital = (s: string) => s[0]!.toUpperCase() + s.slice(1).replace(/_/g, " ");
 
+const STAFF_ROLE_CARDS: { role: RoleValue; label: string }[] = [
+  { role: "system_admin", label: "System Admins" },
+  { role: "head_office_coordinator", label: "Head Office Coordinators" },
+  { role: "factory_operator", label: "Factory Operators" },
+];
+
+const MEMBER_ROLE_FILTERS: { value: RoleValue | "all"; label: string }[] = [
+  { value: "all", label: "All staff roles" },
+  { value: "super_admin", label: "Super Admin" },
+  { value: "system_admin", label: "System Admin" },
+  { value: "head_office_coordinator", label: "Head Office Coordinator" },
+  { value: "factory_operator", label: "Factory Operator" },
+];
+
 /** Says exactly what happened to the invitation email; never claims delivery that didn't happen. */
 function deliveryToast(delivery: MailDelivery | undefined, email: string, error?: string) {
   const notice = deliveryNotice(delivery, "The invitation", email, error);
@@ -107,6 +123,8 @@ function TeamPage() {
   const invitations = useMemo(() => data?.invitations ?? [], [data]);
   const members = useMemo(() => data?.members ?? [], [data]);
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [tab, setTab] = useState("members");
+  const [roleFilter, setRoleFilter] = useState<RoleValue | "all">("all");
 
   const monthAgo = Date.now() - 30 * 864e5;
 
@@ -146,6 +164,32 @@ function TeamPage() {
         />
       </div>
 
+      {/* Every staff account, grouped by role. Each card opens the Members list filtered to it. */}
+      <div className="mt-4 grid gap-3 sm:grid-cols-3">
+        {STAFF_ROLE_CARDS.map((card) => {
+          const count = members.filter((m) => m.roles.includes(card.role)).length;
+          const selected = tab === "members" && roleFilter === card.role;
+          return (
+            <button
+              key={card.role}
+              type="button"
+              onClick={() => {
+                setRoleFilter(card.role);
+                setTab("members");
+              }}
+              className={cn(
+                "rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary hover:bg-secondary/40",
+                selected && "border-primary bg-secondary/60",
+              )}
+            >
+              <p className="text-sm text-muted-foreground">{card.label}</p>
+              <p className="mt-1 font-display text-2xl font-extrabold">{count}</p>
+              <p className="mt-1 text-xs text-primary">View accounts →</p>
+            </button>
+          );
+        })}
+      </div>
+
       {loading && !data ? (
         <Skeleton className="mt-6 h-64 w-full rounded-xl" />
       ) : error ? (
@@ -153,16 +197,23 @@ function TeamPage() {
           <EmptyState title="Couldn't load the team" hint={error} />
         </div>
       ) : (
-        <Tabs defaultValue="invitations" className="mt-6">
+        <Tabs value={tab} onValueChange={setTab} className="mt-6">
           <TabsList>
-            <TabsTrigger value="invitations">Invitations</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="members">Members ({members.length})</TabsTrigger>
+            <TabsTrigger value="invitations">
+              Invitations ({invitations.filter((i) => i.status === "pending").length} pending)
+            </TabsTrigger>
           </TabsList>
+          <TabsContent value="members">
+            <MembersTable
+              members={members}
+              roleFilter={roleFilter}
+              onRoleFilterChange={setRoleFilter}
+              onChanged={reload}
+            />
+          </TabsContent>
           <TabsContent value="invitations">
             <InvitationsTable invitations={invitations} onChanged={reload} />
-          </TabsContent>
-          <TabsContent value="members">
-            <MembersTable members={members} onChanged={reload} />
           </TabsContent>
         </Tabs>
       )}
@@ -172,6 +223,8 @@ function TeamPage() {
         onOpenChange={setInviteOpen}
         onInvited={async () => {
           setInviteOpen(false);
+          // Show the invitation that was just sent.
+          setTab("invitations");
           await reload();
         }}
       />
@@ -558,12 +611,28 @@ function InvitationsTable({
 type MemberConfirm = { member: StaffMemberRow; action: "suspend" | "remove_staff_access" };
 
 function MembersTable({
-  members,
+  members: allMembers,
+  roleFilter,
+  onRoleFilterChange,
   onChanged,
 }: {
   members: StaffMemberRow[];
+  roleFilter: RoleValue | "all";
+  onRoleFilterChange: (role: RoleValue | "all") => void;
   onChanged: () => Promise<void>;
 }) {
+  const [query, setQuery] = useState("");
+  const members = allMembers
+    .filter((m) => roleFilter === "all" || m.roles.includes(roleFilter))
+    .filter((m) => {
+      const q = query.trim().toLowerCase();
+      return (
+        !q ||
+        m.fullName.toLowerCase().includes(q) ||
+        m.email.toLowerCase().includes(q) ||
+        m.employeeId.toLowerCase().includes(q)
+      );
+    });
   const [confirm, setConfirm] = useState<MemberConfirm | null>(null);
   const [roleFor, setRoleFor] = useState<StaffMemberRow | null>(null);
   const [nextRole, setNextRole] = useState<InvitableRole>("factory_operator");
@@ -597,16 +666,50 @@ function MembersTable({
     return result.ok;
   }
 
+  const filters = (
+    <div className="mt-4 flex flex-wrap gap-3">
+      <Select value={roleFilter} onValueChange={(v) => onRoleFilterChange(v as RoleValue | "all")}>
+        <SelectTrigger className="w-60" aria-label="Filter by role">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {MEMBER_ROLE_FILTERS.map((f) => (
+            <SelectItem key={f.value} value={f.value}>
+              {f.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Input
+        className="max-w-xs"
+        placeholder="Search name, email or ID"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+      />
+    </div>
+  );
+
   if (members.length === 0) {
     return (
-      <div className="mt-4">
-        <EmptyState title="No staff yet" hint="Accepted invitations appear here." />
-      </div>
+      <>
+        {filters}
+        <div className="mt-4">
+          <EmptyState
+            title={allMembers.length === 0 ? "No staff yet" : "No staff match these filters"}
+            hint={
+              allMembers.length === 0
+                ? "Accepted invitations appear here."
+                : "Choose “All staff roles” or clear the search."
+            }
+          />
+        </div>
+      </>
     );
   }
 
   return (
     <>
+      {filters}
       <TableShell minWidth={960}>
         <thead className="border-b border-border text-left text-muted-foreground">
           <tr>

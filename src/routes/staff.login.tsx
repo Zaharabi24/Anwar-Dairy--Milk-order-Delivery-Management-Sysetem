@@ -22,11 +22,8 @@ export const Route = createFileRoute("/staff/login")({
   },
   head: () => ({
     meta: [
-      { title: "Staff sign in — Anwar Fresh" },
-      {
-        name: "description",
-        content: "Sign in for factory operators, head office coordinators and administrators.",
-      },
+      { title: "Super Admin Sign In — Anwar Fresh" },
+      { name: "description", content: "Super Admin sign in for Anwar Fresh." },
     ],
   }),
   component: StaffLoginPage,
@@ -66,10 +63,7 @@ function StaffLoginPage() {
 
   return (
     <AuthShell>
-      <AuthHeading
-        title="Staff sign in"
-        description="For factory operators, head office coordinators and administrators."
-      />
+      <AuthHeading title="Super Admin Sign In" />
 
       {message ? (
         <Alert variant="destructive" className="mb-5">
@@ -109,10 +103,7 @@ function StaffLoginPage() {
           Sign in
         </Button>
 
-        <div className="flex items-center justify-between gap-4 pt-1 text-sm">
-          <Link to="/login" className="font-medium text-primary hover:underline">
-            Employee sign in
-          </Link>
+        <div className="flex items-center justify-end gap-4 pt-1 text-sm">
           <Link to="/staff/forgot-password" className="font-medium text-primary hover:underline">
             Forgot Password
           </Link>

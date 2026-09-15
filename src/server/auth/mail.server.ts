@@ -239,11 +239,24 @@ export async function sendMail(msg: MailMessage): Promise<MailDelivery> {
   return (await sendMailDetailed(msg)).delivery;
 }
 
+/**
+ * The Anwar Organic logo for the email header. Email clients fetch images over the internet,
+ * so it's only included when APP_URL is a public address (not localhost).
+ */
+function emailLogo(): string {
+  const base = env("APP_URL")?.replace(/\/+$/, "");
+  if (!base || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(base)) return "";
+  return `<tr><td style="padding-bottom:16px;">
+      <img src="${escapeHtml(`${base}/brand/anwar-organic-logo.png`)}" width="72" height="70"
+        alt="Anwar Organic" style="display:block;border:0;width:72px;height:auto;" /></td></tr>`;
+}
+
 export function layout(heading: string, body: string) {
   return `<!doctype html><html><body style="margin:0;padding:24px;background:${BG};
     font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
     <table width="100%"><tr><td align="center">
     <table width="560" style="background:#fff;border-radius:12px;padding:32px;">
+    ${emailLogo()}
     <tr><td style="font-size:13px;color:#64748B;letter-spacing:.04em;
       text-transform:uppercase;padding-bottom:8px;">Anwar Fresh</td></tr>
     <tr><td style="font-size:22px;font-weight:700;color:${INK};padding-bottom:16px;">

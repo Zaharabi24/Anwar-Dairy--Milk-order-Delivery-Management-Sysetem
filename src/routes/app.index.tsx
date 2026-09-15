@@ -27,15 +27,46 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
       title: "Team & invitations",
       body: "Invite operators, coordinators and System Admins.",
     },
-    { to: "/app/admin/account-requests", title: "Account requests", body: "Approve employee access." },
-    { to: "/app/admin/accounts", title: "Accounts", body: "Suspend, reactivate and reset accounts." },
-    { to: "/app/admin/account-audit", title: "Account audit", body: "Every sign-in and account change." },
+    {
+      to: "/app/admin/account-requests",
+      title: "Account requests",
+      body: "Approve employee access.",
+    },
+    {
+      to: "/app/admin/accounts",
+      title: "Accounts",
+      body: "Suspend, reactivate and reset accounts.",
+    },
+    {
+      to: "/app/admin/settings",
+      title: "System Admin",
+      body: "Settings, employees and delivery points.",
+    },
+    {
+      to: "/app/operator",
+      title: "Factory Operator",
+      body: "Batch dashboard, new batch and publish.",
+    },
+    {
+      to: "/app/orders",
+      title: "Head Office Coordinator",
+      body: "Orders, fulfillment and collections.",
+    },
+    { to: "/app/reports", title: "Reports", body: "Production, sales and collections trends." },
   ],
   "System Admin": [
-    { to: "/app/admin/account-requests", title: "Account requests", body: "Approve who gets access." },
+    {
+      to: "/app/admin/account-requests",
+      title: "Account requests",
+      body: "Approve who gets access.",
+    },
     { to: "/app/admin/accounts", title: "Accounts", body: "Suspend, reactivate and change roles." },
     { to: "/app/admin/employees", title: "Employees", body: "Manage the employee directory." },
-    { to: "/app/admin/delivery-points", title: "Delivery points", body: "Manage collection points." },
+    {
+      to: "/app/admin/delivery-points",
+      title: "Delivery points",
+      body: "Manage collection points.",
+    },
     { to: "/app/admin/settings", title: "Settings", body: "Defaults for new batches." },
     { to: "/app/admin/audit-log", title: "Audit log", body: "Every change, old and new value." },
   ],
@@ -47,7 +78,10 @@ export const Route = createFileRoute("/app/")({
       { title: "Home — Anwar Fresh" },
       { name: "description", content: "Your daily fresh milk workspace at Anwar Agro Farms." },
       { property: "og:title", content: "Home — Anwar Fresh" },
-      { property: "og:description", content: "Your daily fresh milk workspace at Anwar Agro Farms." },
+      {
+        property: "og:description",
+        content: "Your daily fresh milk workspace at Anwar Agro Farms.",
+      },
     ],
   }),
   component: Hub,
@@ -60,7 +94,9 @@ function Hub() {
   return (
     <div className="mx-auto w-full max-w-5xl">
       <PageHeader
-        title={role === "Employee" ? `Hello, ${currentEmployee.name.split(" ")[0]}` : `Welcome, ${role}`}
+        title={
+          role === "Employee" ? `Hello, ${currentEmployee.name.split(" ")[0]}` : `Welcome, ${role}`
+        }
         description={
           activeBatch
             ? `${activeBatch.batchNo} is ${activeBatch.status.toLowerCase()} — ${remainingLitres(activeBatch.batchNo)} L still available.`

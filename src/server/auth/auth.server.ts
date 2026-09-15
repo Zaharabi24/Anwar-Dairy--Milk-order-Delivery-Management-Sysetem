@@ -78,7 +78,7 @@ type Row = any;
 
 export const LOCK_AFTER = 5;
 export const LOCK_MINUTES = 15;
-const GENERIC = "Incorrect employee ID, password or role.";
+const GENERIC = "Incorrect Employee ID, company email or password.";
 const STAFF_GENERIC = "Incorrect email or password.";
 const SETUP_TOKEN_DAYS = 7;
 const RESET_TOKEN_MINUTES = 30;
@@ -108,11 +108,15 @@ export function audit(
             ${JSON.stringify(entry.detail ?? {})}::jsonb, ${clientIp()})`;
 }
 
-/** Failed sign-in attempts for an identifier within the lockout window. */
-export async function failuresFor(db: Tx | Sql, identifier: string): Promise<number> {
+/**
+ * Failed sign-in attempts within the lockout window. Pass every identifier of one account
+ * (Employee ID and company email) so switching between them can't sidestep the lockout.
+ */
+export async function failuresFor(db: Tx | Sql, identifier: string | string[]): Promise<number> {
+  const keys = (Array.isArray(identifier) ? identifier : [identifier]).map((k) => k.toLowerCase());
   const [row] = await db<Row[]>`
     select count(*)::int as fails from login_attempts
-    where lower(identifier) = lower(${identifier})
+    where lower(identifier) = any(${keys}::text[])
       and outcome not in ('success', 'staff_reset_request', 'invite_token_fail')
       and attempted_at > now() - make_interval(mins => ${LOCK_MINUTES})`;
   return row?.fails ?? 0;
@@ -151,19 +155,28 @@ export async function getAuthState(): Promise<AuthUser | null> {
   return user ? toAuthUser(user) : null;
 }
 
-/** Employee portal: Employee ID + password, employee role only. */
+/** Employee portal: Employee ID or company email + password, employee role only. */
 export async function signIn(input: SignInInput): Promise<AuthResult<{ profile: AuthUser }>> {
   const sql = await getDb();
-  const empId = input.employee_id.trim();
+  const identifier = input.employee_id.trim();
+  // Employee IDs never contain "@", so an "@" means the employee typed their company email.
+  const byEmail = identifier.includes("@");
 
-  if ((await failuresFor(sql, empId)) >= LOCK_AFTER) {
+  const [emp] = byEmail
+    ? await sql<Row[]>`
+        select id, name, company_email, account_status, password_hash from employees
+        where lower(company_email) = lower(${identifier}) and account_status is not null`
+    : await sql<Row[]>`
+        select id, name, company_email, account_status, password_hash from employees
+        where lower(id) = lower(${identifier}) and account_status is not null`;
+
+  // Attempts are recorded against the Employee ID when the account is known.
+  const empId = emp?.id ?? identifier;
+  const lockKeys = emp ? [emp.id, emp.company_email] : [identifier];
+  if ((await failuresFor(sql, lockKeys)) >= LOCK_AFTER) {
     await logAttempt(sql, empId, "locked", "employee");
     return fail(`Too many attempts. Try again in ${LOCK_MINUTES} minutes.`);
   }
-
-  const [emp] = await sql<Row[]>`
-    select id, name, company_email, account_status, password_hash from employees
-    where lower(id) = lower(${empId}) and account_status is not null`;
 
   if (!emp) {
     await verifyPassword(input.password, null); // same cost as a real check

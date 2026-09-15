@@ -24,7 +24,8 @@ export const Route = createFileRoute("/login")({
       { title: "Sign in — Anwar Fresh" },
       {
         name: "description",
-        content: "Employees sign in with their Employee ID to book today's milk batch.",
+        content:
+          "Employees sign in with their Employee ID or company email to book today's milk batch.",
       },
       { property: "og:title", content: "Sign in — Anwar Fresh" },
       {
@@ -50,7 +51,7 @@ function LoginPage() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     const next: Record<string, string> = {};
-    if (!employeeId.trim()) next["employee_id"] = "Employee ID is required.";
+    if (!employeeId.trim()) next["employee_id"] = "Employee ID or company email is required.";
     if (!password) next["password"] = "Password is required.";
     setErrors(next);
     setMessage(null);
@@ -72,7 +73,7 @@ function LoginPage() {
     <AuthShell>
       <AuthHeading
         title="Sign in"
-        description="Employees: use your Employee ID and password to book milk."
+        description="Employees: use your Employee ID or company email and password to book milk."
       />
 
       {message ? (
@@ -83,12 +84,12 @@ function LoginPage() {
 
       <form className="space-y-4" onSubmit={submit} noValidate>
         <div className="space-y-2">
-          <Label htmlFor="employee-id">Employee ID</Label>
+          <Label htmlFor="employee-id">Employee ID or company email</Label>
           <Input
             id="employee-id"
             value={employeeId}
             onChange={(e) => setEmployeeId(e.target.value)}
-            placeholder="Enter your employee ID"
+            placeholder="Enter your Employee ID or company email"
             autoComplete="username"
             aria-invalid={!!errors["employee_id"]}
             className={errors["employee_id"] ? "border-destructive" : ""}
@@ -120,13 +121,6 @@ function LoginPage() {
             Forgot Password
           </Link>
         </div>
-
-        <p className="border-t border-border pt-4 text-center text-sm text-muted-foreground">
-          Factory, head office or admin staff?{" "}
-          <Link to="/staff/login" className="font-medium text-primary hover:underline">
-            Staff sign in
-          </Link>
-        </p>
       </form>
     </AuthShell>
   );

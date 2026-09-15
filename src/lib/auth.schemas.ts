@@ -10,7 +10,8 @@ const token = z.string().min(10).max(200);
 
 /** Employee portal: Employee ID + password. */
 export const signInInput = z.object({
-  employee_id: z.string().trim().min(1).max(40),
+  // Employee ID or company email.
+  employee_id: z.string().trim().min(1).max(200),
   password: z.string().min(1).max(200),
 });
 
