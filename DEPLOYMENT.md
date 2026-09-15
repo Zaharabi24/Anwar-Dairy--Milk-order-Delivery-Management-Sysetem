@@ -1,20 +1,21 @@
 # Deployment (Docker Compose / Dokploy)
 
-The whole system runs as two containers:
+The whole system runs as three containers:
 
 | Service | Image | Purpose |
 | --- | --- | --- |
 | `web` | built from `Dockerfile` | TanStack Start SSR app, server functions and authentication — Node on port **3000** |
 | `db` | `postgres:17-alpine` | PostgreSQL; data kept in the `db-data` volume |
+| `mailpit` | `axllent/mailpit` | Test inbox that catches every email the app sends — web inbox on port **8025** |
 
-There's no Supabase or other backend service. Email goes out through Microsoft Graph or any
-SMTP server.
+There's no Supabase or other backend service. By default every email goes to Mailpit. To deliver
+to real mailboxes, configure Microsoft Graph or an SMTP server instead.
 
 | File | Purpose |
 | --- | --- |
 | `Dockerfile` | `bun install --frozen-lockfile` → `vite build` (`NITRO_PRESET=node-server`) → slim `node:24-alpine` runtime (non-root, healthcheck) |
-| `docker-compose.yml` | What Dokploy deploys: `web` + `db`, no host ports, no demo data |
-| `docker-compose.override.yml` | Local only. Publishes ports, adds **Mailpit** (catches all email), turns demo data on. Dokploy runs `-f docker-compose.yml` and ignores it |
+| `docker-compose.yml` | What Dokploy deploys: `web` + `db` + `mailpit`, no host ports, no demo data |
+| `docker-compose.override.yml` | Local only. Publishes ports (incl. Mailpit), turns demo data on. Dokploy runs `-f docker-compose.yml` and ignores it |
 | `.env.example` | Settings for `bun run dev`. Copy to `.env.local` (gitignored, never read by compose) |
 
 > **Why `NITRO_PRESET=node-server`:** `@lovable.dev/vite-tanstack-config` builds for
@@ -186,10 +187,12 @@ directly, but new deployments shouldn't need them.
 2. In Dokploy: **Create Service → Compose**, type **Docker Compose**.
 3. **Provider:** pick the repo and branch. **Compose Path:** `./docker-compose.yml`.
 4. **Environment** tab: at minimum set `POSTGRES_PASSWORD`, `APP_URL`, `SUPER_ADMIN_EMAIL`
-   (+ `SUPER_ADMIN_NAME`) and one email transport.
+   (+ `SUPER_ADMIN_NAME`) and `MAILPIT_UI_AUTH` (`username:password` for the inbox). Leave the
+   `SMTP_*`, `MS_*` and `MAIL_CAPTURE` variables unset so email goes to Mailpit.
 5. Click **Deploy**.
 6. **Domains** tab: add a domain with service `web`, container port `3000`, HTTPS on with
-   Let's Encrypt. Redeploy so the routing applies.
+   Let's Encrypt. Add a second domain with service `mailpit`, container port `8025` for the
+   inbox. Redeploy so the routing applies.
 7. Open the invitation email (or copy the link from the `web` logs) and accept it. You're signed in
    as Super Admin; invite your team from **Team & invitations**.
 
@@ -221,7 +224,9 @@ holds no data.
 | `SUPER_ADMIN_PASSWORD` | — | Optional, 12+ chars: create directly instead of inviting |
 | `INVITE_TTL_HOURS` | `72` | How long staff invitation links stay valid |
 | `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SENDER_MAILBOX` | — | Microsoft Graph email. The app registration needs `Mail.Send` with admin consent |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | —, `587`, —, —, `false` | SMTP email, used when Graph isn't configured |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | `mailpit`, `1025`, —, —, `false` | SMTP email, used when Graph isn't configured. Defaults point at the bundled Mailpit |
+| `MAIL_CAPTURE` | `true` | `true` while email goes to Mailpit. Set `false` with a real SMTP provider |
+| `MAILPIT_UI_AUTH` | — | `username:password` sign-in for the Mailpit inbox. **Set it** — the inbox shows invitation and password links |
 | `MAIL_FROM` | `no-reply@anwargroup.net` | From address for SMTP |
 | `SEED_DEMO_DATA` | `false` | **Keep `false` in production.** Demo accounts share a known password |
 | `DEMO_PASSWORD` | `Demo@12345` | Only used with demo data |

@@ -24,6 +24,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mailpit:
+        condition: service_started
     environment:
       NODE_ENV: production
       HOST: 0.0.0.0
@@ -55,15 +57,16 @@ services:
       MS_CLIENT_ID: ${MS_CLIENT_ID:-}
       MS_CLIENT_SECRET: ${MS_CLIENT_SECRET:-}
       MS_SENDER_MAILBOX: ${MS_SENDER_MAILBOX:-}
-      # ...otherwise SMTP.
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
+      # ...otherwise SMTP. Defaults send every email to the bundled Mailpit inbox (below).
+      # For a real provider set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and MAIL_CAPTURE=false.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-false}
-      # Only for a local test inbox such as Mailpit. Leave false in production.
-      MAIL_CAPTURE: ${MAIL_CAPTURE:-false}
+      # true = the SMTP server is a test inbox (Mailpit): emails are recorded as "captured".
+      MAIL_CAPTURE: ${MAIL_CAPTURE:-true}
       MAIL_FROM: ${MAIL_FROM:-no-reply@anwargroup.net}
 
       # Demo employees, batches, orders and demo sign-in accounts. Keep false in production.
@@ -73,6 +76,19 @@ services:
     # For local runs, docker-compose.override.yml publishes it.
     expose:
       - "3000"
+
+  # Catches every email the app sends. In Dokploy, add a domain for service `mailpit`, port 8025,
+  # to open the inbox.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    environment:
+      # Inbox sign-in as "username:password". The inbox shows invitation and password links, so
+      # set this whenever the inbox has a public domain. Empty = no sign-in.
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:-}
+    expose:
+      - "8025"
+      - "1025"
 
 volumes:
   db-data:
