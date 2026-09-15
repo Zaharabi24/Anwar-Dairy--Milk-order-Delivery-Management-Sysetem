@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { AuthHeading, AuthShell, FieldError } from "@/components/auth/AuthShell";
@@ -102,12 +102,6 @@ function StaffLoginPage() {
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
           Sign in
         </Button>
-
-        <div className="flex items-center justify-end gap-4 pt-1 text-sm">
-          <Link to="/staff/forgot-password" className="font-medium text-primary hover:underline">
-            Forgot Password
-          </Link>
-        </div>
 
         <p className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
           Staff accounts are created by invitation. If you were invited, use the link in your email
