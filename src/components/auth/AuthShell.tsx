@@ -16,7 +16,7 @@ export function AuthShell({
     <div className="flex min-h-screen flex-col items-center justify-center bg-background px-5 py-12">
       <Link to="/" className="mb-6 flex items-center gap-2">
         <img src={logoUrl} alt="Anwar Organic" width={83} height={80} className="h-20 w-auto" />
-        <span className="font-display text-xl font-extrabold">Anwar Fresh</span>
+        <span className="font-display text-xl font-extrabold">Anwar Organic</span>
       </Link>
       <motion.div
         initial={{ opacity: 0, y: 10 }}

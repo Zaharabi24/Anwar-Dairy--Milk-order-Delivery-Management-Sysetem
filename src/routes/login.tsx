@@ -21,16 +21,16 @@ export const Route = createFileRoute("/login")({
   },
   head: () => ({
     meta: [
-      { title: "Sign in — Anwar Fresh" },
+      { title: "Sign in — Anwar Organic" },
       {
         name: "description",
         content:
           "Employees sign in with their Employee ID or company email to book today's milk batch.",
       },
-      { property: "og:title", content: "Sign in — Anwar Fresh" },
+      { property: "og:title", content: "Sign in — Anwar Organic" },
       {
         property: "og:description",
-        content: "Company sign-in for the Anwar Fresh milk ordering system.",
+        content: "Company sign-in for the Anwar Organic milk ordering system.",
       },
     ],
   }),

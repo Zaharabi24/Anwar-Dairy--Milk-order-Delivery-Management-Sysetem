@@ -6,7 +6,7 @@ export const Route = createFileRoute("/set-password")({
     typeof search["token"] === "string" ? { token: search["token"] } : {},
   head: () => ({
     meta: [
-      { title: "Set your password — Anwar Fresh" },
+      { title: "Set your password — Anwar Organic" },
       { name: "robots", content: "noindex" },
       { name: "referrer", content: "no-referrer" },
     ],

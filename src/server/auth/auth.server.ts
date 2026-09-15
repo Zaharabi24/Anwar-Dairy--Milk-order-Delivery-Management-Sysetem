@@ -523,7 +523,7 @@ export async function staffForgotPassword(
 function resetEmail(to: string, name: string, link: string): MailMessage {
   return {
     to,
-    subject: "Reset your Anwar Fresh password",
+    subject: "Reset your Anwar Organic password",
     template: "password_reset",
     html: layout(
       "Reset your password",
@@ -540,7 +540,7 @@ function resetEmail(to: string, name: string, link: string): MailMessage {
 function setupEmail(to: string, name: string, link: string, intro: string): MailMessage {
   return {
     to,
-    subject: "Set your Anwar Fresh password",
+    subject: "Set your Anwar Organic password",
     template: "setup_link",
     html: layout(
       "Set your password",
@@ -640,7 +640,7 @@ export async function setPassword(
   if (tk.purpose === "reset") {
     await sendMail({
       to: tk.company_email,
-      subject: "Your Anwar Fresh password was changed",
+      subject: "Your Anwar Organic password was changed",
       template: "reset_confirm",
       html: layout(
         "Your password was changed",
@@ -736,7 +736,7 @@ export async function reviewAccountRequest(
         data: { decision: "rejected" },
         mail: {
           to: rq.company_mail,
-          subject: "Your Anwar Fresh account request",
+          subject: "Your Anwar Organic account request",
           template: "request_rejected",
           html: layout(
             "Your account request was not approved",
@@ -1136,12 +1136,12 @@ export async function sendTestEmail(): Promise<AuthResult<MailTestResult>> {
   const { description } = mailTransport();
   const sent = await sendMailDetailed({
     to: actor.companyMail,
-    subject: "Anwar Fresh test email",
+    subject: "Anwar Organic test email",
     template: "test_email",
     html: layout(
       "Email delivery works",
       `<p>Hello ${escapeHtml(actor.fullName)},</p>
-       <p>This test was sent from Anwar Fresh using ${escapeHtml(description)}.</p>
+       <p>This test was sent from Anwar Organic using ${escapeHtml(description)}.</p>
        <p>If you received it, invitations and account emails will reach people too.</p>`,
     ),
   });

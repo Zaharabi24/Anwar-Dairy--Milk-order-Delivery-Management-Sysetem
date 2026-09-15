@@ -68,8 +68,8 @@ import { authService } from "@/services/auth-service";
 export const Route = createFileRoute("/app/admin/team")({
   head: () => ({
     meta: [
-      { title: "Team & invitations — Anwar Fresh" },
-      { name: "description", content: "Invite staff and manage who operates Anwar Fresh." },
+      { title: "Team & invitations — Anwar Organic" },
+      { name: "description", content: "Invite staff and manage who operates Anwar Organic." },
     ],
   }),
   component: TeamPage,

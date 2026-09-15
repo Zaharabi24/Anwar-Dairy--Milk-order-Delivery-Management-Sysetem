@@ -18,13 +18,13 @@ import { Button } from "@/components/ui/button";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Anwar Fresh — Daily farm milk for the Anwar Agro team" },
+      { title: "Anwar Organic — Daily farm milk for the Anwar Agro team" },
       {
         name: "description",
         content:
           "Book your litres from today's fresh milk batch before the cut-off, pick your delivery point, and collect the same day.",
       },
-      { property: "og:title", content: "Anwar Fresh — Daily farm milk for the Anwar Agro team" },
+      { property: "og:title", content: "Anwar Organic — Daily farm milk for the Anwar Agro team" },
       {
         property: "og:description",
         content:

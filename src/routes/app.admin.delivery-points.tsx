@@ -20,9 +20,9 @@ import type { DeliveryPoint } from "@/lib/types";
 export const Route = createFileRoute("/app/admin/delivery-points")({
   head: () => ({
     meta: [
-      { title: "Delivery points — Anwar Fresh" },
+      { title: "Delivery points — Anwar Organic" },
       { name: "description", content: "Manage pickup locations and their coordinators." },
-      { property: "og:title", content: "Delivery points — Anwar Fresh" },
+      { property: "og:title", content: "Delivery points — Anwar Organic" },
       { property: "og:description", content: "Manage pickup locations and their coordinators." },
     ],
   }),

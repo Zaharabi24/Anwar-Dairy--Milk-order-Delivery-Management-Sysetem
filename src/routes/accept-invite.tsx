@@ -26,7 +26,7 @@ export const Route = createFileRoute("/accept-invite")({
     typeof search["token"] === "string" ? { token: search["token"] } : {},
   head: () => ({
     meta: [
-      { title: "Accept invitation — Anwar Fresh" },
+      { title: "Accept invitation — Anwar Organic" },
       { name: "robots", content: "noindex" },
       // Keep the token out of Referer headers sent to fonts or other hosts.
       { name: "referrer", content: "no-referrer" },
@@ -141,7 +141,7 @@ function AcceptInvitePage() {
   return (
     <AuthShell>
       <AuthHeading
-        title="Join Anwar Fresh"
+        title="Join Anwar Organic"
         description={`${preview.invitedBy ?? "An administrator"} invited you as ${roleLabel(preview.role)}.`}
       />
 
@@ -170,7 +170,7 @@ function AcceptInvitePage() {
         {existing ? (
           <>
             <p className="text-sm">
-              You already have an Anwar Fresh account ({existing.employeeId}). Enter your current
+              You already have an Anwar Organic account ({existing.employeeId}). Enter your current
               password to add the <strong>{roleLabel(preview.role)}</strong> role to it.
             </p>
             <PasswordField
@@ -240,7 +240,7 @@ function AcceptInvitePage() {
         >
           <DialogHeader className="items-center text-center sm:text-center">
             <CheckCircle2 className="size-12 text-primary" />
-            <DialogTitle>Welcome to Anwar Fresh</DialogTitle>
+            <DialogTitle>Welcome to Anwar Organic</DialogTitle>
             <DialogDescription>
               Your account is ready and you&apos;re signed in as {roleLabel(preview.role)}.
             </DialogDescription>

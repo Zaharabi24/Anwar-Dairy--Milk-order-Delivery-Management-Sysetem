@@ -20,7 +20,7 @@ import { countdown, dateTime, taka } from "@/lib/format";
 export const Route = createFileRoute("/app/my-orders")({
   head: () => ({
     meta: [
-      { title: "My orders — Anwar Fresh" },
+      { title: "My orders — Anwar Organic" },
       {
         name: "description",
         content: "Your booking history and the option to request cancellation before cut-off.",

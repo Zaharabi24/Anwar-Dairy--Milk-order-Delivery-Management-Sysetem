@@ -43,7 +43,7 @@ import { authService } from "@/services/auth-service";
 export const Route = createFileRoute("/app/admin/accounts")({
   head: () => ({
     meta: [
-      { title: "Accounts — Anwar Fresh" },
+      { title: "Accounts — Anwar Organic" },
       { name: "description", content: "Manage sign-in accounts and access." },
     ],
   }),

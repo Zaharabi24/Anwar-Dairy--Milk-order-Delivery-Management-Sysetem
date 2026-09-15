@@ -16,12 +16,12 @@ import { dateTime, litres } from "@/lib/format";
 export const Route = createFileRoute("/app/coupons")({
   head: () => ({
     meta: [
-      { title: "Delivery coupons — Anwar Fresh" },
+      { title: "Delivery coupons — Anwar Organic" },
       {
         name: "description",
         content: "Every handover recorded as a delivery coupon: recipient, floor, quantity and receiver.",
       },
-      { property: "og:title", content: "Delivery coupons — Anwar Fresh" },
+      { property: "og:title", content: "Delivery coupons — Anwar Organic" },
       {
         property: "og:description",
         content: "Every handover recorded as a delivery coupon: recipient, floor, quantity and receiver.",

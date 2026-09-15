@@ -154,7 +154,7 @@ function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2 px-2">
       <img src={logoUrl} alt="Anwar Organic" width={50} height={48} className="h-12 w-auto" />
-      <span className="font-display text-lg font-extrabold">Anwar Fresh</span>
+      <span className="font-display text-lg font-extrabold">Anwar Organic</span>
     </Link>
   );
 }

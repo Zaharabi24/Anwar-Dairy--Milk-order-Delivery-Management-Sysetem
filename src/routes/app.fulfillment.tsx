@@ -23,9 +23,9 @@ const nextLabel: Partial<Record<OrderStatus, string>> = {
 export const Route = createFileRoute("/app/fulfillment")({
   head: () => ({
     meta: [
-      { title: "Fulfillment — Anwar Fresh" },
+      { title: "Fulfillment — Anwar Organic" },
       { name: "description", content: "Orders grouped by delivery point with one-tap status updates." },
-      { property: "og:title", content: "Fulfillment — Anwar Fresh" },
+      { property: "og:title", content: "Fulfillment — Anwar Organic" },
       { property: "og:description", content: "Orders grouped by delivery point with one-tap status updates." },
     ],
   }),

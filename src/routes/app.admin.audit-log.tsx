@@ -9,9 +9,9 @@ import { dateTime } from "@/lib/format";
 export const Route = createFileRoute("/app/admin/audit-log")({
   head: () => ({
     meta: [
-      { title: "Audit log — Anwar Fresh" },
+      { title: "Audit log — Anwar Organic" },
       { name: "description", content: "Every change to batches, orders, payments and people." },
-      { property: "og:title", content: "Audit log — Anwar Fresh" },
+      { property: "og:title", content: "Audit log — Anwar Organic" },
       { property: "og:description", content: "Every change to batches, orders, payments and people." },
     ],
   }),

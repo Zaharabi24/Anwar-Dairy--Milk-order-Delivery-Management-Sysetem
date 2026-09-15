@@ -28,9 +28,9 @@ import type { CollectionRecord, Order } from "@/lib/types";
 export const Route = createFileRoute("/app/collections")({
   head: () => ({
     meta: [
-      { title: "Collections — Anwar Fresh" },
+      { title: "Collections — Anwar Organic" },
       { name: "description", content: "Track amount due, collected and outstanding for each order." },
-      { property: "og:title", content: "Collections — Anwar Fresh" },
+      { property: "og:title", content: "Collections — Anwar Organic" },
       { property: "og:description", content: "Record cash, bKash and payroll settlements against delivered milk orders." },
     ],
   }),

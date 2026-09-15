@@ -22,7 +22,7 @@ import { authService } from "@/services/auth-service";
 export const Route = createFileRoute("/app/admin/password-resets")({
   head: () => ({
     meta: [
-      { title: "Password resets — Anwar Fresh" },
+      { title: "Password resets — Anwar Organic" },
       { name: "description", content: "Password setup and reset links sent in the last 30 days." },
     ],
   }),

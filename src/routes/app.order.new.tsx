@@ -13,7 +13,7 @@ const paymentMethods: PaymentMethod[] = ["Cash", "bKash", "Payroll deduction"];
 export const Route = createFileRoute("/app/order/new")({
   head: () => ({
     meta: [
-      { title: "Book milk — Anwar Fresh" },
+      { title: "Book milk — Anwar Organic" },
       {
         name: "description",
         content: "Choose your litres and delivery point, then confirm your order.",

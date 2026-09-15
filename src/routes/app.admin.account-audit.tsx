@@ -26,7 +26,7 @@ import { authService } from "@/services/auth-service";
 export const Route = createFileRoute("/app/admin/account-audit")({
   head: () => ({
     meta: [
-      { title: "Account audit — Anwar Fresh" },
+      { title: "Account audit — Anwar Organic" },
       {
         name: "description",
         content: "Every account event: sign-ins, approvals, resets and role changes.",

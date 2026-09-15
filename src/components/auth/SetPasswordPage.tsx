@@ -118,7 +118,7 @@ export function SetPasswordPage({ token }: { token: string }) {
         title={isSetup ? "Set your password" : "Reset your password"}
         description={
           isSetup
-            ? "Create a password for your Anwar Fresh account."
+            ? "Create a password for your Anwar Organic account."
             : "Choose a new password for your account."
         }
       />

@@ -258,7 +258,7 @@ export function layout(heading: string, body: string) {
     <table width="560" style="background:#fff;border-radius:12px;padding:32px;">
     ${emailLogo()}
     <tr><td style="font-size:13px;color:#64748B;letter-spacing:.04em;
-      text-transform:uppercase;padding-bottom:8px;">Anwar Fresh</td></tr>
+      text-transform:uppercase;padding-bottom:8px;">Anwar Organic</td></tr>
     <tr><td style="font-size:22px;font-weight:700;color:${INK};padding-bottom:16px;">
       ${heading}</td></tr>
     <tr><td style="font-size:15px;line-height:1.6;color:#334155;">${body}</td></tr>

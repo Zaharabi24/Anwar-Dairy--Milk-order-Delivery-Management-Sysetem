@@ -14,9 +14,9 @@ import { taka } from "@/lib/format";
 export const Route = createFileRoute("/app/operator/new-batch")({
   head: () => ({
     meta: [
-      { title: "New batch — Anwar Fresh" },
+      { title: "New batch — Anwar Organic" },
       { name: "description", content: "Create today's milk batch with rate, limits and delivery details." },
-      { property: "og:title", content: "New batch — Anwar Fresh" },
+      { property: "og:title", content: "New batch — Anwar Organic" },
       { property: "og:description", content: "Create today's milk batch with rate, limits and delivery details." },
     ],
   }),

@@ -28,9 +28,9 @@ import type { Department, Employee, Site } from "@/lib/types";
 export const Route = createFileRoute("/app/admin/employees")({
   head: () => ({
     meta: [
-      { title: "Employees — Anwar Fresh" },
+      { title: "Employees — Anwar Organic" },
       { name: "description", content: "Add, edit and deactivate employees across departments and sites." },
-      { property: "og:title", content: "Employees — Anwar Fresh" },
+      { property: "og:title", content: "Employees — Anwar Organic" },
       { property: "og:description", content: "Manage who can book milk from the daily batch." },
     ],
   }),

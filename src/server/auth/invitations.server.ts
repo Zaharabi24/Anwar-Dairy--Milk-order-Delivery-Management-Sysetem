@@ -93,12 +93,12 @@ function invitationEmail(input: {
   });
   return {
     to: input.to,
-    subject: `You're invited to Anwar Fresh as ${roleLabel(input.role)}`,
+    subject: `You're invited to Anwar Organic as ${roleLabel(input.role)}`,
     template: "staff_invitation",
     html: layout(
-      "You've been invited to Anwar Fresh",
+      "You've been invited to Anwar Organic",
       `<p>Hello${input.name ? ` ${escapeHtml(input.name)}` : ""},</p>
-       <p><strong>${escapeHtml(input.inviter)}</strong> invited you to join Anwar Fresh as
+       <p><strong>${escapeHtml(input.inviter)}</strong> invited you to join Anwar Organic as
        <strong>${escapeHtml(roleLabel(input.role))}</strong>.</p>
        <p>Accept the invitation to set up your account. You'll be signed in straight away.</p>
        ${button(input.link, "Accept invitation")}
@@ -110,9 +110,9 @@ function invitationEmail(input: {
 }
 
 async function inviterName(db: Tx | Sql, employeeId: string | null): Promise<string> {
-  if (!employeeId) return "The Anwar Fresh administrator";
+  if (!employeeId) return "The Anwar Organic administrator";
   const [row] = await db<Row[]>`select name from employees where id = ${employeeId}`;
-  return row?.name ?? "The Anwar Fresh administrator";
+  return row?.name ?? "The Anwar Organic administrator";
 }
 
 // ---------------------------------------------------------------------------
@@ -614,7 +614,7 @@ export async function acceptInvitation(
               to: inviter.company_email,
               mail: {
                 to: inviter.company_email,
-                subject: `${fullName} joined Anwar Fresh as ${roleLabel(inv.role)}`,
+                subject: `${fullName} joined Anwar Organic as ${roleLabel(inv.role)}`,
                 template: "invitation_accepted",
                 html: layout(
                   "Your invitation was accepted",
@@ -716,7 +716,7 @@ export async function bootstrapSuperAdmin(tx: Tx): Promise<MailMessage | null> {
     to: email,
     name,
     role: "super_admin",
-    inviter: "The Anwar Fresh administrator",
+    inviter: "The Anwar Organic administrator",
     link,
     expiresAt: new Date(row.expires_at),
   });

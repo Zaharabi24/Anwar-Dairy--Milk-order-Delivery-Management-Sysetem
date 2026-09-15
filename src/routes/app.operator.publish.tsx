@@ -10,9 +10,9 @@ import { dateShort, taka, timeShort } from "@/lib/format";
 export const Route = createFileRoute("/app/operator/publish")({
   head: () => ({
     meta: [
-      { title: "Review and publish — Anwar Fresh" },
+      { title: "Review and publish — Anwar Organic" },
       { name: "description", content: "Preview the batch as employees see it, then publish it." },
-      { property: "og:title", content: "Review and publish — Anwar Fresh" },
+      { property: "og:title", content: "Review and publish — Anwar Organic" },
       { property: "og:description", content: "Preview the batch as employees see it, then publish it." },
     ],
   }),

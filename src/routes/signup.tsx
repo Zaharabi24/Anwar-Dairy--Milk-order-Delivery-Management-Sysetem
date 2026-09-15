@@ -30,10 +30,10 @@ export const Route = createFileRoute("/signup")({
   },
   head: () => ({
     meta: [
-      { title: "Request an account — Anwar Fresh" },
+      { title: "Request an account — Anwar Organic" },
       {
         name: "description",
-        content: "Request access to Anwar Fresh. An administrator reviews every request.",
+        content: "Request access to Anwar Organic. An administrator reviews every request.",
       },
     ],
   }),

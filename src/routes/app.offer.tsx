@@ -10,7 +10,7 @@ import { countdown, dateShort, taka } from "@/lib/format";
 export const Route = createFileRoute("/app/offer")({
   head: () => ({
     meta: [
-      { title: "Today's offer — Anwar Fresh" },
+      { title: "Today's offer — Anwar Organic" },
       {
         name: "description",
         content: "See today's batch, the live litres remaining and the booking cut-off.",

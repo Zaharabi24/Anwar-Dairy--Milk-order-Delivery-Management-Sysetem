@@ -22,8 +22,8 @@ export const Route = createFileRoute("/staff/admin")({
   },
   head: () => ({
     meta: [
-      { title: "Super Admin Sign In — Anwar Fresh" },
-      { name: "description", content: "Super Admin sign in for Anwar Fresh." },
+      { title: "Super Admin Sign In — Anwar Organic" },
+      { name: "description", content: "Super Admin sign in for Anwar Organic." },
     ],
   }),
   component: StaffLoginPage,

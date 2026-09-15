@@ -9,7 +9,7 @@ import { dateShort, dateTime, taka } from "@/lib/format";
 export const Route = createFileRoute("/app/order/confirmation/$orderId")({
   head: () => ({
     meta: [
-      { title: "Order confirmed — Anwar Fresh" },
+      { title: "Order confirmed — Anwar Organic" },
       { name: "description", content: "Your order code, summary and collection instructions." },
     ],
   }),

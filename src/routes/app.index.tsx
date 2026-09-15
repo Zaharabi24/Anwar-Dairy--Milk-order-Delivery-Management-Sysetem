@@ -75,9 +75,9 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
 export const Route = createFileRoute("/app/")({
   head: () => ({
     meta: [
-      { title: "Home — Anwar Fresh" },
+      { title: "Home — Anwar Organic" },
       { name: "description", content: "Your daily fresh milk workspace at Anwar Agro Farms." },
-      { property: "og:title", content: "Home — Anwar Fresh" },
+      { property: "og:title", content: "Home — Anwar Organic" },
       {
         property: "og:description",
         content: "Your daily fresh milk workspace at Anwar Agro Farms.",

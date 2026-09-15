@@ -59,8 +59,8 @@ import { authService } from "@/services/auth-service";
 export const Route = createFileRoute("/app/admin/account-requests")({
   head: () => ({
     meta: [
-      { title: "Account requests — Anwar Fresh" },
-      { name: "description", content: "Review and approve who gets access to Anwar Fresh." },
+      { title: "Account requests — Anwar Organic" },
+      { name: "description", content: "Review and approve who gets access to Anwar Organic." },
     ],
   }),
   component: AccountRequestsPage,
@@ -183,7 +183,7 @@ function AccountRequestsPage() {
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
         title="Account requests"
-        description="Review and approve who gets access to Anwar Fresh."
+        description="Review and approve who gets access to Anwar Organic."
         action={
           <div className="flex flex-wrap gap-2">
             <TestEmailButton />

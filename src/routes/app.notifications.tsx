@@ -23,12 +23,12 @@ const icons: Record<NotificationKind, typeof Bell> = {
 export const Route = createFileRoute("/app/notifications")({
   head: () => ({
     meta: [
-      { title: "Notifications — Anwar Fresh" },
+      { title: "Notifications — Anwar Organic" },
       {
         name: "description",
         content: "Batch publications, cut-off reminders, order updates and payment alerts in one feed.",
       },
-      { property: "og:title", content: "Notifications — Anwar Fresh" },
+      { property: "og:title", content: "Notifications — Anwar Organic" },
       {
         property: "og:description",
         content: "Batch publications, cut-off reminders, order updates and payment alerts in one feed.",

@@ -12,9 +12,9 @@ import { useAppData } from "@/context/app-data";
 export const Route = createFileRoute("/app/admin/settings")({
   head: () => ({
     meta: [
-      { title: "Settings — Anwar Fresh" },
+      { title: "Settings — Anwar Organic" },
       { name: "description", content: "Default rate, booking cutoff, caps and notification rules." },
-      { property: "og:title", content: "Settings — Anwar Fresh" },
+      { property: "og:title", content: "Settings — Anwar Organic" },
       { property: "og:description", content: "Default rate, booking cutoff, caps and notification rules." },
     ],
   }),

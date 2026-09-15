@@ -49,9 +49,9 @@ const statuses: OrderStatus[] = [
 export const Route = createFileRoute("/app/orders")({
   head: () => ({
     meta: [
-      { title: "Orders — Anwar Fresh" },
+      { title: "Orders — Anwar Organic" },
       { name: "description", content: "Search, filter and adjust incoming employee orders." },
-      { property: "og:title", content: "Orders — Anwar Fresh" },
+      { property: "og:title", content: "Orders — Anwar Organic" },
       { property: "og:description", content: "Search, filter and adjust incoming employee orders." },
     ],
   }),

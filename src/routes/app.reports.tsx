@@ -33,9 +33,9 @@ import { dateShort, litres, taka } from "@/lib/format";
 export const Route = createFileRoute("/app/reports")({
   head: () => ({
     meta: [
-      { title: "Reports — Anwar Fresh" },
+      { title: "Reports — Anwar Organic" },
       { name: "description", content: "Daily reconciliation: produced, booked, delivered, collected and sell-through." },
-      { property: "og:title", content: "Reports — Anwar Fresh" },
+      { property: "og:title", content: "Reports — Anwar Organic" },
       { property: "og:description", content: "Daily reconciliation: produced, booked, delivered, collected and sell-through." },
     ],
   }),

@@ -17,8 +17,8 @@ export const Route = createFileRoute("/forgot-password")({
   },
   head: () => ({
     meta: [
-      { title: "Reset your password — Anwar Fresh" },
-      { name: "description", content: "Get a link to choose a new Anwar Fresh password." },
+      { title: "Reset your password — Anwar Organic" },
+      { name: "description", content: "Get a link to choose a new Anwar Organic password." },
     ],
   }),
   component: ForgotPasswordPage,
