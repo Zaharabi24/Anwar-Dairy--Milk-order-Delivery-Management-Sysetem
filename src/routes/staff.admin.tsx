@@ -11,7 +11,7 @@ import { EMAIL_PLACEHOLDER, ROLE_HOME } from "@/lib/auth-constants";
 import { safeRedirect } from "@/lib/safe-redirect";
 import { authService } from "@/services/auth-service";
 
-export const Route = createFileRoute("/staff/login")({
+export const Route = createFileRoute("/staff/admin")({
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
     const target = safeRedirect(search["redirect"]);
     return target ? { redirect: target } : {};

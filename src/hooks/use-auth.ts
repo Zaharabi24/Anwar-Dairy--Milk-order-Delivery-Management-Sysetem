@@ -17,7 +17,7 @@ export function useAuth() {
     const portal = user?.portal;
     await authService.signOut();
     await router.invalidate();
-    await router.navigate({ to: portal === "staff" ? "/staff/login" : "/" });
+    await router.navigate({ to: portal === "staff" ? "/staff/admin" : "/" });
   }, [router, user?.portal]);
 
   const switchRole = useCallback(

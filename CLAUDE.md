@@ -33,7 +33,7 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
 `employee` · `factory_operator` · `head_office_coordinator` · `system_admin` · `super_admin`
 
 - **Employees:** Sign Up + approval, and sign in at `/login` with their Employee ID.
-- **Staff:** invited by a Super Admin, and sign in at `/staff/login` with their email.
+- **Staff:** invited by a Super Admin, and sign in at `/staff/admin` with their email.
 - **Sessions:** a session only uses roles allowed by its portal (`rolesForPortal`).
 - **Super Admin:** everything a System Admin can do, plus staff invitations and staff management.
 - **System Admin:** manages employee accounts only.

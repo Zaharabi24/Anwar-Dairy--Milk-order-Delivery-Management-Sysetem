@@ -35,7 +35,7 @@ export const Route = createFileRoute("/app")({
       const allowed = rolesFor(location.pathname);
       const staffArea = !!allowed && !allowed.includes("employee");
       throw redirect({
-        to: staffArea ? "/staff/login" : "/login",
+        to: staffArea ? "/staff/admin" : "/login",
         search: { redirect: location.href },
       });
     }

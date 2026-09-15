@@ -57,11 +57,11 @@ Password for all of them: `Demo@12345`, or `DEMO_PASSWORD`.
 
 | Sign in at | Identifier | Name | Roles |
 | --- | --- | --- | --- |
-| `/staff/login` | `superadmin@anwargroup.net` | Rahima Chowdhury | Super Admin |
-| `/staff/login` | `farid.hasan@anwargroup.net` | Farid Hasan | System Admin (+ Employee) |
-| `/staff/login` | `sadia.rahman@anwargroup.net` | Sadia Rahman | System Admin (+ Employee) |
-| `/staff/login` | `nusrat.jahan@anwargroup.net` | Nusrat Jahan | Head Office Coordinator (+ Employee) |
-| `/staff/login` | `kamal.hossain@anwargroup.net` | Kamal Hossain | Factory Operator (+ Employee) |
+| `/staff/admin` | `superadmin@anwargroup.net` | Rahima Chowdhury | Super Admin |
+| `/staff/admin` | `farid.hasan@anwargroup.net` | Farid Hasan | System Admin (+ Employee) |
+| `/staff/admin` | `sadia.rahman@anwargroup.net` | Sadia Rahman | System Admin (+ Employee) |
+| `/staff/admin` | `nusrat.jahan@anwargroup.net` | Nusrat Jahan | Head Office Coordinator (+ Employee) |
+| `/staff/admin` | `kamal.hossain@anwargroup.net` | Kamal Hossain | Factory Operator (+ Employee) |
 | `/login` | `EMP-1006` | Ayesha Siddika | Employee |
 
 People who hold an Employee role can also sign in at `/login` with their Employee ID
@@ -76,7 +76,7 @@ Reset everything with `docker compose down -v`, which deletes the database and e
 | | Employee portal | Staff portal |
 | --- | --- | --- |
 | Who | Employees booking milk | Factory Operator, Head Office Coordinator, System Admin, Super Admin |
-| Sign in | `/login`: Employee ID + password | `/staff/login`: company email + password |
+| Sign in | `/login`: Employee ID + password | `/staff/admin`: company email + password |
 | Getting an account | `/signup` request, approved by a System Admin | Invitation from a Super Admin |
 | Forgot password | `/forgot-password`: Employee ID + email + date of birth | `/staff/forgot-password`: email only, same response whether or not the account exists |
 

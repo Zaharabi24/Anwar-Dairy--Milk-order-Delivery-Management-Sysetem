@@ -37,7 +37,7 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-/** Employee portal. Staff (operators, coordinators, admins) use /staff/login. */
+/** Employee portal. Staff (operators, coordinators, admins) use /staff/admin. */
 function LoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
   const navigate = useNavigate();

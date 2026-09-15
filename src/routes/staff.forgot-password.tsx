@@ -54,7 +54,7 @@ function StaffForgotPasswordPage() {
           {/* The same answer whether or not the account exists. */}
           <p className="mt-3 text-sm">{sent}</p>
           <p className="mt-6 text-sm">
-            <Link to="/staff/login" className="font-medium text-primary hover:underline">
+            <Link to="/staff/admin" className="font-medium text-primary hover:underline">
               Back to staff sign in
             </Link>
           </p>
@@ -97,7 +97,7 @@ function StaffForgotPasswordPage() {
         </Button>
 
         <p className="text-center text-sm">
-          <Link to="/staff/login" className="font-medium text-primary hover:underline">
+          <Link to="/staff/admin" className="font-medium text-primary hover:underline">
             Back to staff sign in
           </Link>
         </p>

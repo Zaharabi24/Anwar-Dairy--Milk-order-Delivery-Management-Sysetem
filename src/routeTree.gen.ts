@@ -26,8 +26,8 @@ import { Route as AppNotificationsRouteImport } from './routes/app.notifications
 import { Route as AppOfferRouteImport } from './routes/app.offer'
 import { Route as AppOrdersRouteImport } from './routes/app.orders'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as StaffAdminRouteImport } from './routes/staff.admin'
 import { Route as StaffForgotPasswordRouteImport } from './routes/staff.forgot-password'
-import { Route as StaffLoginRouteImport } from './routes/staff.login'
 import { Route as AppAdminAccountAuditRouteImport } from './routes/app.admin.account-audit'
 import { Route as AppAdminAccountRequestsRouteImport } from './routes/app.admin.account-requests'
 import { Route as AppAdminAccountsRouteImport } from './routes/app.admin.accounts'
@@ -128,14 +128,14 @@ const AppReportsRoute = AppReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => AppRoute,
 } as any)
+const StaffAdminRoute = StaffAdminRouteImport.update({
+  id: '/staff/admin',
+  path: '/staff/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StaffForgotPasswordRoute = StaffForgotPasswordRouteImport.update({
   id: '/staff/forgot-password',
   path: '/staff/forgot-password',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const StaffLoginRoute = StaffLoginRouteImport.update({
-  id: '/staff/login',
-  path: '/staff/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppAdminAccountAuditRoute = AppAdminAccountAuditRouteImport.update({
@@ -227,8 +227,8 @@ export interface FileRoutesByFullPath {
   '/app/offer': typeof AppOfferRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/reports': typeof AppReportsRoute
+  '/staff/admin': typeof StaffAdminRoute
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
-  '/staff/login': typeof StaffLoginRoute
   '/app/': typeof AppIndexRoute
   '/app/admin/account-audit': typeof AppAdminAccountAuditRoute
   '/app/admin/account-requests': typeof AppAdminAccountRequestsRoute
@@ -261,8 +261,8 @@ export interface FileRoutesByTo {
   '/app/offer': typeof AppOfferRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/reports': typeof AppReportsRoute
+  '/staff/admin': typeof StaffAdminRoute
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
-  '/staff/login': typeof StaffLoginRoute
   '/app': typeof AppIndexRoute
   '/app/admin/account-audit': typeof AppAdminAccountAuditRoute
   '/app/admin/account-requests': typeof AppAdminAccountRequestsRoute
@@ -297,8 +297,8 @@ export interface FileRoutesById {
   '/app/offer': typeof AppOfferRoute
   '/app/orders': typeof AppOrdersRoute
   '/app/reports': typeof AppReportsRoute
+  '/staff/admin': typeof StaffAdminRoute
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
-  '/staff/login': typeof StaffLoginRoute
   '/app/': typeof AppIndexRoute
   '/app/admin/account-audit': typeof AppAdminAccountAuditRoute
   '/app/admin/account-requests': typeof AppAdminAccountRequestsRoute
@@ -334,8 +334,8 @@ export interface FileRouteTypes {
     | '/app/offer'
     | '/app/orders'
     | '/app/reports'
+    | '/staff/admin'
     | '/staff/forgot-password'
-    | '/staff/login'
     | '/app/'
     | '/app/admin/account-audit'
     | '/app/admin/account-requests'
@@ -368,8 +368,8 @@ export interface FileRouteTypes {
     | '/app/offer'
     | '/app/orders'
     | '/app/reports'
+    | '/staff/admin'
     | '/staff/forgot-password'
-    | '/staff/login'
     | '/app'
     | '/app/admin/account-audit'
     | '/app/admin/account-requests'
@@ -403,8 +403,8 @@ export interface FileRouteTypes {
     | '/app/offer'
     | '/app/orders'
     | '/app/reports'
+    | '/staff/admin'
     | '/staff/forgot-password'
-    | '/staff/login'
     | '/app/'
     | '/app/admin/account-audit'
     | '/app/admin/account-requests'
@@ -431,8 +431,8 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetPasswordRoute: typeof SetPasswordRoute
   SignupRoute: typeof SignupRoute
+  StaffAdminRoute: typeof StaffAdminRoute
   StaffForgotPasswordRoute: typeof StaffForgotPasswordRoute
-  StaffLoginRoute: typeof StaffLoginRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -556,18 +556,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppReportsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/staff/admin': {
+      id: '/staff/admin'
+      path: '/staff/admin'
+      fullPath: '/staff/admin'
+      preLoaderRoute: typeof StaffAdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/staff/forgot-password': {
       id: '/staff/forgot-password'
       path: '/staff/forgot-password'
       fullPath: '/staff/forgot-password'
       preLoaderRoute: typeof StaffForgotPasswordRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/staff/login': {
-      id: '/staff/login'
-      path: '/staff/login'
-      fullPath: '/staff/login'
-      preLoaderRoute: typeof StaffLoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/admin/account-audit': {
@@ -734,8 +734,8 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SetPasswordRoute: SetPasswordRoute,
   SignupRoute: SignupRoute,
+  StaffAdminRoute: StaffAdminRoute,
   StaffForgotPasswordRoute: StaffForgotPasswordRoute,
-  StaffLoginRoute: StaffLoginRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
