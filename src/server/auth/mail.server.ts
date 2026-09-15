@@ -120,6 +120,10 @@ async function smtpTransport(): Promise<Transporter> {
     // true = implicit TLS (port 465). On 587, STARTTLS is negotiated automatically.
     secure: env("SMTP_SECURE") === "true",
     requireTLS: env("SMTP_REQUIRE_TLS") === "true",
+    // An internal server (e.g. on-premises Exchange) may use a self-signed certificate.
+    ...(env("SMTP_TLS_REJECT_UNAUTHORIZED") === "false"
+      ? { tls: { rejectUnauthorized: false } }
+      : {}),
     ...(user ? { auth: { user, pass: env("SMTP_PASS") ?? "" } } : {}),
     pool: true,
     maxConnections: 3,
@@ -173,6 +177,9 @@ export async function verifyMailTransport(): Promise<{
 export function friendlyMailError(error: unknown): string {
   const text = String((error as { message?: string })?.message ?? error);
   const code = (error as { code?: string; responseCode?: number })?.code;
+  if (/self[- ]signed|certificate|unable to verify/i.test(text)) {
+    return "The mail server's TLS certificate isn't trusted (it may be self-signed). For an internal mail server, set SMTP_TLS_REJECT_UNAUTHORIZED=false.";
+  }
   if (code === "EAUTH" || /535|authentication/i.test(text)) {
     return "The mail server rejected the username or password (check SMTP_USER / SMTP_PASS; Microsoft 365 needs SMTP AUTH enabled for the mailbox).";
   }

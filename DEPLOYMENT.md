@@ -226,6 +226,8 @@ holds no data.
 | `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SENDER_MAILBOX` | — | Microsoft Graph email. The app registration needs `Mail.Send` with admin consent |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | `mailpit`, `1025`, —, —, `false` | SMTP email, used when Graph isn't configured. Defaults point at the bundled Mailpit |
 | `MAIL_CAPTURE` | `true` | `true` while email goes to Mailpit. Set `false` with a real SMTP provider |
+| `SMTP_REQUIRE_TLS` | `false` | `true` = refuse to send unless the server upgrades to TLS (STARTTLS) |
+| `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | `false` accepts a self-signed certificate. Only for an internal mail server such as on-premises Exchange |
 | `MAILPIT_UI_AUTH` | — | `username:password` sign-in for the Mailpit inbox. **Set it** — the inbox shows invitation and password links |
 | `MAIL_FROM` | `no-reply@anwargroup.net` | From address for SMTP |
 | `SEED_DEMO_DATA` | `false` | **Keep `false` in production.** Demo accounts share a known password |

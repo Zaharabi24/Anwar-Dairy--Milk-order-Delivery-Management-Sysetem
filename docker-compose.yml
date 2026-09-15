@@ -65,6 +65,8 @@ services:
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_SECURE: ${SMTP_SECURE:-false}
       SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-false}
+      # false = accept a self-signed certificate (internal mail server only).
+      SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
       # true = the SMTP server is a test inbox (Mailpit): emails are recorded as "captured".
       MAIL_CAPTURE: ${MAIL_CAPTURE:-true}
       MAIL_FROM: ${MAIL_FROM:-no-reply@anwargroup.net}
