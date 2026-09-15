@@ -59,7 +59,7 @@ services:
       MS_SENDER_MAILBOX: ${MS_SENDER_MAILBOX:-}
       # ...otherwise SMTP. Defaults send every email to the bundled Mailpit inbox (below).
       # For a real provider set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and MAIL_CAPTURE=false.
-      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_HOST: ${SMTP_HOST:-anwar-fresh-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
@@ -89,6 +89,12 @@ services:
     expose:
       - "8025"
       - "1025"
+    networks:
+      default:
+        # Unique name for SMTP_HOST. A domain puts this service on Dokploy's shared network, where
+        # "mailpit" can also match another project's Mailpit and emails would go astray.
+        aliases:
+          - anwar-fresh-mailpit
 
 volumes:
   db-data:
