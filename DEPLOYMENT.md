@@ -233,7 +233,7 @@ holds no data.
 | `MAIL_FROM` | `no-reply@anwargroup.net` | From address for SMTP |
 | `SEED_DEMO_DATA` | `false` | **Keep `false` in production.** Demo accounts share a known password |
 | `DEMO_PASSWORD` | `Demo@12345` | Only used with demo data |
-| `SESSION_TTL_DAYS` | `7` | |
+| `SESSION_TTL_DAYS` | `7` | Days of **inactivity** before a session lapses. Each request renews it, so someone using the app is never signed out mid-session. Leave it unset rather than blank — a blank value is ignored (with a warning in the log) and 7 is used |
 | `COOKIE_SECURE` | auto | Detected from `X-Forwarded-Proto`. Force with `true` or `false` |
 | `TZ` | `Asia/Dhaka` | Server-rendered times match the browser |
 | `DATABASE_POOL_MAX` | `10` | |

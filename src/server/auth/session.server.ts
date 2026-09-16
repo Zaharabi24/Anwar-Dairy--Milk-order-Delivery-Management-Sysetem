@@ -22,7 +22,23 @@ import type { AuthUser } from "@/lib/auth-types";
 import { hasPermission, type Permission } from "@/lib/permissions";
 
 const COOKIE_NAME = "af_session";
-const SESSION_TTL_DAYS = Number(process.env["SESSION_TTL_DAYS"] ?? 7);
+
+/**
+ * How long a session survives without activity.
+ *
+ * Parsed defensively: an empty value is what a hosting panel writes when the variable is added
+ * but left blank, and Number("") is 0 -- which would set expires_at to now() and maxAge to 0,
+ * signing every user out on their very next request.
+ */
+const SESSION_TTL_DAYS = (() => {
+  const raw = process.env["SESSION_TTL_DAYS"]?.trim();
+  const days = raw ? Number(raw) : Number.NaN;
+  if (raw && !(Number.isFinite(days) && days > 0)) {
+    console.warn(`[auth] SESSION_TTL_DAYS=${raw} is not a positive number; using 7 days.`);
+  }
+  return Number.isFinite(days) && days > 0 ? days : 7;
+})();
+const SESSION_TTL_SECONDS = SESSION_TTL_DAYS * 24 * 60 * 60;
 
 export interface SessionUser extends AuthUser {
   sessionId: string;
@@ -43,7 +59,32 @@ export function appUrl(): string {
 function isHttps(): boolean {
   if (process.env["COOKIE_SECURE"] === "true") return true;
   if (process.env["COOKIE_SECURE"] === "false") return false;
+  // APP_URL is how people actually reach the app, so it answers this identically on every request.
+  // Reading X-Forwarded-Proto instead lets the answer change when a proxy hop or a health check
+  // arrives without the header, and a cookie marked secure is silently dropped by a browser on
+  // http -- which looks exactly like being signed out at random.
+  const configured = process.env["APP_URL"]?.trim();
+  if (configured) {
+    try {
+      return new URL(configured).protocol === "https:";
+    } catch {
+      // Not a URL we can read; fall back to the request below.
+    }
+  }
   return getRequestUrl({ xForwardedProto: true }).protocol === "https:";
+}
+
+/** The cookie's attributes. Set and delete must agree on these or the browser keeps a stale one. */
+const sessionCookie = () => ({
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: isHttps(),
+  path: "/",
+});
+
+/** (Re)issues the session cookie with a full lifetime ahead of it. */
+function issueSessionCookie(token: string): void {
+  setCookie(COOKIE_NAME, token, { ...sessionCookie(), maxAge: SESSION_TTL_SECONDS });
 }
 
 /** All roles the account holds, straight from the database. */
@@ -90,17 +131,11 @@ export async function startSession(
     values (${sha256(token)}, ${employeeId}, ${role}, ${portal}, ${clientIp()},
             ${getRequestHeader("user-agent")?.slice(0, 300) ?? null},
             now() + make_interval(days => ${SESSION_TTL_DAYS}))`;
-  setCookie(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: isHttps(),
-    path: "/",
-    maxAge: SESSION_TTL_DAYS * 24 * 60 * 60,
-  });
+  issueSessionCookie(token);
 }
 
 export function clearSessionCookie(): void {
-  deleteCookie(COOKIE_NAME, { path: "/" });
+  deleteCookie(COOKIE_NAME, sessionCookie());
 }
 
 /** The signed-in user, or null. Roles are re-read from the database on every request. */
@@ -147,9 +182,16 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     isRoleValue(row.active_role) && roles.includes(row.active_role) ? row.active_role : null;
   if (!activeRole || row.stale) {
     activeRole ??= pickDefaultRole(roles);
+    // Being used counts as staying signed in: the expiry moves forward and the cookie is reissued
+    // with it. Without this a session dies a fixed number of days after sign-in however active the
+    // person is, which is a sign-out in the middle of their work rather than one they'd expect.
+    // Idle sessions still lapse, SESSION_TTL_DAYS after the last request.
     await sql`
-      update sessions set active_role = ${activeRole}, last_seen_at = now()
+      update sessions
+      set active_role = ${activeRole}, last_seen_at = now(),
+          expires_at = now() + make_interval(days => ${SESSION_TTL_DAYS})
       where id = ${row.session_id}`;
+    issueSessionCookie(token);
   }
 
   return {
