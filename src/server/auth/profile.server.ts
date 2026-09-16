@@ -60,7 +60,7 @@ export async function getMyProfile(): Promise<AuthResult<MyProfile>> {
   const user = await requireUser();
   const sql = await getDb();
   const [row] = await sql<Row[]>`
-    select e.id, e.name, e.company_email, e.phone, e.department, e.site, e.account_status,
+    select e.id, e.name, e.company_email, e.phone, e.site, e.account_status,
            bu.name as business_unit_name, o.name as office_name,
            e.date_of_birth is not null as has_dob,
            coalesce(e.activated_at, e.created_at) as member_since, e.last_login_at
@@ -76,7 +76,6 @@ export async function getMyProfile(): Promise<AuthResult<MyProfile>> {
       fullName: row["name"]!,
       companyMail: row["company_email"]!,
       phone: row["phone"] ?? "",
-      department: row["department"]!,
       site: row["site"]!,
       businessUnitName: row["business_unit_name"] ?? null,
       officeName: row["office_name"] ?? null,

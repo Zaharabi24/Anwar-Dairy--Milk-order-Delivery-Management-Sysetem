@@ -137,7 +137,6 @@ function ProfilePage() {
         <dl className="mt-5 grid gap-4 sm:grid-cols-2">
           <Field label="Employee ID" value={profile.employeeId} />
           <Field label="Company email" value={profile.companyMail} />
-          <Field label="Department" value={profile.department} />
           <Field label="Site" value={profile.site} />
           <Field label="Business unit" value={profile.businessUnitName ?? "—"} />
           <Field label="Office" value={profile.officeName ?? "—"} />

@@ -28,7 +28,6 @@ export interface MyProfile {
   fullName: string;
   companyMail: string;
   phone: string;
-  department: string;
   site: string;
   businessUnitName: string | null;
   officeName: string | null;
