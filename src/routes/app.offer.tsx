@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, useReducedMotion } from "framer-motion";
+import { Info, MapPin } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { BatchStatusBadge } from "@/components/status-badge";
@@ -110,24 +111,41 @@ function OfferPage() {
           </dl>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-6 md:w-72">
-          <h2 className="font-semibold">Collection points</h2>
-          <ul className="mt-3 space-y-3 text-sm">
+        {/* Where to collect is the one thing on this page someone has to act on later, so it is
+            the one panel that doesn't look like all the others: a tinted surface, each point on its
+            own card, and the operator's note called out rather than trailing off the bottom. */}
+        <aside className="rounded-xl border-2 border-primary/25 bg-secondary p-5 md:w-72">
+          <h2 className="flex items-center gap-2 font-semibold text-primary-deep">
+            <MapPin className="size-4 shrink-0" />
+            Collection points
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">Where to pick your milk up.</p>
+
+          <ul className="mt-4 space-y-2.5 text-sm">
             {activeBatch.deliveryPoints.map((id) => {
               const dp = deliveryPoints.find((d) => d.id === id);
               if (!dp) return null;
               return (
-                <li key={id}>
-                  <p className="font-medium">{dp.name}</p>
-                  <p className="text-muted-foreground">{dp.address}</p>
+                <li key={id} className="rounded-lg border border-border bg-card p-3 shadow-sm">
+                  <p className="font-semibold">{dp.name}</p>
+                  <p className="mt-0.5 text-muted-foreground">{dp.address}</p>
+                  {dp.coordinatorName ? (
+                    <p className="mt-1.5 text-xs text-muted-foreground">
+                      Ask for {dp.coordinatorName}
+                    </p>
+                  ) : null}
                 </li>
               );
             })}
           </ul>
-          <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground">
-            {activeBatch.note}
-          </p>
-        </div>
+
+          {activeBatch.note ? (
+            <p className="mt-4 flex gap-2 rounded-lg border border-accent/40 bg-accent/15 p-3 text-sm">
+              <Info className="mt-0.5 size-4 shrink-0 text-accent-foreground" />
+              <span>{activeBatch.note}</span>
+            </p>
+          ) : null}
+        </aside>
       </div>
 
       <div className="mt-6 rounded-xl border border-border bg-card p-6">
