@@ -865,7 +865,7 @@ export async function reviewAccountRequest(
 // Admin: accounts
 
 export async function listAccounts(): Promise<AuthResult<AccountRow[]>> {
-  const actor = await requirePermission("employee_accounts.manage");
+  const actor = await requirePermission("accounts.manage");
   const sql = await getDb();
   const rows = await sql<Row[]>`
     select e.id, e.name, e.company_email, e.business_unit_code, bu.name as business_unit_name,
@@ -904,7 +904,7 @@ export async function listAccounts(): Promise<AuthResult<AccountRow[]>> {
  * this is also the record of which orders belong to someone who no longer has access.
  */
 export async function listDeletedAccounts(): Promise<AuthResult<DeletedAccountRow[]>> {
-  await requirePermission("employee_accounts.manage");
+  await requirePermission("accounts.manage");
   const sql = await getDb();
   const rows = await sql<Row[]>`
     select e.id, e.name, coalesce(e.former_company_email, e.company_email) as company_email,
@@ -933,8 +933,19 @@ export async function listDeletedAccounts(): Promise<AuthResult<DeletedAccountRo
 
 /** Everything an admin can do to an account after it exists. */
 export async function accountAction(input: AccountActionInput): Promise<AuthResult<ActionOutcome>> {
+  // Three screens call this, and they don't all belong to the same person:
+  //   change_role / remove_staff_access  -> Team & invitations, the Super Admin's own page
+  //   delete                             -> Accounts, and the approved rows of Account Requests,
+  //                                         which a System Admin still owns
+  //   everything else                    -> Accounts, which is now the Super Admin's
   const staffAction = input.action === "change_role" || input.action === "remove_staff_access";
-  const actor = await requirePermission(staffAction ? "staff.manage" : "employee_accounts.manage");
+  const actor = await requirePermission(
+    staffAction
+      ? "staff.manage"
+      : input.action === "delete"
+        ? "employee_accounts.manage"
+        : "accounts.manage",
+  );
   if (input.employee_id.toLowerCase() === actor.employeeId.toLowerCase()) {
     return fail("You cannot perform this on your own account.");
   }

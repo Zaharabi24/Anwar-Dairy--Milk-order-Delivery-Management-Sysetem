@@ -13,6 +13,7 @@ export type Permission =
   | "delivery_points.manage"
   | "settings.manage"
   | "employee_accounts.manage"
+  | "accounts.manage"
   | "account_audit.view"
   | "staff.invite"
   | "staff.manage";
@@ -34,8 +35,9 @@ const GRANTS: Record<RoleValue, readonly Permission[]> = {
   factory_operator: ["batches.manage", "reports.view"],
   head_office_coordinator: ["orders.manage", "collections.manage", "reports.view"],
   system_admin: SYSTEM_ADMIN,
-  // Super Admin can do everything a System Admin can, and owns the staff lifecycle.
-  super_admin: [...SYSTEM_ADMIN, "staff.invite", "staff.manage"],
+  // Super Admin can do everything a System Admin can, and owns the staff lifecycle and the
+  // Accounts console.
+  super_admin: [...SYSTEM_ADMIN, "accounts.manage", "staff.invite", "staff.manage"],
 };
 
 export function hasPermission(roles: readonly RoleValue[], permission: Permission): boolean {

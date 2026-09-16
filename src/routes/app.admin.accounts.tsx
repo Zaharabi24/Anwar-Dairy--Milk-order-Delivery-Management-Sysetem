@@ -162,11 +162,7 @@ function AccountsPage() {
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
         title="Accounts"
-        description={
-          can("staff.manage")
-            ? "Everyone who can sign in. Employee roles are managed from Team & invitations."
-            : "Everyone who can sign in. You can manage employee accounts; other employee accounts are managed by a Super Admin."
-        }
+        description="Everyone who can sign in. Employee roles are managed from Team & invitations."
         action={
           can("staff.invite") ? (
             <Button asChild variant="outline">

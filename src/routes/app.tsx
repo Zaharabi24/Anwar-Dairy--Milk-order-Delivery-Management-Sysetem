@@ -50,9 +50,9 @@ type NavItem = { label: string; to: string; section?: string };
 
 const reportsNav: NavItem = { label: "Reports", to: "/app/reports" };
 
+// Accounts is not here: it belongs to the Super Admin, below.
 const systemAdminPages: NavItem[] = [
   { label: "Account Requests", to: "/app/admin/account-requests" },
-  { label: "Accounts", to: "/app/admin/accounts" },
   { label: "Password Resets", to: "/app/admin/password-resets" },
   { label: "Account audit", to: "/app/admin/account-audit" },
   { label: "Employees", to: "/app/admin/employees" },
@@ -97,7 +97,10 @@ const navByRole: Record<Role, NavItem[]> = {
   // Super Admin oversees every staff area: its own team page, plus the System Admin,
   // Factory Operator and Head Office Coordinator workspaces.
   "Super Admin": [
-    ...section("Super Admin", [{ label: "Team & invitations", to: "/app/admin/team" }]),
+    ...section("Super Admin", [
+      { label: "Team & invitations", to: "/app/admin/team" },
+      { label: "Accounts", to: "/app/admin/accounts" },
+    ]),
     ...section("System Admin", systemAdminPages),
     ...section("Factory Operator", operatorPages),
     ...section("Head Office Coordinator", coordinatorPages),
@@ -110,7 +113,9 @@ const OPERATOR: RoleValue[] = ["factory_operator", "super_admin"];
 const COORDINATOR: RoleValue[] = ["head_office_coordinator", "super_admin"];
 const ADMINS: RoleValue[] = ["system_admin", "super_admin"];
 const routeRoles: Array<[prefix: string, roles: RoleValue[]]> = [
+  // Longest first: rolesFor takes the first match, and these sit under /app/admin.
   ["/app/admin/team", ["super_admin"]],
+  ["/app/admin/accounts", ["super_admin"]],
   ["/app/admin", ADMINS],
   ["/app/operator", OPERATOR],
   ["/app/orders", COORDINATOR],
