@@ -4,6 +4,7 @@
 import { getDb, type Tx } from "./db/client.server";
 import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
 import { AppError } from "@/lib/app-error";
+import { startOfDay } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/auth-constants";
 import type {
   AppNotification,
@@ -389,6 +390,21 @@ export async function createBatch({ batch }: CreateBatchInput) {
       throw new AppError("Saleable litres cannot exceed produced litres.");
     if (batch.minOrder > batch.maxOrder)
       throw new AppError("Minimum order cannot be above the maximum.");
+
+    // The schedule has to describe a day that can actually happen. The form keeps these in step
+    // as they are chosen, but it is the client, so the rules are settled here.
+    const produced = new Date(batch.productionDate);
+    const cutoff = new Date(batch.bookingCutoff);
+    const delivery = new Date(batch.deliveryDate);
+    const endOfToday = new Date();
+    endOfToday.setHours(23, 59, 59, 999);
+    if (produced > endOfToday) throw new AppError("The production date can't be in the future.");
+    if (delivery < startOfDay(produced))
+      throw new AppError("Delivery can't be before the milk was produced.");
+    if (cutoff <= new Date())
+      throw new AppError("Bookings would already be closed. Choose a later cut-off.");
+    if (cutoff > delivery)
+      throw new AppError("Bookings must close before the milk is handed over.");
 
     // Checked before anything is written, so a delivery point that isn't on this system gives a
     // plain answer instead of a foreign key violation reported as "a record that doesn't exist".

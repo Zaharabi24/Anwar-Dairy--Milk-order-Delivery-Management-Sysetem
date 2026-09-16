@@ -12,6 +12,8 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DateField } from "@/components/ui/date-field";
+import { addDays, atTime, sameDay, startOfDay } from "@/lib/dates";
 import { PageHeader } from "@/components/page-header";
 import { useAppData } from "@/context/app-data";
 import { taka } from "@/lib/format";
@@ -34,11 +36,10 @@ export const Route = createFileRoute("/app/operator/new-batch")({
   component: NewBatch,
 });
 
-function todayAt(hour: number, minute = 0) {
-  const d = new Date();
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
-}
+/** Milk can't have been produced in the future, and a week back covers a late entry. */
+const PRODUCTION_WINDOW_DAYS = 7;
+/** Far enough ahead to plan a fortnight of deliveries, not so far the calendar is a wall. */
+const DELIVERY_WINDOW_DAYS = 14;
 
 function to12Hour(value: string) {
   const [hStr, mStr] = value.split(":");
@@ -58,6 +59,11 @@ function NewBatch() {
   const [minOrder, setMin] = useState(1);
   const [maxOrder, setMax] = useState(10);
   const [cap, setCap] = useState(10);
+  const today = startOfDay(new Date());
+  const [productionDate, setProductionDate] = useState(today);
+  const [cutoffDate, setCutoffDate] = useState(today);
+  const [cutoffTime, setCutoffTime] = useState("13:00");
+  const [deliveryDate, setDeliveryDate] = useState(today);
   const [windowFrom, setWindowFrom] = useState("16:00");
   const [windowTo, setWindowTo] = useState("18:30");
   const [note, setNote] = useState("Chilled at 4°C. Please bring your own carry bag.");
@@ -81,6 +87,22 @@ function NewBatch() {
         ? chosenNames.join(", ")
         : `${chosenNames.length} points selected`;
 
+  // Delivery can't precede production, and bookings can't close after the milk is handed over.
+  // Rather than let someone build an impossible schedule and then refuse it, the later dates
+  // follow the earlier one.
+  const setProduction = (d: Date) => {
+    setProductionDate(d);
+    if (deliveryDate < d) setDeliveryDate(d);
+    if (cutoffDate < d) setCutoffDate(d);
+  };
+  const setDelivery = (d: Date) => {
+    setDeliveryDate(d);
+    if (cutoffDate > d) setCutoffDate(d);
+  };
+
+  const cutoffAt = atTime(cutoffDate, cutoffTime).toISOString();
+  const cutoffPassed = new Date(cutoffAt).getTime() <= Date.now();
+
   const produced = Number(producedText) || 0;
   const saleable = Number(saleableText) || 0;
   const window = `${to12Hour(windowFrom)} – ${to12Hour(windowTo)}`;
@@ -94,7 +116,8 @@ function NewBatch() {
     saleable <= 0 ||
     saleable > produced ||
     minOrder > maxOrder ||
-    points.length === 0;
+    points.length === 0 ||
+    cutoffPassed;
 
   async function submit() {
     if (invalid) {
@@ -102,7 +125,7 @@ function NewBatch() {
       return;
     }
     const saved = await addBatch({
-      productionDate: todayAt(6),
+      productionDate: atTime(productionDate, "06:00").toISOString(),
       product: "Fresh Whole Milk",
       producedLitres: produced,
       saleableLitres: saleable,
@@ -110,8 +133,8 @@ function NewBatch() {
       minOrder,
       maxOrder,
       employeeCap: cap,
-      bookingCutoff: todayAt(13),
-      deliveryDate: todayAt(16),
+      bookingCutoff: cutoffAt,
+      deliveryDate: atTime(deliveryDate, windowFrom).toISOString(),
       deliveryWindow: window,
       deliveryPoints: points,
       note,
@@ -165,6 +188,57 @@ function NewBatch() {
           <Field label="Per-employee cap (L)">
             <Input type="number" value={cap} onChange={(e) => setCap(Number(e.target.value))} />
           </Field>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div>
+            <h2 className="text-sm font-semibold">Schedule</h2>
+            <p className="text-xs text-muted-foreground">
+              Employees can book from the moment you publish until bookings close.
+            </p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <DateField
+              id="production-date"
+              label="Production date"
+              value={productionDate}
+              onChange={setProduction}
+              earliest={addDays(today, -PRODUCTION_WINDOW_DAYS)}
+              latest={today}
+              hint="When the milk was produced."
+            />
+            <DateField
+              id="delivery-date"
+              label="Delivery date"
+              value={deliveryDate}
+              onChange={setDelivery}
+              earliest={productionDate}
+              latest={addDays(today, DELIVERY_WINDOW_DAYS)}
+              {...(sameDay(deliveryDate, today)
+                ? { hint: "Collected today." }
+                : sameDay(deliveryDate, addDays(today, 1))
+                  ? { hint: "Collected tomorrow." }
+                  : {})}
+            />
+            <div className="space-y-2">
+              <DateField
+                id="cutoff-date"
+                label="Bookings close"
+                value={cutoffDate}
+                onChange={setCutoffDate}
+                earliest={productionDate}
+                latest={deliveryDate}
+                {...(cutoffPassed ? { error: "This is already in the past." } : {})}
+              />
+              <Input
+                type="time"
+                value={cutoffTime}
+                onChange={(e) => setCutoffTime(e.target.value)}
+                aria-label="Time bookings close"
+                className={cutoffPassed ? "border-destructive" : ""}
+              />
+            </div>
+          </div>
         </div>
 
         <div>
