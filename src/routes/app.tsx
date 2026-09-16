@@ -8,7 +8,7 @@ import {
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
-import { Bell, ChevronDown, LogOut, Menu } from "lucide-react";
+import { Bell, ChevronDown, LogOut, Menu, ShieldCheck, User } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,8 +46,6 @@ export const Route = createFileRoute("/app")({
 /** `section` starts a labelled group in the sidebar (used for the Super Admin's combined menu). */
 type NavItem = { label: string; to: string; section?: string };
 
-const commonTail: NavItem[] = [{ label: "Notifications", to: "/app/notifications" }];
-
 const reportsNav: NavItem = { label: "Reports", to: "/app/reports" };
 
 const systemAdminPages: NavItem[] = [
@@ -76,6 +74,14 @@ const coordinatorPages: NavItem[] = [
 
 const section = (name: string, items: NavItem[]): NavItem[] =>
   items.map((item, i) => (i === 0 ? { ...item, section: name } : item));
+
+const commonTail: NavItem[] = [
+  { label: "Notifications", to: "/app/notifications" },
+  ...section("Your account", [
+    { label: "Profile", to: "/app/profile" },
+    { label: "Privacy & security", to: "/app/security" },
+  ]),
+];
 
 const navByRole: Record<Role, NavItem[]> = {
   Employee: [
@@ -332,6 +338,19 @@ function AppShell() {
                     {user?.employeeId} · {user?.companyMail}
                   </p>
                 </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/app/profile">
+                    <User className="size-4" />
+                    Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/app/security">
+                    <ShieldCheck className="size-4" />
+                    Privacy &amp; security
+                  </Link>
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => void signOut()}>
                   <LogOut className="size-4" />

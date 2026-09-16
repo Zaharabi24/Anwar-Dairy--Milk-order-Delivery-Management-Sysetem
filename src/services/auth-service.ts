@@ -11,6 +11,13 @@ import {
   listAccountsFn,
   listAuthAuditFn,
   listDeletedAccountsFn,
+  myProfileFn,
+  updateProfileFn,
+  changePasswordFn,
+  mySessionsFn,
+  revokeMySessionFn,
+  revokeMyOtherSessionsFn,
+  myActivityFn,
   listPasswordResetsFn,
   sendTestEmailFn,
   listTeamFn,
@@ -33,9 +40,11 @@ import type {
   AccountActionInput,
   AccountAuditFilter,
   AccountRequestInput,
+  ChangePasswordInput,
   CreateInvitationInput,
   ForgotPasswordInput,
   ReviewRequestInput,
+  UpdateProfileInput,
 } from "@/lib/auth.schemas";
 
 export type { AuthResult, FieldErrors } from "@/lib/auth-types";
@@ -77,6 +86,16 @@ export const authService = {
   listAccounts: () => call(() => listAccountsFn()),
   accountAction: (p: AccountActionInput) => call(() => accountActionFn({ data: p })),
   listDeletedAccounts: () => call(() => listDeletedAccountsFn()),
+
+  // Everyone: their own profile and security
+  myProfile: () => call(() => myProfileFn()),
+  updateProfile: (p: UpdateProfileInput) => call(() => updateProfileFn({ data: p })),
+  changePassword: (p: ChangePasswordInput) => call(() => changePasswordFn({ data: p })),
+  mySessions: () => call(() => mySessionsFn()),
+  revokeMySession: (sessionId: string) =>
+    call(() => revokeMySessionFn({ data: { session_id: sessionId } })),
+  revokeMyOtherSessions: () => call(() => revokeMyOtherSessionsFn()),
+  myActivity: () => call(() => myActivityFn()),
   listPasswordResets: () => call(() => listPasswordResetsFn()),
   sendTestEmail: () => call(() => sendTestEmailFn()),
   listAuthAudit: (f: Partial<AccountAuditFilter>) =>

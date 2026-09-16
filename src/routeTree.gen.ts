@@ -25,7 +25,9 @@ import { Route as AppMyOrdersRouteImport } from './routes/app.my-orders'
 import { Route as AppNotificationsRouteImport } from './routes/app.notifications'
 import { Route as AppOfferRouteImport } from './routes/app.offer'
 import { Route as AppOrdersRouteImport } from './routes/app.orders'
+import { Route as AppProfileRouteImport } from './routes/app.profile'
 import { Route as AppReportsRouteImport } from './routes/app.reports'
+import { Route as AppSecurityRouteImport } from './routes/app.security'
 import { Route as StaffAdminRouteImport } from './routes/staff.admin'
 import { Route as StaffForgotPasswordRouteImport } from './routes/staff.forgot-password'
 import { Route as AppAdminAccountAuditRouteImport } from './routes/app.admin.account-audit'
@@ -123,9 +125,19 @@ const AppOrdersRoute = AppOrdersRouteImport.update({
   path: '/orders',
   getParentRoute: () => AppRoute,
 } as any)
+const AppProfileRoute = AppProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppReportsRoute = AppReportsRouteImport.update({
   id: '/reports',
   path: '/reports',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSecurityRoute = AppSecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
   getParentRoute: () => AppRoute,
 } as any)
 const StaffAdminRoute = StaffAdminRouteImport.update({
@@ -226,7 +238,9 @@ export interface FileRoutesByFullPath {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/offer': typeof AppOfferRoute
   '/app/orders': typeof AppOrdersRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/security': typeof AppSecurityRoute
   '/staff/admin': typeof StaffAdminRoute
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
   '/app/': typeof AppIndexRoute
@@ -260,7 +274,9 @@ export interface FileRoutesByTo {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/offer': typeof AppOfferRoute
   '/app/orders': typeof AppOrdersRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/security': typeof AppSecurityRoute
   '/staff/admin': typeof StaffAdminRoute
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
   '/app': typeof AppIndexRoute
@@ -296,7 +312,9 @@ export interface FileRoutesById {
   '/app/notifications': typeof AppNotificationsRoute
   '/app/offer': typeof AppOfferRoute
   '/app/orders': typeof AppOrdersRoute
+  '/app/profile': typeof AppProfileRoute
   '/app/reports': typeof AppReportsRoute
+  '/app/security': typeof AppSecurityRoute
   '/staff/admin': typeof StaffAdminRoute
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
   '/app/': typeof AppIndexRoute
@@ -333,7 +351,9 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/offer'
     | '/app/orders'
+    | '/app/profile'
     | '/app/reports'
+    | '/app/security'
     | '/staff/admin'
     | '/staff/forgot-password'
     | '/app/'
@@ -367,7 +387,9 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/offer'
     | '/app/orders'
+    | '/app/profile'
     | '/app/reports'
+    | '/app/security'
     | '/staff/admin'
     | '/staff/forgot-password'
     | '/app'
@@ -402,7 +424,9 @@ export interface FileRouteTypes {
     | '/app/notifications'
     | '/app/offer'
     | '/app/orders'
+    | '/app/profile'
     | '/app/reports'
+    | '/app/security'
     | '/staff/admin'
     | '/staff/forgot-password'
     | '/app/'
@@ -549,11 +573,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOrdersRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/profile': {
+      id: '/app/profile'
+      path: '/profile'
+      fullPath: '/app/profile'
+      preLoaderRoute: typeof AppProfileRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/reports': {
       id: '/app/reports'
       path: '/reports'
       fullPath: '/app/reports'
       preLoaderRoute: typeof AppReportsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/security': {
+      id: '/app/security'
+      path: '/security'
+      fullPath: '/app/security'
+      preLoaderRoute: typeof AppSecurityRouteImport
       parentRoute: typeof AppRoute
     }
     '/staff/admin': {
@@ -679,7 +717,9 @@ interface AppRouteChildren {
   AppNotificationsRoute: typeof AppNotificationsRoute
   AppOfferRoute: typeof AppOfferRoute
   AppOrdersRoute: typeof AppOrdersRoute
+  AppProfileRoute: typeof AppProfileRoute
   AppReportsRoute: typeof AppReportsRoute
+  AppSecurityRoute: typeof AppSecurityRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAdminAccountAuditRoute: typeof AppAdminAccountAuditRoute
   AppAdminAccountRequestsRoute: typeof AppAdminAccountRequestsRoute
@@ -705,7 +745,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppNotificationsRoute: AppNotificationsRoute,
   AppOfferRoute: AppOfferRoute,
   AppOrdersRoute: AppOrdersRoute,
+  AppProfileRoute: AppProfileRoute,
   AppReportsRoute: AppReportsRoute,
+  AppSecurityRoute: AppSecurityRoute,
   AppIndexRoute: AppIndexRoute,
   AppAdminAccountAuditRoute: AppAdminAccountAuditRoute,
   AppAdminAccountRequestsRoute: AppAdminAccountRequestsRoute,

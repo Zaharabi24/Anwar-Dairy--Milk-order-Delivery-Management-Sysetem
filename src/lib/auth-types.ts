@@ -21,6 +21,45 @@ export interface AuthUser {
 }
 
 export type AccountStatus = "awaiting_password" | "active" | "suspended" | "deactivated";
+
+/** The signed-in person's own account, for the Profile page. */
+export interface MyProfile {
+  employeeId: string;
+  fullName: string;
+  companyMail: string;
+  phone: string;
+  department: string;
+  site: string;
+  businessUnitName: string | null;
+  officeName: string | null;
+  roles: RoleValue[];
+  status: AccountStatus;
+  /** Shown as on file or missing; the date itself never leaves the server. */
+  hasDateOfBirth: boolean;
+  memberSince: string;
+  lastLoginAt: string | null;
+}
+
+/** One place this account is signed in, for Privacy & security. */
+export interface SessionSummary {
+  id: string;
+  device: string;
+  ip: string | null;
+  portal: Portal;
+  /** The session making the request. It can be signed out, but only from the account menu. */
+  current: boolean;
+  startedAt: string;
+  lastSeenAt: string;
+  expiresAt: string;
+}
+
+/** One entry in the account's recent activity. */
+export interface AccountActivity {
+  id: string;
+  event: string;
+  at: string;
+  ip: string | null;
+}
 export type RequestStatus = "pending" | "approved" | "rejected" | "expired";
 
 export interface AccountRequestRow {
