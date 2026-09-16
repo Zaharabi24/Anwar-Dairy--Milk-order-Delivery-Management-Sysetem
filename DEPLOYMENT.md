@@ -224,7 +224,7 @@ holds no data.
 | `SUPER_ADMIN_PASSWORD` | — | Optional, 12+ chars: create directly instead of inviting |
 | `INVITE_TTL_HOURS` | `72` | How long staff invitation links stay valid |
 | `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SENDER_MAILBOX` | — | Microsoft Graph email. The app registration needs `Mail.Send` with admin consent |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | `mailpit`, `1025`, —, —, `false` | SMTP email, used when Graph isn't configured. Defaults point at the bundled Mailpit |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | `mailpit`, `1025`, —, —, `false` | SMTP email, used when Graph isn't configured. Defaults point at the bundled Mailpit. `SMTP_HOST` accepts a comma-separated list of mail servers — see [Several mail servers](#several-mail-servers) |
 | `MAIL_CAPTURE` | `true` | `true` while email goes to Mailpit. Set `false` with a real SMTP provider |
 | `SMTP_REQUIRE_TLS` | `false` | `true` = refuse to send unless the server upgrades to TLS (STARTTLS) |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | `false` accepts a self-signed certificate. Only for an internal mail server such as on-premises Exchange |
@@ -273,6 +273,40 @@ go through `src/server/auth/mail.server.ts`. The transport is picked from the en
   3. **Authenticated SMTP** must be enabled for that mailbox (Microsoft 365 admin → user → Mail →
      Email apps). Tenants with Security Defaults block it; use Graph instead.
 
+### Several mail servers
+
+`SMTP_HOST` accepts a comma-separated list, which is what to use when the organisation has more
+than one Exchange server:
+
+```
+SMTP_HOST=exchange02.corp.internal,exchange01.corp.internal
+```
+
+Every email is offered to the hosts in order and goes out through the **first one that accepts
+it**. A host that refuses the connection, the TLS handshake, the credentials or the recipient is
+skipped and the next is tried; only when all of them refuse does the message count as failed, and
+the error then names what each host said. The host that last delivered is tried first, so a
+refusing server isn't dialled again for every message. All hosts share `SMTP_PORT`, `SMTP_USER`,
+`SMTP_PASS` and the TLS settings, so list servers that take the same credentials.
+
+Because a host is skipped only after it refuses, a server that accepts a message but never
+acknowledges it (a timeout part-way through) can lead to the same email arriving twice. That is
+the intended trade for password-setup and invitation links.
+
+**Which server works?** `scripts/mail-probe.mjs` tries every host, port and auth mode and reports
+how far each one got, then prints the variables to set:
+
+```sh
+node scripts/mail-probe.mjs \
+  --hosts exchange01.corp.internal,exchange02.corp.internal \
+  --user 'DOMAIN\svc-mailer' --pass 'secret' \
+  --to you@anwargroup.net
+```
+
+It stops after the credentials are accepted and sends nothing; add `--send` to deliver a real
+test message, and `--no-require-tls` for a server with no STARTTLS. Run it from a machine on the
+same network as the mail servers — the Dokploy host is ideal, since that is where the app runs.
+
 ### Checking that it works
 
 - **Send test email:** the button on **Team & invitations** or **Account requests** sends a test to
@@ -281,7 +315,9 @@ go through `src/server/auth/mail.server.ts`. The transport is picked from the en
   - "caught by the local test inbox" means Mailpit;
   - "couldn't be emailed: …" gives the reason.
 - **Startup log:**
-  - `[mail] ready: …` means the connection and credentials work;
+  - `[mail] ready: …` names the host email will leave by, and lists any host that isn't usable
+    with the reason — this is the quickest way to see which Exchange server is answering;
+  - `[mail] sending through …` means delivery moved to another host in the list;
   - `[mail] local test inbox …` means capture mode;
   - `[mail] NOT READY — …` gives the problem (bad password, unreachable host, …).
 - **Screens:** inviting, resending, approving and sending setup/reset links now report the real
