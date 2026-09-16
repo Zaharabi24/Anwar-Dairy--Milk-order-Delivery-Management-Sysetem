@@ -1,12 +1,17 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { PageHeader } from "@/components/page-header";
 import { useAppData } from "@/context/app-data";
 import { taka } from "@/lib/format";
@@ -67,6 +72,14 @@ function NewBatch() {
   const points = (chosen ?? activePoints.map((p) => p.id)).filter((id) =>
     activePoints.some((p) => p.id === id),
   );
+
+  const chosenNames = activePoints.filter((p) => points.includes(p.id)).map((p) => p.name);
+  const summary =
+    chosenNames.length === 0
+      ? "Select delivery points"
+      : chosenNames.length <= 2
+        ? chosenNames.join(", ")
+        : `${chosenNames.length} points selected`;
 
   const produced = Number(producedText) || 0;
   const saleable = Number(saleableText) || 0;
@@ -177,32 +190,50 @@ function NewBatch() {
         </div>
 
         <div>
-          <Label className="mb-2 block">Delivery points</Label>
+          <Label className="mb-2 block" id="delivery-points-label">
+            Delivery points
+          </Label>
           {activePoints.length === 0 ? (
             <p className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">
               No delivery points are set up yet. A System Admin adds them under Delivery points; a
               batch can&apos;t be saved until at least one exists.
             </p>
           ) : (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {activePoints.map((p) => (
-                <label
-                  key={p.id}
-                  className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm"
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  aria-labelledby="delivery-points-label"
+                  className="w-full justify-between font-normal sm:w-96"
                 >
-                  <Checkbox
+                  <span className="truncate">{summary}</span>
+                  <ChevronsUpDown className="ml-2 size-4 shrink-0 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              {/* Matches the trigger width so long addresses stay readable. */}
+              <DropdownMenuContent
+                align="start"
+                className="w-[--radix-dropdown-menu-trigger-width]"
+              >
+                {activePoints.map((p) => (
+                  <DropdownMenuCheckboxItem
+                    key={p.id}
                     checked={points.includes(p.id)}
+                    // Without this the menu closes on the first tick, so picking a second
+                    // point would mean reopening it.
+                    onSelect={(e) => e.preventDefault()}
                     onCheckedChange={(v) =>
                       setChosen(v ? [...points, p.id] : points.filter((x) => x !== p.id))
                     }
-                  />
-                  <span>
-                    <span className="font-medium">{p.name}</span>
-                    <span className="block text-muted-foreground">{p.address}</span>
-                  </span>
-                </label>
-              ))}
-            </div>
+                  >
+                    <span className="block">
+                      <span className="font-medium">{p.name}</span>
+                      <span className="block text-xs text-muted-foreground">{p.address}</span>
+                    </span>
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           )}
           {activePoints.length > 0 && points.length === 0 ? (
             <p className="mt-1 text-sm text-destructive">Pick at least one point.</p>
