@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { AuthHeading, AuthShell, FieldError } from "@/components/auth/AuthShell";
@@ -14,20 +14,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  BUSINESS_UNITS,
-  DOB_HELPER,
-  EMAIL_PLACEHOLDER,
-  OFFICES,
-  ROLE_HOME,
-} from "@/lib/auth-constants";
+import { BUSINESS_UNITS, DOB_HELPER, EMAIL_PLACEHOLDER, OFFICES } from "@/lib/auth-constants";
+import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
 import { validateCompanyEmail, validateDob, validateEmployeeId } from "@/lib/auth-validation";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/signup")({
-  beforeLoad: ({ context }) => {
-    if (context.auth) throw redirect({ to: ROLE_HOME[context.auth.activeRole] });
-  },
+  validateSearch: (search: Record<string, unknown>): SignInSearch => signInSearch(search),
+  beforeLoad: ({ context, search }) => guardSignInPage(context.auth, "employee", search),
   head: () => ({
     meta: [
       { title: "Request an account — Anwar Organic" },
@@ -149,8 +143,8 @@ function RequestAccountPage() {
       />
 
       <p className="-mt-3 mb-5 rounded-lg border border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
-        This form is for employees booking milk. Factory, head office and admin staff are invited
-        by email — ask your Super Admin.
+        This form is for employees booking milk. Factory, head office and admin staff are invited by
+        email — ask your Super Admin.
       </p>
 
       {message ? (

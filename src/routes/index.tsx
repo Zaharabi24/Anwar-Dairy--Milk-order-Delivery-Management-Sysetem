@@ -14,6 +14,8 @@ import {
   Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ROLE_HOME, roleLabel } from "@/lib/auth-constants";
+import type { AuthUser } from "@/lib/auth-types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -54,7 +56,7 @@ function useCountUp(target: number, start: boolean, duration = 1.6) {
   return value;
 }
 
-function Nav() {
+function Nav({ auth }: { auth: AuthUser | null }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-28 max-w-6xl items-center justify-between px-5">
@@ -68,12 +70,29 @@ function Nav() {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link to="/login">Sign In</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link to="/signup">Sign Up</Link>
-          </Button>
+          {auth ? (
+            <>
+              {/* Always reaches the form, so an employee can sign in on a browser where a
+                  colleague is still signed in. */}
+              <Button asChild size="sm" variant="outline">
+                <Link to="/login" search={{ switch: true }}>
+                  Sign in as someone else
+                </Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to={ROLE_HOME[auth.activeRole]}>Open dashboard</Link>
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/login">Sign In</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/signup">Sign Up</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -273,9 +292,10 @@ function Stat({
 }
 
 function Landing() {
+  const { auth } = Route.useRouteContext();
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Nav />
+      <Nav auth={auth} />
 
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[55fr_45fr] md:py-24">
         <div>
@@ -291,9 +311,16 @@ function Landing() {
               <a href="#how-it-works">See today's batch</a>
             </Button>
             <Button asChild size="lg" variant="outline">
-              <Link to="/login">Sign in</Link>
+              <Link to="/login" search={auth ? { switch: true } : {}}>
+                {auth ? "Sign in as someone else" : "Sign in"}
+              </Link>
             </Button>
           </div>
+          {auth ? (
+            <p className="mt-4 text-sm text-muted-foreground">
+              Signed in as <strong>{auth.fullName}</strong> ({roleLabel(auth.activeRole)}).
+            </p>
+          ) : null}
         </div>
         <BatchWidget />
       </section>

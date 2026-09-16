@@ -8,17 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROLE_HOME } from "@/lib/auth-constants";
-import { safeRedirect } from "@/lib/safe-redirect";
+import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
+import { SignedInNotice } from "@/components/auth/SignedInNotice";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
-    const target = safeRedirect(search["redirect"]);
-    return target ? { redirect: target } : {};
-  },
-  beforeLoad: ({ context }) => {
-    if (context.auth) throw redirect({ to: ROLE_HOME[context.auth.activeRole] });
-  },
+  validateSearch: (search: Record<string, unknown>): SignInSearch => signInSearch(search),
+  // Only an employee-portal session is already signed in *here*. A staff session belongs to the
+  // other front door, so it still gets the form — that is how an employee signs in on a browser
+  // where an admin is logged in.
+  beforeLoad: ({ context, search }) => guardSignInPage(context.auth, "employee", search),
   head: () => ({
     meta: [
       { title: "Sign in — Anwar Organic" },
@@ -40,6 +39,7 @@ export const Route = createFileRoute("/login")({
 /** Employee portal. Staff (operators, coordinators, admins) use /staff/admin. */
 function LoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
+  const { auth } = Route.useRouteContext();
   const navigate = useNavigate();
   const router = useRouter();
   const [employeeId, setEmployeeId] = useState("");
@@ -75,6 +75,8 @@ function LoginPage() {
         title="Sign in"
         description="Employees: use your Employee ID or company email and password to book milk."
       />
+
+      {auth ? <SignedInNotice auth={auth} /> : null}
 
       {message ? (
         <Alert variant="destructive" className="mb-5">

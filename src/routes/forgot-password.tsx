@@ -1,4 +1,4 @@
-import { createFileRoute, Link, redirect } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Loader2, MailCheck } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { AuthHeading, AuthShell, FieldError } from "@/components/auth/AuthShell";
@@ -7,14 +7,14 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DOB_HELPER, EMAIL_PLACEHOLDER, ROLE_HOME } from "@/lib/auth-constants";
+import { DOB_HELPER, EMAIL_PLACEHOLDER } from "@/lib/auth-constants";
+import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
 import { validateCompanyEmail } from "@/lib/auth-validation";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/forgot-password")({
-  beforeLoad: ({ context }) => {
-    if (context.auth) throw redirect({ to: ROLE_HOME[context.auth.activeRole] });
-  },
+  validateSearch: (search: Record<string, unknown>): SignInSearch => signInSearch(search),
+  beforeLoad: ({ context, search }) => guardSignInPage(context.auth, "employee", search),
   head: () => ({
     meta: [
       { title: "Reset your password — Anwar Organic" },

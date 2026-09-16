@@ -8,18 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EMAIL_PLACEHOLDER, ROLE_HOME } from "@/lib/auth-constants";
-import { safeRedirect } from "@/lib/safe-redirect";
+import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
+import { SignedInNotice } from "@/components/auth/SignedInNotice";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/staff/admin")({
-  validateSearch: (search: Record<string, unknown>): { redirect?: string } => {
-    const target = safeRedirect(search["redirect"]);
-    return target ? { redirect: target } : {};
-  },
-  beforeLoad: ({ context }) => {
-    if (context.auth?.portal === "staff")
-      throw redirect({ to: ROLE_HOME[context.auth.activeRole] });
-  },
+  validateSearch: (search: Record<string, unknown>): SignInSearch => signInSearch(search),
+  beforeLoad: ({ context, search }) => guardSignInPage(context.auth, "staff", search),
   head: () => ({
     meta: [
       { title: "Super Admin Sign In — Anwar Organic" },
@@ -32,6 +27,7 @@ export const Route = createFileRoute("/staff/admin")({
 /** Staff portal: invited operators, coordinators, System Admins and Super Admins. */
 function StaffLoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
+  const { auth } = Route.useRouteContext();
   const navigate = useNavigate();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -64,6 +60,8 @@ function StaffLoginPage() {
   return (
     <AuthShell>
       <AuthHeading title="Super Admin Sign In" />
+
+      {auth ? <SignedInNotice auth={auth} /> : null}
 
       {message ? (
         <Alert variant="destructive" className="mb-5">

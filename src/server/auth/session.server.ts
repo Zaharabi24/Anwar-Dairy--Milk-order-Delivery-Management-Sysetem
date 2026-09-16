@@ -62,6 +62,19 @@ export function rolesForPortal(held: RoleValue[], portal: Portal): RoleValue[] {
   return held.some(isStaffRole) ? held : [];
 }
 
+/**
+ * Ends whatever session this browser is currently holding. Signing in as someone else replaces
+ * the cookie either way; revoking the row as well means the old token can't still be redeemed if
+ * it was captured, so the new person never inherits the previous person's access.
+ */
+export async function revokeCurrentSession(db: Sql | Tx): Promise<void> {
+  const token = getCookie(COOKIE_NAME);
+  if (!token) return;
+  await db`
+    update sessions set revoked_at = now()
+    where token_hash = ${sha256(token)} and revoked_at is null`;
+}
+
 /** Starts a session for an active account and sets the cookie on the current response. */
 export async function startSession(
   db: Sql | Tx,
@@ -69,6 +82,8 @@ export async function startSession(
   role: RoleValue,
   portal: Portal = "employee",
 ): Promise<void> {
+  // Every sign-in goes through here, so this is the one place that has to retire the old session.
+  await revokeCurrentSession(db);
   const token = randomToken(32);
   await db`
     insert into sessions (token_hash, employee_id, active_role, portal, ip, user_agent, expires_at)
