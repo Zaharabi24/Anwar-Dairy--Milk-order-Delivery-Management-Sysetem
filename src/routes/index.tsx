@@ -14,6 +14,8 @@ import {
   Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
+import type { AuthUser } from "@/lib/auth-types";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -54,7 +56,7 @@ function useCountUp(target: number, start: boolean, duration = 1.6) {
   return value;
 }
 
-function Nav() {
+function Nav({ auth }: { auth: AuthUser | null }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur">
       <div className="mx-auto flex h-28 max-w-6xl items-center justify-between px-5">
@@ -68,12 +70,23 @@ function Nav() {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link to="/login">Sign In</Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link to="/signup">Sign Up</Link>
-          </Button>
+          {auth ? (
+            // Signed in: the logo brought them here, so offer the way back into their own
+            // workspace. Sign In and Sign Up would both be wrong for someone who already has a
+            // session, and were what made a logo click look like a sign-out.
+            <Button asChild size="sm">
+              <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
+            </Button>
+          ) : (
+            <>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/login">Sign In</Link>
+              </Button>
+              <Button asChild size="sm">
+                <Link to="/signup">Sign Up</Link>
+              </Button>
+            </>
+          )}
         </div>
       </div>
     </header>
@@ -273,9 +286,10 @@ function Stat({
 }
 
 function Landing() {
+  const { auth } = Route.useRouteContext();
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Nav />
+      <Nav auth={auth} />
 
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[55fr_45fr] md:py-24">
         <div>
@@ -287,12 +301,31 @@ function Landing() {
             pick your litres before the cut-off and collect it at your usual point.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Button asChild size="lg">
-              <a href="#how-it-works">See today's batch</a>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link to="/login">Sign in</Link>
-            </Button>
+            {auth ? (
+              <>
+                <Button asChild size="lg">
+                  <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
+                </Button>
+                {auth.roles.includes("employee") ? (
+                  <Button asChild size="lg" variant="outline">
+                    <Link to="/app/my-orders">My orders</Link>
+                  </Button>
+                ) : (
+                  <Button asChild size="lg" variant="outline">
+                    <a href="#how-it-works">How it works</a>
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Button asChild size="lg">
+                  <a href="#how-it-works">See today's batch</a>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <Link to="/login">Sign in</Link>
+                </Button>
+              </>
+            )}
           </div>
         </div>
         <BatchWidget />

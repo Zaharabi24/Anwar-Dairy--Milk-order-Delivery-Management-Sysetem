@@ -76,6 +76,18 @@ export const ROLE_HOME: Record<RoleValue, string> = {
   super_admin: "/app/admin/team",
 };
 
+/**
+ * What the landing page's call to action says once someone is signed in. It points at the same
+ * place as ROLE_HOME, so the button names where it is actually going.
+ */
+export const ROLE_HOME_LABEL: Record<RoleValue, string> = {
+  employee: "See today's offer",
+  factory_operator: "Operator dashboard",
+  head_office_coordinator: "Fulfillment",
+  system_admin: "Admin console",
+  super_admin: "Admin console",
+};
+
 export const ROLE_PRECEDENCE: RoleValue[] = [
   "super_admin",
   "system_admin",
