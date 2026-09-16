@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { ChevronUp, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,9 +15,15 @@ export const Route = createFileRoute("/app/operator/new-batch")({
   head: () => ({
     meta: [
       { title: "New batch — Anwar Organic" },
-      { name: "description", content: "Create today's milk batch with rate, limits and delivery details." },
+      {
+        name: "description",
+        content: "Create today's milk batch with rate, limits and delivery details.",
+      },
       { property: "og:title", content: "New batch — Anwar Organic" },
-      { property: "og:description", content: "Create today's milk batch with rate, limits and delivery details." },
+      {
+        property: "og:description",
+        content: "Create today's milk batch with rate, limits and delivery details.",
+      },
     ],
   }),
   component: NewBatch,
@@ -50,7 +56,17 @@ function NewBatch() {
   const [windowFrom, setWindowFrom] = useState("16:00");
   const [windowTo, setWindowTo] = useState("18:30");
   const [note, setNote] = useState("Chilled at 4°C. Please bring your own carry bag.");
-  const [points, setPoints] = useState<string[]>(["dp-gulshan", "dp-savar"]);
+  // Selection starts as null and means "every active point". Nothing is hardcoded: the demo
+  // seed's ids don't exist on a real database, and a batch saved against one is only rejected
+  // once it reaches the foreign key.
+  const [chosen, setChosen] = useState<string[] | null>(null);
+
+  const activePoints = useMemo(() => deliveryPoints.filter((p) => p.active), [deliveryPoints]);
+  // Filtered every render, so a point that is removed or deactivated drops out of the selection
+  // instead of failing at save time.
+  const points = (chosen ?? activePoints.map((p) => p.id)).filter((id) =>
+    activePoints.some((p) => p.id === id),
+  );
 
   const produced = Number(producedText) || 0;
   const saleable = Number(saleableText) || 0;
@@ -61,7 +77,11 @@ function NewBatch() {
     Math.max(2400, ...batches.map((b) => Number(/^BATCH-(\d+)$/.exec(b.batchNo)?.[1] ?? 0))) + 1
   }`;
   const invalid =
-    produced <= 0 || saleable <= 0 || saleable > produced || minOrder > maxOrder || points.length === 0;
+    produced <= 0 ||
+    saleable <= 0 ||
+    saleable > produced ||
+    minOrder > maxOrder ||
+    points.length === 0;
 
   async function submit() {
     if (invalid) {
@@ -90,14 +110,20 @@ function NewBatch() {
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <PageHeader title="New batch" description={`Draft ${nextNo} — employees see it only after you publish.`} />
+      <PageHeader
+        title="New batch"
+        description={`Draft ${nextNo} — employees see it only after you publish.`}
+      />
 
       <div className="space-y-6 rounded-xl border border-border bg-card p-6">
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Produced litres">
             <StepperInput value={producedText} onChange={setProducedText} />
           </Field>
-          <Field label="Saleable litres" error={saleable > produced ? "Cannot exceed produced" : undefined}>
+          <Field
+            label="Saleable litres"
+            error={saleable > produced ? "Cannot exceed produced" : undefined}
+          >
             <StepperInput value={saleableText} onChange={setSaleableText} />
           </Field>
           <Field label="Rate per litre (৳)">
@@ -106,11 +132,22 @@ function NewBatch() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Field label="Minimum order (L)" error={minOrder > maxOrder ? "Above maximum" : undefined}>
-            <Input type="number" value={minOrder} onChange={(e) => setMin(Number(e.target.value))} />
+          <Field
+            label="Minimum order (L)"
+            error={minOrder > maxOrder ? "Above maximum" : undefined}
+          >
+            <Input
+              type="number"
+              value={minOrder}
+              onChange={(e) => setMin(Number(e.target.value))}
+            />
           </Field>
           <Field label="Maximum order (L)">
-            <Input type="number" value={maxOrder} onChange={(e) => setMax(Number(e.target.value))} />
+            <Input
+              type="number"
+              value={maxOrder}
+              onChange={(e) => setMax(Number(e.target.value))}
+            />
           </Field>
           <Field label="Per-employee cap (L)">
             <Input type="number" value={cap} onChange={(e) => setCap(Number(e.target.value))} />
@@ -141,23 +178,33 @@ function NewBatch() {
 
         <div>
           <Label className="mb-2 block">Delivery points</Label>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {deliveryPoints.filter((p) => p.active).map((p) => (
-              <label key={p.id} className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm">
-                <Checkbox
-                  checked={points.includes(p.id)}
-                  onCheckedChange={(v) =>
-                    setPoints((prev) => (v ? [...prev, p.id] : prev.filter((x) => x !== p.id)))
-                  }
-                />
-                <span>
-                  <span className="font-medium">{p.name}</span>
-                  <span className="block text-muted-foreground">{p.address}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {points.length === 0 ? (
+          {activePoints.length === 0 ? (
+            <p className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm text-muted-foreground">
+              No delivery points are set up yet. A System Admin adds them under Delivery points; a
+              batch can&apos;t be saved until at least one exists.
+            </p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {activePoints.map((p) => (
+                <label
+                  key={p.id}
+                  className="flex items-start gap-3 rounded-lg border border-border p-3 text-sm"
+                >
+                  <Checkbox
+                    checked={points.includes(p.id)}
+                    onCheckedChange={(v) =>
+                      setChosen(v ? [...points, p.id] : points.filter((x) => x !== p.id))
+                    }
+                  />
+                  <span>
+                    <span className="font-medium">{p.name}</span>
+                    <span className="block text-muted-foreground">{p.address}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          )}
+          {activePoints.length > 0 && points.length === 0 ? (
             <p className="mt-1 text-sm text-destructive">Pick at least one point.</p>
           ) : null}
         </div>
@@ -168,7 +215,8 @@ function NewBatch() {
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <p className="text-sm text-muted-foreground">
-            Potential value: <span className="font-medium text-foreground">{taka(saleable * rate)}</span>
+            Potential value:{" "}
+            <span className="font-medium text-foreground">{taka(saleable * rate)}</span>
           </p>
           <Button onClick={submit} disabled={invalid}>
             Save draft & review

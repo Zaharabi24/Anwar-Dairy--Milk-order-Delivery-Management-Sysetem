@@ -389,6 +389,23 @@ export async function createBatch({ batch }: CreateBatchInput) {
     if (batch.minOrder > batch.maxOrder)
       throw new AppError("Minimum order cannot be above the maximum.");
 
+    // Checked before anything is written, so a delivery point that isn't on this system gives a
+    // plain answer instead of a foreign key violation reported as "a record that doesn't exist".
+    // An empty list is already refused by the schema (deliveryPoints is .min(1)).
+    const points = [...new Set(batch.deliveryPoints)];
+    const known = await tx<Row[]>`
+      select id, active from delivery_points where id = any(${points}::text[])`;
+    const missing = points.filter((id) => !known.some((p) => p.id === id));
+    if (missing.length) {
+      throw new AppError(
+        `No delivery point exists for ${missing.join(", ")}. Add it under Delivery points, then try again.`,
+      );
+    }
+    const inactive = known.filter((p) => !p.active).map((p) => p.id as string);
+    if (inactive.length) {
+      throw new AppError(`${inactive.join(", ")} is no longer active. Choose another point.`);
+    }
+
     await lock(tx, LOCK_BATCH_NO);
     const [{ next }] = (await tx<Row[]>`
       select coalesce(max(substring(batch_no from '^BATCH-([0-9]+)$')::int), 2400) + 1 as next
@@ -411,7 +428,6 @@ export async function createBatch({ batch }: CreateBatchInput) {
       note: batch.note,
       status: "Draft",
     })}`;
-    const points = [...new Set(batch.deliveryPoints)];
     await tx`insert into batch_delivery_points ${tx(
       points.map((id, position) => ({ batch_no: batchNo, delivery_point_id: id, position })),
     )}`;
