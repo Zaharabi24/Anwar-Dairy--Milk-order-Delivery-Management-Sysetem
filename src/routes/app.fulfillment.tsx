@@ -6,6 +6,7 @@ import { orderStatusLabels } from "@/lib/order-status";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useAppData } from "@/context/app-data";
 import { litres } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import type { Order, OrderStatus } from "@/lib/types";
 
 /**
@@ -146,9 +147,21 @@ function StatusSelect({
     ? SETTABLE
     : [order.status, ...SETTABLE];
 
+  // What is in the field is what is stored -- the change is written the moment it is picked --
+  // so the saved status is shown in the brand green to say so at a glance. "Not collected" is the
+  // exception: it is saved too, but it is an order nobody came for, and colouring that like a
+  // success would bury the one row on the page someone has to do something about.
+  const tone =
+    order.status === "NotCollected"
+      ? "border-destructive/50 text-destructive"
+      : "border-primary/50 text-primary-deep";
+
   return (
     <Select value={order.status} onValueChange={(v) => onChange(v as OrderStatus)}>
-      <SelectTrigger className="w-44" aria-label={`Status for order ${order.orderNo}`}>
+      <SelectTrigger
+        className={cn("w-44 font-medium", tone)}
+        aria-label={`Status for order ${order.orderNo}`}
+      >
         {/* The label is rendered here rather than through SelectValue, which resolves it from the
             items -- and those live in portalled content the server never renders, so the trigger
             came back empty until the page hydrated. The value is controlled, so this is always
