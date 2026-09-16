@@ -228,6 +228,7 @@ holds no data.
 | `MAIL_CAPTURE` | `true` | `true` while email goes to Mailpit. Set `false` with a real SMTP provider |
 | `SMTP_REQUIRE_TLS` | `false` | `true` = refuse to send unless the server upgrades to TLS (STARTTLS) |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | `false` accepts a self-signed certificate. Only for an internal mail server such as on-premises Exchange |
+| `SMTP_ANONYMOUS_FALLBACK` | `true` | `false` requires authentication and never relays without credentials — see [Several mail servers](#several-mail-servers) |
 | `MAILPIT_UI_AUTH` | — | `username:password` sign-in for the Mailpit inbox. **Set it** — the inbox shows invitation and password links |
 | `MAIL_FROM` | `no-reply@anwargroup.net` | From address for SMTP |
 | `SEED_DEMO_DATA` | `false` | **Keep `false` in production.** Demo accounts share a known password |
@@ -275,6 +276,21 @@ go through `src/server/auth/mail.server.ts`. The transport is picked from the en
 
 ### Several mail servers
 
+Each email is offered to a list of **routes** and goes out through the first that accepts it. A
+route is one address paired with one authentication choice, and the list is built from three
+things:
+
+1. `SMTP_HOST`, which accepts a comma-separated list of servers;
+2. **every address each name resolves to** — two Exchange servers commonly share one name, and
+   only one of them may accept our mail, so failing over from the name to the same name would
+   just reach the same pair;
+3. **with `SMTP_USER` first, then without it** — an internal relay connector usually wants no
+   credentials at all and answers `535` to the ones meant for the client connector. Set
+   `SMTP_ANONYMOUS_FALLBACK=false` to require authentication and never fall back.
+
+Authenticated routes are tried across every address before any anonymous one, so a server that
+does accept the credentials is always preferred over relaying without them.
+
 `SMTP_HOST` accepts a comma-separated list, which is what to use when the organisation has more
 than one Exchange server:
 
@@ -282,12 +298,26 @@ than one Exchange server:
 SMTP_HOST=exchange02.corp.internal,exchange01.corp.internal
 ```
 
-Every email is offered to the hosts in order and goes out through the **first one that accepts
-it**. A host that refuses the connection, the TLS handshake, the credentials or the recipient is
+A route that refuses the connection, the TLS handshake, the credentials or the recipient is
 skipped and the next is tried; only when all of them refuse does the message count as failed, and
-the error then names what each host said. The host that last delivered is tried first, so a
+the error then names what each one said. The route that last delivered is tried first, so a
 refusing server isn't dialled again for every message. All hosts share `SMTP_PORT`, `SMTP_USER`,
 `SMTP_PASS` and the TLS settings, so list servers that take the same credentials.
+
+### `535 5.7.3 Authentication unsuccessful` from one server only
+
+This client can speak `LOGIN`, `PLAIN`, `CRAM-MD5` and `XOAUTH2`. An Exchange server whose EHLO
+offers only `NTLM` or `GSSAPI` — the internal server-to-server connector, usually alongside
+`X-ANONYMOUSTLS`, `X-EXPS` and `XRDST` — still advertises `AUTH`, so a login is attempted and
+refused with `535` no matter how correct the password is. When two servers share a name and only
+one of them is like this, delivery looks intermittent. `scripts/mail-probe.mjs` prints each
+server's `AUTH` line and says which mechanisms are unusable; point `SMTP_HOST` at the server that
+offers `AUTH LOGIN`, or let the route list find it.
+
+> **A passing startup check is not proof of delivery.** `verify()` stops once the server has
+> accepted the connection, TLS and the credentials — it never offers a recipient. A connector that
+> takes an anonymous connection but refuses to relay therefore still logs `[mail] ready`, and only
+> a real send reveals it. That is what the route list is for, and why `--send` exists in the probe.
 
 Because a host is skipped only after it refuses, a server that accepts a message but never
 acknowledges it (a timeout part-way through) can lead to the same email arriving twice. That is
@@ -303,9 +333,10 @@ node scripts/mail-probe.mjs \
   --to you@anwargroup.net
 ```
 
-It stops after the credentials are accepted and sends nothing; add `--send` to deliver a real
-test message, and `--no-require-tls` for a server with no STARTTLS. Run it from a machine on the
-same network as the mail servers — the Dokploy host is ideal, since that is where the app runs.
+It resolves each name to every address, prints the server name and `AUTH` line for each, and
+stops after the credentials are accepted — nothing is sent. Add `--send` to deliver a real test
+message, and `--no-require-tls` for a server with no STARTTLS. Run it from a machine on the same
+network as the mail servers — the Dokploy host is ideal, since that is where the app runs.
 
 ### Checking that it works
 
@@ -315,9 +346,10 @@ same network as the mail servers — the Dokploy host is ideal, since that is wh
   - "caught by the local test inbox" means Mailpit;
   - "couldn't be emailed: …" gives the reason.
 - **Startup log:**
-  - `[mail] ready: …` names the host email will leave by, and lists any host that isn't usable
-    with the reason — this is the quickest way to see which Exchange server is answering;
-  - `[mail] sending through …` means delivery moved to another host in the list;
+  - `[mail] ready: …` names the route email will leave by, and lists any route that isn't usable
+    with the reason — this is the quickest way to see which Exchange server is answering. It is a
+    connection check, not proof that the server will relay (see above);
+  - `[mail] sending through …` means delivery moved to another route in the list;
   - `[mail] local test inbox …` means capture mode;
   - `[mail] NOT READY — …` gives the problem (bad password, unreachable host, …).
 - **Screens:** inviting, resending, approving and sending setup/reset links now report the real

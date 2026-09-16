@@ -134,34 +134,136 @@ class MailHostsRefusedError extends Error {
   }
 }
 
-// One pooled transport per host, so offering several servers doesn't rebuild a connection
+/**
+ * One way to reach the mail server: an address to connect to, and whether to present credentials.
+ *
+ * Two on-premises Exchange servers commonly share a single name, and a single server commonly has
+ * more than one receive connector, so "mail.example.net:25" is not one destination but several
+ * that can disagree about authentication. Each combination is tried separately.
+ */
+interface SmtpCandidate {
+  /** What to dial: the configured name, or one of the addresses it resolves to. */
+  address: string;
+  /** The configured name, kept for TLS SNI and for messages. */
+  host: string;
+  /** Whether to present SMTP_USER / SMTP_PASS on this attempt. */
+  authenticate: boolean;
+  /** Stable identity, for the connection pool and for remembering what worked. */
+  id: string;
+  /** Where this route points, without the authentication part. */
+  where: string;
+  /** How this route reads in a log line. */
+  label: string;
+}
+
+// One pooled transport per candidate, so offering several routes doesn't rebuild a connection
 // pool on every send.
 const smtpPool = new Map<string, { key: string; transport: Transporter }>();
 
-// The host that last delivered. Tried first, so once a working server is found the refusing one
-// isn't dialled again for every message.
-let preferredHost: string | undefined;
+// The route that last delivered. Tried first, so a refusing server isn't dialled again for every
+// message.
+let preferredId: string | undefined;
 
-/** Configured hosts with the last known-good one first. */
-function orderedHosts(): string[] {
-  const hosts = smtpHosts();
-  const i = preferredHost ? hosts.indexOf(preferredHost) : -1;
-  return i <= 0 ? hosts : [hosts[i]!, ...hosts.slice(0, i), ...hosts.slice(i + 1)];
+const isIpAddress = (value: string) => /^\d{1,3}(\.\d{1,3}){3}$/.test(value);
+
+const dnsCache = new Map<string, { at: number; addresses: string[] }>();
+const DNS_TTL_MS = 300_000;
+
+/**
+ * Every address a host resolves to. This is what makes failover work when two Exchange servers
+ * sit behind one name: moving from the name to the same name would just reach the same pair, so
+ * the addresses have to be tried individually. A single answer keeps the name, so ordinary
+ * single-server setups behave exactly as before.
+ */
+async function addressesFor(host: string): Promise<string[]> {
+  if (isIpAddress(host) || host === "localhost") return [host];
+  const hit = dnsCache.get(host);
+  if (hit && Date.now() - hit.at < DNS_TTL_MS) return hit.addresses;
+  let addresses = [host];
+  try {
+    const { resolve4 } = await import("node:dns/promises");
+    const found = await resolve4(host);
+    if (found.length > 1) addresses = found;
+  } catch {
+    // No DNS answer (a hosts-file entry, say): the name itself is still worth dialling.
+  }
+  dnsCache.set(host, { at: Date.now(), addresses });
+  return addresses;
 }
 
-async function smtpTransport(host: string): Promise<Transporter> {
+/**
+ * Every route worth trying, best first.
+ *
+ * When credentials are configured each address is tried with them and then without. That second
+ * attempt matters: an internal relay connector typically wants no credentials at all and answers
+ * 535 to the ones meant for the client connector. Set SMTP_ANONYMOUS_FALLBACK=false to require
+ * authentication and never fall back.
+ */
+async function smtpCandidates(): Promise<SmtpCandidate[]> {
   const user = env("SMTP_USER");
+  const allowAnonymous = env("SMTP_ANONYMOUS_FALLBACK") !== "false";
+  const targets: Array<{ address: string; host: string; where: string }> = [];
+  for (const host of smtpHosts()) {
+    for (const address of await addressesFor(host)) {
+      targets.push({ address, host, where: address === host ? host : `${host} (${address})` });
+    }
+  }
+
+  // Authenticated routes are tried across every address before any anonymous one, so a server
+  // that does accept the credentials is always preferred over relaying without them.
+  const list: SmtpCandidate[] = [];
+  if (user) {
+    for (const t of targets) {
+      list.push({
+        ...t,
+        authenticate: true,
+        id: `${t.address}|auth`,
+        label: `${t.where} with SMTP_USER`,
+      });
+    }
+  }
+  if (!user || allowAnonymous) {
+    for (const t of targets) {
+      list.push({
+        ...t,
+        authenticate: false,
+        id: `${t.address}|anon`,
+        label: user ? `${t.where} without credentials` : t.where,
+      });
+    }
+  }
+  const i = preferredId ? list.findIndex((c) => c.id === preferredId) : -1;
+  return i <= 0 ? list : [list[i]!, ...list.slice(0, i), ...list.slice(i + 1)];
+}
+
+async function smtpTransport(candidate: SmtpCandidate): Promise<Transporter> {
+  const user = env("SMTP_USER");
+  // Dialling an address still has to present the configured name for the certificate check.
+  const servername =
+    candidate.address !== candidate.host && !isIpAddress(candidate.host)
+      ? candidate.host
+      : undefined;
   const options = {
-    host,
+    host: candidate.address,
     port: Number(env("SMTP_PORT") ?? 587),
     // true = implicit TLS (port 465). On 587, STARTTLS is negotiated automatically.
     secure: env("SMTP_SECURE") === "true",
     requireTLS: env("SMTP_REQUIRE_TLS") === "true",
     // An internal server (e.g. on-premises Exchange) may use a self-signed certificate.
-    ...(env("SMTP_TLS_REJECT_UNAUTHORIZED") === "false"
-      ? { tls: { rejectUnauthorized: false } }
+    tls: {
+      ...(env("SMTP_TLS_REJECT_UNAUTHORIZED") === "false" ? { rejectUnauthorized: false } : {}),
+      ...(servername ? { servername } : {}),
+    },
+    ...(candidate.authenticate && user
+      ? {
+          auth: { user, pass: env("SMTP_PASS") ?? "" },
+          // Without this, nodemailer only logs in when that connection's EHLO happened to
+          // advertise AUTH, so the same settings can authenticate on one connection and skip it
+          // on the next -- which is how a startup check passes while every send fails. Forcing it
+          // makes each candidate mean exactly one thing.
+          forceAuth: true,
+        }
       : {}),
-    ...(user ? { auth: { user, pass: env("SMTP_PASS") ?? "" } } : {}),
     pool: true,
     maxConnections: 3,
     connectionTimeout: 10_000,
@@ -170,32 +272,32 @@ async function smtpTransport(host: string): Promise<Transporter> {
   };
   const key = JSON.stringify({
     ...options,
-    auth: user ? `${user}:${(env("SMTP_PASS") ?? "").length}` : null,
+    auth: candidate.authenticate && user ? `${user}:${(env("SMTP_PASS") ?? "").length}` : null,
   });
-  const cached = smtpPool.get(host);
+  const cached = smtpPool.get(candidate.id);
   if (cached?.key === key) return cached.transport;
   cached?.transport.close();
   const { createTransport } = await import("nodemailer");
-  const transport = createTransport(options);
-  smtpPool.set(host, { key, transport });
+  const transport = createTransport(options as Parameters<typeof createTransport>[0]);
+  smtpPool.set(candidate.id, { key, transport });
   return transport;
 }
 
 /**
- * Sends through the first host that accepts the message. A server that refuses the connection,
- * the credentials or the recipient is treated as unusable and the next one is tried; only when
- * every host has refused does the message count as failed. A message the server accepted but
- * never acknowledged (a timeout mid-DATA) can therefore arrive twice, which is the right trade
- * for password setup and invitation links.
+ * Sends through the first route that accepts the message. A route that refuses the connection,
+ * the credentials or the recipient is treated as unusable and the next is tried; only when every
+ * route has refused does the message count as failed. A message the server accepted but never
+ * acknowledged (a timeout mid-DATA) can therefore arrive twice, which is the right trade for
+ * password setup and invitation links.
  */
 async function sendViaSmtp(msg: MailMessage) {
-  const hosts = orderedHosts();
-  if (!hosts.length) throw new Error("No SMTP host configured (set SMTP_HOST).");
+  const candidates = await smtpCandidates();
+  if (!candidates.length) throw new Error("No SMTP host configured (set SMTP_HOST).");
   const refusals: string[] = [];
   let lastError: unknown;
-  for (const host of hosts) {
+  for (const candidate of candidates) {
     try {
-      const transport = await smtpTransport(host);
+      const transport = await smtpTransport(candidate);
       const info = await transport.sendMail({
         from: sender(),
         to: msg.to,
@@ -204,41 +306,42 @@ async function sendViaSmtp(msg: MailMessage) {
       });
       if (info.rejected?.length)
         throw new Error(`SMTP server rejected ${info.rejected.join(", ")}: ${info.response}`);
-      if (preferredHost !== host) {
-        console.info(`[mail] sending through ${host}`);
-        preferredHost = host;
+      if (preferredId !== candidate.id) {
+        console.info(`[mail] sending through ${candidate.label}`);
+        preferredId = candidate.id;
       }
       return;
     } catch (error) {
       lastError = error;
-      const why = friendlyMailError(error, host);
-      refusals.push(hosts.length > 1 ? `${host}: ${why}` : why);
-      if (preferredHost === host) preferredHost = undefined;
-      if (hosts.length > 1) console.warn(`[mail] ${host} wouldn't take the message: ${why}`);
+      const why = friendlyMailError(error, candidate.host);
+      refusals.push(candidates.length > 1 ? `${candidate.label}: ${why}` : why);
+      if (preferredId === candidate.id) preferredId = undefined;
+      if (candidates.length > 1)
+        console.warn(`[mail] ${candidate.label} wouldn't take the message: ${why}`);
     }
   }
-  throw hosts.length > 1 ? new MailHostsRefusedError(refusals) : lastError;
+  throw candidates.length > 1 ? new MailHostsRefusedError(refusals) : lastError;
 }
 
-/** Verifies every configured host, so the log names the one that works and why the others don't. */
+/** Verifies every route, so the log names the one that works and why the others don't. */
 async function probeSmtpHosts(): Promise<{
-  ready: string | undefined;
+  ready: SmtpCandidate | undefined;
   failures: string[];
   lastError: unknown;
 }> {
   const failures: string[] = [];
-  let ready: string | undefined;
+  let ready: SmtpCandidate | undefined;
   let lastError: unknown;
-  for (const host of orderedHosts()) {
+  for (const candidate of await smtpCandidates()) {
     try {
-      await (await smtpTransport(host)).verify();
-      ready ??= host;
+      await (await smtpTransport(candidate)).verify();
+      ready ??= candidate;
     } catch (error) {
       lastError = error;
-      failures.push(`${host}: ${friendlyMailError(error, host)}`);
+      failures.push(`${candidate.label}: ${friendlyMailError(error, candidate.host)}`);
     }
   }
-  if (ready) preferredHost = ready;
+  if (ready) preferredId = ready.id;
   return { ready, failures, lastError };
 }
 
@@ -260,8 +363,10 @@ export async function verifyMailTransport(): Promise<{
         if (failures.length > 1) throw new MailHostsRefusedError(failures);
         throw lastError ?? new Error("No SMTP host configured (set SMTP_HOST).");
       }
-      // Name the host email will actually leave by, and list the ones standing by or broken.
-      const live = `${ready}:${env("SMTP_PORT") ?? 587}`;
+      // Name the route email will actually leave by, and list the ones standing by or broken.
+      const live = `${ready.where}:${env("SMTP_PORT") ?? 587}${
+        ready.authenticate ? "" : " without credentials"
+      }`;
       const aside = failures.length ? ` — not usable: ${failures.join("; ")}` : "";
       return {
         ok: true,
