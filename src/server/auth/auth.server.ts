@@ -118,7 +118,7 @@ export async function failuresFor(db: Tx | Sql, identifier: string | string[]): 
   const [row] = await db<Row[]>`
     select count(*)::int as fails from login_attempts
     where lower(identifier) = any(${keys}::text[])
-      and outcome not in ('success', 'staff_reset_request', 'invite_token_fail', 'staff_account')
+      and outcome not in ('success', 'staff_reset_request', 'invite_token_fail', 'wrong_portal')
       and attempted_at > now() - make_interval(mins => ${LOCK_MINUTES})`;
   return row?.fails ?? 0;
 }
@@ -202,23 +202,32 @@ export async function signIn(input: SignInInput): Promise<AuthResult<{ profile: 
   }
 
   const held = await activeRoles(sql, emp.id);
-  // The employee portal is for employees only. Anyone holding a staff role signs in at
-  // /staff/admin, so no admin can pick up an employee session from the public link. The password
-  // has already been checked by this point, so naming the right door gives nothing away.
-  if (held.some(isStaffRole)) {
-    await logAttempt(sql, empId, "staff_account", "employee");
-    return fail("This is a staff account. Please sign in at /staff/admin.");
+  // This is the one sign-in for everybody who works inside the app: employees, and the operators,
+  // coordinators and System Admins who are invited. Only the Super Admin has a separate door, so
+  // their credentials are never accepted here. The password has already been checked by this
+  // point, so naming the right door gives nothing away.
+  if (held.includes("super_admin")) {
+    await logAttempt(sql, empId, "wrong_portal", "employee");
+    return fail("This is a Super Admin account. Please sign in at /staff/admin.");
   }
-  const roles = rolesForPortal(held, "employee");
-  if (!roles.includes("employee")) {
+  // Holding a staff role means a staff-portal session, so the workspace that role is for is
+  // actually reachable; everyone else gets an employee session.
+  const portal: Portal = held.some(isStaffRole) ? "staff" : "employee";
+  const roles = rolesForPortal(held, portal);
+  if (roles.length === 0) {
     await logAttempt(sql, empId, "bad_role", "employee");
     return fail(GENERIC);
   }
+  const activeRole = pickDefaultRole(portal === "staff" ? roles.filter(isStaffRole) : roles);
 
   await sql`update employees set last_login_at = now() where id = ${emp.id}`;
-  await audit(sql, { subject: emp.id, event: "login_success", detail: { portal: "employee" } });
+  await audit(sql, {
+    subject: emp.id,
+    event: "login_success",
+    detail: { portal, role: activeRole },
+  });
   await logAttempt(sql, empId, "success", "employee");
-  await startSession(sql, emp.id, "employee", "employee");
+  await startSession(sql, emp.id, activeRole, portal);
 
   return {
     ok: true,
@@ -228,8 +237,8 @@ export async function signIn(input: SignInInput): Promise<AuthResult<{ profile: 
         fullName: emp.name,
         companyMail: emp.company_email,
         roles,
-        activeRole: "employee",
-        portal: "employee",
+        activeRole,
+        portal,
       },
     },
   };
@@ -273,6 +282,11 @@ export async function staffSignIn(
     return fail(STAFF_GENERIC);
   }
 
+  // Everyone else -- operators, coordinators, System Admins -- uses the main sign-in.
+  if (!roles.includes("super_admin")) {
+    await logAttempt(sql, email, "wrong_portal", "staff");
+    return fail("Please sign in from the main Sign In page.");
+  }
   const role = pickDefaultRole(roles.filter(isStaffRole));
   await sql`update employees set last_login_at = now() where id = ${emp.id}`;
   await audit(sql, { subject: emp.id, event: "login_success", detail: { portal: "staff", role } });
@@ -354,7 +368,7 @@ export async function submitAccountRequest(
     select id, account_status from employees
     where lower(id) = lower(${empId}) or lower(company_email) = ${email}`;
   if (existing && (await activeRoles(sql, existing.id)).some(isStaffRole)) {
-    return fail("This is a staff account. Staff access is arranged by a Super Admin.");
+    return fail("You already have an account. Use the Sign In page, or Forgot Password.");
   }
   if (existing?.account_status) {
     return fail("An account already exists for this Employee ID or email. Use Forgot Password.");

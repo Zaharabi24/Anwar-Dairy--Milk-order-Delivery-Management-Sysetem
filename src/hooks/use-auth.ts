@@ -14,11 +14,13 @@ export function useAuth() {
   const router = useRouter();
 
   const signOut = useCallback(async () => {
-    const portal = user?.portal;
+    // Only the Super Admin has their own door to go back to; everyone else signs in from the
+    // front page.
+    const superAdmin = user?.roles.includes("super_admin") ?? false;
     await authService.signOut();
     await router.invalidate();
-    await router.navigate({ to: portal === "staff" ? "/staff/admin" : "/" });
-  }, [router, user?.portal]);
+    await router.navigate({ to: superAdmin ? "/staff/admin" : "/" });
+  }, [router, user?.roles]);
 
   const switchRole = useCallback(
     async (role: RoleValue) => {

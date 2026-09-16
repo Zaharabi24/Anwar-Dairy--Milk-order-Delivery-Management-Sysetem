@@ -22,8 +22,7 @@ import { Button } from "@/components/ui/button";
 import { AppDataProvider, useAppData } from "@/context/app-data";
 import { getAppSnapshot } from "@/functions/app-data.functions";
 import { useAuth } from "@/hooks/use-auth";
-import { ROLE_HOME, isStaffRole, type Portal, type RoleValue } from "@/lib/auth-constants";
-import { PORTAL_SIGN_IN } from "@/lib/portal-guard";
+import { ROLE_HOME, type RoleValue } from "@/lib/auth-constants";
 import { timeShort } from "@/lib/format";
 import logoUrl from "@/assets/anwar-organic-logo.png";
 import type { Role } from "@/lib/types";
@@ -32,11 +31,10 @@ export const Route = createFileRoute("/app")({
   // The session cookie travels with the SSR request, so this guard works on the server.
   beforeLoad: ({ context, location }) => {
     if (!context.auth) {
-      // Staff areas send people to the staff portal; everything else to the employee sign-in.
-      const allowed = rolesFor(location.pathname);
-      const staffArea = !!allowed && !allowed.includes("employee");
+      // One sign-in serves every role except the Super Admin, whose own area has its own door.
+      const superAdminArea = location.pathname.startsWith("/app/admin/team");
       throw redirect({
-        to: staffArea ? "/staff/admin" : "/login",
+        to: superAdminArea ? "/staff/admin" : "/login",
         search: { redirect: location.href },
       });
     }
@@ -133,35 +131,17 @@ function AppLayout() {
   );
 }
 
-/**
- * `wrongPortal` is set when the page belongs to the other front door entirely — an employee-portal
- * session on a staff page, say. Offering that portal's sign-in beats a dead end, because no amount
- * of role switching inside this session can reach the page.
- */
-function NotAvailable({ home, wrongPortal }: { home: string; wrongPortal: Portal | null }) {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+function NotAvailable({ home }: { home: string }) {
   return (
     <div className="mx-auto mt-10 max-w-md rounded-xl border border-border bg-card p-8 text-center">
       <h1 className="font-display text-xl font-bold">Not available for your role</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        {wrongPortal === "staff"
-          ? "This page is part of the staff area. Sign in through the staff portal to open it."
-          : wrongPortal === "employee"
-            ? "This page is part of the employee area. Sign in with an employee account to open it."
-            : "This page belongs to a different role. Switch role from the header if you hold it, or go back to your own workspace."}
+        This page belongs to a different role. Switch role from the header if you hold it, or go
+        back to your own workspace.
       </p>
-      <div className="mt-6 flex flex-wrap justify-center gap-2">
-        {wrongPortal ? (
-          <Button asChild>
-            <Link to={PORTAL_SIGN_IN[wrongPortal]} search={{ switch: true, redirect: pathname }}>
-              Go to that sign-in
-            </Link>
-          </Button>
-        ) : null}
-        <Button asChild variant={wrongPortal ? "outline" : "default"}>
-          <Link to={home}>Back to my home</Link>
-        </Button>
-      </div>
+      <Button asChild className="mt-6">
+        <Link to={home}>Back to my home</Link>
+      </Button>
     </div>
   );
 }
@@ -209,15 +189,6 @@ function AppShell() {
   const router = useRouter();
   const allowed = rolesFor(pathname);
   const permitted = !allowed || (!!user && allowed.includes(user.activeRole));
-  // Which portal owns this page, when the current session can't reach it at all.
-  const wrongPortal: Portal | null =
-    !allowed || permitted || !user
-      ? null
-      : !allowed.includes("employee") && user.portal === "employee"
-        ? "staff"
-        : !allowed.some(isStaffRole) && user.portal === "staff"
-          ? "employee"
-          : null;
 
   useEffect(() => {
     setMobileOpen(false);
@@ -381,10 +352,7 @@ function AppShell() {
             {permitted ? (
               <Outlet />
             ) : (
-              <NotAvailable
-                home={ROLE_HOME[user?.activeRole ?? "employee"]}
-                wrongPortal={wrongPortal}
-              />
+              <NotAvailable home={ROLE_HOME[user?.activeRole ?? "employee"]} />
             )}
           </motion.div>
         </main>

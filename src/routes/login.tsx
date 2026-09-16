@@ -35,7 +35,7 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
-/** Employee portal. Staff (operators, coordinators, admins) use /staff/admin. */
+/** The main sign-in: employees, and the staff roles that are invited. Super Admins use /staff/admin. */
 function LoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
   const navigate = useNavigate();
@@ -71,7 +71,7 @@ function LoginPage() {
     <AuthShell>
       <AuthHeading
         title="Sign in"
-        description="Employees: use your Employee ID or company email and password to book milk."
+        description="Use your Employee ID or company email and your password."
       />
 
       {message ? (

@@ -98,7 +98,7 @@ function AcceptInvitePage() {
           </h1>
           <p className="mt-3 text-sm text-muted-foreground">{preview.message}</p>
           <Button asChild className="mt-6 w-full" size="lg">
-            <Link to="/staff/admin">Go to staff sign in</Link>
+            <Link to="/login">Go to sign in</Link>
           </Button>
         </div>
       </AuthShell>

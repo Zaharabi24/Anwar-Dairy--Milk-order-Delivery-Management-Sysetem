@@ -57,7 +57,10 @@ function StaffLoginPage() {
 
   return (
     <AuthShell>
-      <AuthHeading title="Super Admin Sign In" />
+      <AuthHeading
+        title="Super Admin Sign In"
+        description="Operators, coordinators and System Admins sign in from the main Sign In page."
+      />
 
       {message ? (
         <Alert variant="destructive" className="mb-5">
