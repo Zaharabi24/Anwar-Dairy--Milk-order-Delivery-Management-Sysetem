@@ -23,6 +23,8 @@ import { AppDataProvider, useAppData } from "@/context/app-data";
 import { getAppSnapshot } from "@/functions/app-data.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { ROLE_HOME, type RoleValue } from "@/lib/auth-constants";
+import { activeNavPath } from "@/lib/nav-active";
+import { cn } from "@/lib/utils";
 import { timeShort } from "@/lib/format";
 import logoUrl from "@/assets/anwar-organic-logo.png";
 import type { Role } from "@/lib/types";
@@ -153,7 +155,8 @@ function NotAvailable({ home }: { home: string }) {
 }
 
 const linkClass =
-  "rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground data-[status=active]:bg-secondary data-[status=active]:font-medium data-[status=active]:text-primary-deep";
+  "rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground";
+const linkActiveClass = "bg-secondary font-medium text-primary-deep";
 
 function Brand() {
   return (
@@ -165,19 +168,34 @@ function Brand() {
 }
 
 function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  // Home is part of the list, not a special case, so it competes for the match like everything
+  // else and loses to any page that sits beneath it.
+  const all: NavItem[] = [{ label: "Home", to: "/app" }, ...items, ...commonTail];
+  const active = activeNavPath(
+    pathname,
+    all.map((i) => i.to),
+  );
+
   return (
     <nav className="flex flex-col gap-1">
-      <Link to="/app" className={linkClass} onClick={onNavigate}>
-        Home
-      </Link>
-      {[...items, ...commonTail].map((item) => (
+      {all.map((item) => (
         <div key={item.to} className="flex flex-col">
           {item.section ? (
             <p className="mt-4 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/80">
               {item.section}
             </p>
           ) : null}
-          <Link to={item.to} className={linkClass} onClick={onNavigate}>
+          <Link
+            to={item.to}
+            // Link marks itself by loose prefix match, which is what lit Home on every page
+            // beneath it. Exact stops it deciding for itself; the one item the URL belongs to is
+            // decided above and carried by the class and aria-current together.
+            activeOptions={{ exact: true }}
+            className={cn(linkClass, item.to === active && linkActiveClass)}
+            aria-current={item.to === active ? "page" : undefined}
+            onClick={onNavigate}
+          >
             {item.label}
           </Link>
         </div>
