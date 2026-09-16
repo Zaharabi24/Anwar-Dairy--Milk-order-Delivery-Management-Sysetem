@@ -103,7 +103,6 @@
   --sidebar-ring: oklch(0.487 0.083 156);
 }
 
-
 .dark {
   --background: oklch(0.129 0.042 264.695);
   --foreground: oklch(0.984 0.003 247.858);
@@ -156,7 +155,10 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  h1, h2, h3, h4 {
+  h1,
+  h2,
+  h3,
+  h4 {
     font-family: var(--font-display);
     letter-spacing: -0.02em;
   }
@@ -171,9 +173,125 @@
   border: 1px solid var(--color-border);
 }
 
+/* ---------------------------------------------------------------------------
+   Live batch scene (landing page).
+
+   Its own tokens, derived from the brand greens, so the pasture reads as the
+   same family as the rest of the app and stays themeable. Depth comes from
+   lightness and haze: the far hills are pale and desaturated, the foreground
+   grass darker and more saturated, which is what makes the flat layers sit at
+   different distances.
+--------------------------------------------------------------------------- */
+:root {
+  --scene-sky-top: oklch(0.93 0.035 220);
+  --scene-sky-low: oklch(0.965 0.03 140);
+  --scene-sun: oklch(0.97 0.07 95);
+  --scene-hill-far: oklch(0.79 0.045 152);
+  --scene-hill-near: oklch(0.68 0.07 153);
+  --scene-field-far: oklch(0.6 0.085 148);
+  --scene-field-near: oklch(0.47 0.09 150);
+  --scene-grass-blade: oklch(0.41 0.085 152);
+  --scene-cow: oklch(0.33 0.035 157);
+  --scene-milk-top: oklch(0.985 0.012 96);
+  --scene-milk-body: oklch(0.955 0.02 92);
+  --scene-milk-deep: oklch(0.9 0.028 90);
+  --scene-glass-edge: oklch(1 0 0 / 0.72);
+  --scene-glass-tint: oklch(0.98 0.01 200 / 0.14);
+}
+
+/* The milk surface drifts, so the level never looks painted on. */
+@keyframes scene-wave {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0%, 0, 0);
+  }
+}
+
+/* A slow breathing of the whole body of milk, a few pixels only. */
+@keyframes scene-swell {
+  0%,
+  100% {
+    transform: translate3d(0, 0.5%, 0);
+  }
+  50% {
+    transform: translate3d(0, -0.9%, 0);
+  }
+}
+
+/* Grass sway: pivots at the base, like a blade bending rather than sliding. */
+@keyframes scene-sway {
+  0%,
+  100% {
+    transform: rotate(-1.4deg);
+  }
+  50% {
+    transform: rotate(1.6deg);
+  }
+}
+
+/* Cows graze across the field and turn back at the far side. */
+@keyframes scene-graze {
+  0% {
+    transform: translate3d(0, 0, 0) scaleX(1);
+  }
+  46% {
+    transform: translate3d(var(--graze-distance, 34px), 0, 0) scaleX(1);
+  }
+  50% {
+    transform: translate3d(var(--graze-distance, 34px), 0, 0) scaleX(-1);
+  }
+  96% {
+    transform: translate3d(0, 0, 0) scaleX(-1);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scaleX(1);
+  }
+}
+
+/* The head dips to the grass and lifts again, off the walking rhythm. */
+@keyframes scene-browse {
+  0%,
+  62%,
+  100% {
+    transform: rotate(0deg);
+  }
+  72%,
+  88% {
+    transform: rotate(7deg);
+  }
+}
+
+/* Haze drifting over the far field. */
+@keyframes scene-drift {
+  0% {
+    transform: translate3d(-4%, 0, 0);
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translate3d(4%, 0, 0);
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene-animate,
+  .scene-animate * {
+    animation: none !important;
+  }
+}
+
 @keyframes marquee-x {
-  from { transform: translateX(0); }
-  to { transform: translateX(-50%); }
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
 }
 
 @utility marquee-track {
@@ -181,8 +299,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track { animation: none; }
-  *, *::before, *::after {
+  .marquee-track {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
   }

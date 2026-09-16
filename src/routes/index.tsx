@@ -14,6 +14,8 @@ import {
   Settings2,
 } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { LiveBatchScene } from "@/components/landing/LiveBatchScene";
+import { publicBatchStatusFn } from "@/functions/public.functions";
 import { Button } from "@/components/ui/button";
 import { ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
 import type { AuthUser } from "@/lib/auth-types";
@@ -35,6 +37,7 @@ export const Route = createFileRoute("/")({
       },
     ],
   }),
+  loader: () => publicBatchStatusFn(),
   component: Landing,
 });
 
@@ -99,60 +102,24 @@ function Nav({ auth }: { auth: AuthUser | null }) {
 }
 
 function BatchWidget() {
-  const reduce = useReducedMotion();
-  const [litres, setLitres] = useState(214);
+  const initial = Route.useLoaderData();
+  const [batch, setBatch] = useState(initial);
+
+  // The batch is live, so it is re-read while the page is open: an approved order taking litres
+  // out of the batch should show here without a refresh.
   useEffect(() => {
-    if (reduce) return;
+    setBatch(initial);
     const id = setInterval(() => {
-      setLitres((l) => (l <= 96 ? 214 : l - Math.ceil(Math.random() * 4)));
-    }, 2200);
+      void publicBatchStatusFn()
+        .then(setBatch)
+        .catch(() => {
+          // A dropped poll is not worth showing anyone; the next one will do.
+        });
+    }, 30_000);
     return () => clearInterval(id);
-  }, [reduce]);
+  }, [initial]);
 
-  const fill = Math.max(0.08, litres / 600);
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-medium">
-          <motion.span
-            className="inline-block size-2 rounded-full bg-primary"
-            animate={reduce ? {} : { opacity: [1, 0.25, 1], scale: [1, 1.35, 1] }}
-            transition={{ duration: 1.8, repeat: Infinity }}
-          />
-          Active batch · BATCH-2409
-        </div>
-        <span className="text-sm text-muted-foreground">৳92 / litre</span>
-      </div>
-
-      <div className="mt-6 flex items-end gap-6">
-        <div className="relative h-40 w-24 overflow-hidden rounded-b-[2.5rem] rounded-t-lg border-2 border-primary/40 bg-secondary">
-          <div className="absolute inset-x-7 -top-3 h-4 rounded-t-md border-2 border-b-0 border-primary/40 bg-secondary" />
-          <motion.div
-            className="absolute inset-x-0 bottom-0 bg-primary/80"
-            animate={{ height: `${fill * 100}%` }}
-            transition={{ duration: reduce ? 0 : 1.4, ease: "easeInOut" }}
-          />
-        </div>
-        <div>
-          <p className="text-sm text-muted-foreground">Litres remaining</p>
-          <motion.p
-            key={litres}
-            initial={reduce ? false : { opacity: 0.4, y: -4 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="font-display text-6xl font-extrabold leading-none"
-          >
-            {litres}
-          </motion.p>
-          <p className="mt-3 text-sm text-muted-foreground">Bookings close in 3h 12m</p>
-        </div>
-      </div>
-
-      <p className="mt-6 border-t border-border pt-4 text-sm text-muted-foreground">
-        Delivery tomorrow, 4:00 PM – 6:30 PM · Gulshan &amp; Savar
-      </p>
-    </div>
-  );
+  return <LiveBatchScene batch={batch} />;
 }
 
 const stages = [
