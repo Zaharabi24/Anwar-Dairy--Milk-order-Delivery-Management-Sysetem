@@ -69,7 +69,7 @@ export const Route = createFileRoute("/app/admin/team")({
   head: () => ({
     meta: [
       { title: "Team & invitations — Anwar Organic" },
-      { name: "description", content: "Invite staff and manage who operates Anwar Organic." },
+      { name: "description", content: "Invite employees and manage who operates Anwar Organic." },
     ],
   }),
   component: TeamPage,
@@ -96,7 +96,7 @@ const STAFF_ROLE_CARDS: { role: RoleValue; label: string }[] = [
 ];
 
 const MEMBER_ROLE_FILTERS: { value: RoleValue | "all"; label: string }[] = [
-  { value: "all", label: "All staff roles" },
+  { value: "all", label: "All employee roles" },
   { value: "super_admin", label: "Super Admin" },
   { value: "system_admin", label: "System Admin" },
   { value: "head_office_coordinator", label: "Head Office Coordinator" },
@@ -143,7 +143,7 @@ function TeamPage() {
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Staff members"
+          label="Employee members"
           value={members.filter((m) => m.status === "active").length}
           emphasis
         />
@@ -695,11 +695,13 @@ function MembersTable({
         {filters}
         <div className="mt-4">
           <EmptyState
-            title={allMembers.length === 0 ? "No staff yet" : "No staff match these filters"}
+            title={
+              allMembers.length === 0 ? "No employees yet" : "No employees match these filters"
+            }
             hint={
               allMembers.length === 0
                 ? "Accepted invitations appear here."
-                : "Choose “All staff roles” or clear the search."
+                : "Choose “All employee roles” or clear the search."
             }
           />
         </div>
@@ -795,7 +797,7 @@ function MembersTable({
                         className="text-destructive focus:text-destructive"
                         onSelect={() => setConfirm({ member: m, action: "remove_staff_access" })}
                       >
-                        Remove staff access
+                        Remove employee access
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -816,14 +818,14 @@ function MembersTable({
             <AlertDialogTitle>
               {confirm?.action === "suspend"
                 ? `Suspend ${confirm.member.fullName}?`
-                : `Remove staff access for ${confirm?.member.fullName}?`}
+                : `Remove employee access for ${confirm?.member.fullName}?`}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm?.action === "suspend"
                 ? "They're signed out everywhere and can't sign in until reactivated."
                 : confirm?.member.roles.includes("employee")
-                  ? "Their staff roles are removed and staff sessions end. Their employee account stays."
-                  : "Their staff roles are removed and the account is deactivated."}
+                  ? "Their employee roles are removed and employee sessions end. Their employee account stays."
+                  : "Their employee roles are removed and the account is deactivated."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -848,7 +850,7 @@ function MembersTable({
           <DialogHeader>
             <DialogTitle>Change role for {roleFor?.fullName}</DialogTitle>
             <DialogDescription>
-              Replaces their current staff role. The change applies on their next request.
+              Replaces their current employee role. The change applies on their next request.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">

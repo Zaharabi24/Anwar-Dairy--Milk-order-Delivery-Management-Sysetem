@@ -101,8 +101,8 @@ function StaffLoginPage() {
         </Button>
 
         <p className="border-t border-border pt-4 text-center text-xs text-muted-foreground">
-          Staff accounts are created by invitation. If you were invited, use the link in your email
-          to set up your account.
+          Employee accounts are created by invitation. If you were invited, use the link in your
+          email to set up your account.
         </p>
       </form>
     </AuthShell>

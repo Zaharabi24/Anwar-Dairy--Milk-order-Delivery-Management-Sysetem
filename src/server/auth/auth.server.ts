@@ -510,7 +510,7 @@ export async function staffForgotPassword(
     ok: true,
     data: {
       message:
-        "If a staff account exists for that email, we've sent a link to reset the password. It expires in 30 minutes.",
+        "If an employee account exists for that email, we've sent a link to reset the password. It expires in 30 minutes.",
     },
   };
 
@@ -1058,7 +1058,7 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
           // Switches a staff member between staff roles. Granting a first staff role needs an invitation.
           if (!input.role) return fail("Choose a role.");
           if (!hasStaffRole) {
-            return fail("This person isn't on the staff team. Send them an invitation instead.");
+            return fail("This person isn't on the employee team. Send them an invitation instead.");
           }
           if (roles.includes(input.role))
             return fail(`${emp.name} is already ${roleLabel(input.role)}.`);
@@ -1076,7 +1076,7 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
         }
 
         case "remove_staff_access": {
-          if (!hasStaffRole) return fail("This person has no staff access to remove.");
+          if (!hasStaffRole) return fail("This person has no employee access to remove.");
           await tx`
           update user_roles set revoked_at = now(), revoked_by = ${actor.employeeId}
           where employee_id = ${emp.id} and role <> 'employee' and revoked_at is null`;
@@ -1094,8 +1094,8 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
           return {
             ok: true,
             message: keepsEmployee
-              ? `${emp.name} no longer has staff access (their employee account stays).`
-              : `${emp.name}'s staff access was removed and the account deactivated.`,
+              ? `${emp.name} no longer has employee access (their employee account stays).`
+              : `${emp.name}'s employee access was removed and the account deactivated.`,
           };
         }
 

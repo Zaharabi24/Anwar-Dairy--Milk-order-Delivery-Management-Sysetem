@@ -26,12 +26,14 @@ export const Route = createFileRoute("/app/notifications")({
       { title: "Notifications — Anwar Organic" },
       {
         name: "description",
-        content: "Batch publications, cut-off reminders, order updates and payment alerts in one feed.",
+        content:
+          "Batch publications, cut-off reminders, order updates and payment alerts in one feed.",
       },
       { property: "og:title", content: "Notifications — Anwar Organic" },
       {
         property: "og:description",
-        content: "Batch publications, cut-off reminders, order updates and payment alerts in one feed.",
+        content:
+          "Batch publications, cut-off reminders, order updates and payment alerts in one feed.",
       },
     ],
   }),
@@ -79,7 +81,7 @@ function Notifications() {
                   <p className="font-medium">{n.title}</p>
                   <p className="mt-0.5 text-sm text-muted-foreground">{n.body}</p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {dateTime(n.timestamp)} · {n.audience === "All" ? "All staff" : n.audience}
+                    {dateTime(n.timestamp)} · {n.audience === "All" ? "All employees" : n.audience}
                   </p>
                 </div>
               </motion.li>

@@ -594,8 +594,8 @@ function RequestSheet({
                 {pending ? (
                   <Section title="Decision">
                     <p className="rounded-lg border border-border bg-secondary/50 px-3 py-2 text-xs text-muted-foreground">
-                      Account requests grant the <strong>Employee</strong> role. Staff roles are
-                      given by invitation from a Super Admin.
+                      Account requests grant the <strong>Employee</strong> role. Other employee
+                      roles are given by invitation from a Super Admin.
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-2">

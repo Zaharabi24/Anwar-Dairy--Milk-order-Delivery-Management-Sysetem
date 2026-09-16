@@ -164,8 +164,8 @@ function AccountsPage() {
         title="Accounts"
         description={
           can("staff.manage")
-            ? "Everyone who can sign in. Staff roles are managed from Team & invitations."
-            : "Everyone who can sign in. You can manage employee accounts; staff accounts are managed by a Super Admin."
+            ? "Everyone who can sign in. Employee roles are managed from Team & invitations."
+            : "Everyone who can sign in. You can manage employee accounts; other employee accounts are managed by a Super Admin."
         }
         action={
           can("staff.invite") ? (

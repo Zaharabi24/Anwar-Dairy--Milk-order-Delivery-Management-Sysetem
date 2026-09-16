@@ -221,9 +221,9 @@ export async function createInvitation(
         }
         if (roles.some(isStaffRole)) {
           return fail(
-            `${account.name} is already on the staff team. Change their role from the Members list.`,
+            `${account.name} is already on the employee team. Change their role from the Members list.`,
             {
-              email: "Already a staff member.",
+              email: "Already an employee member.",
             },
           );
         }

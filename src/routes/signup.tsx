@@ -143,8 +143,8 @@ function RequestAccountPage() {
       />
 
       <p className="-mt-3 mb-5 rounded-lg border border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
-        This form is for employees booking milk. Factory, head office and admin staff are invited by
-        email — ask your Super Admin.
+        This form is for employees booking milk. Factory, head office and admin employees are
+        invited by email — ask your Super Admin.
       </p>
 
       {message ? (

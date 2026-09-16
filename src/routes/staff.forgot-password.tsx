@@ -12,8 +12,8 @@ import { authService } from "@/services/auth-service";
 export const Route = createFileRoute("/staff/forgot-password")({
   head: () => ({
     meta: [
-      { title: "Reset staff password — Anwar Organic" },
-      { name: "description", content: "Get a link to choose a new staff password." },
+      { title: "Reset employee password — Anwar Organic" },
+      { name: "description", content: "Get a link to choose a new employee password." },
     ],
   }),
   component: StaffForgotPasswordPage,
@@ -55,7 +55,7 @@ function StaffForgotPasswordPage() {
           <p className="mt-3 text-sm">{sent}</p>
           <p className="mt-6 text-sm">
             <Link to="/staff/admin" className="font-medium text-primary hover:underline">
-              Back to staff sign in
+              Back to employee sign in
             </Link>
           </p>
         </div>
@@ -66,7 +66,7 @@ function StaffForgotPasswordPage() {
   return (
     <AuthShell>
       <AuthHeading
-        title="Reset your staff password"
+        title="Reset your employee password"
         description="Enter your company email and we'll send you a link to choose a new password."
       />
 
@@ -98,7 +98,7 @@ function StaffForgotPasswordPage() {
 
         <p className="text-center text-sm">
           <Link to="/staff/admin" className="font-medium text-primary hover:underline">
-            Back to staff sign in
+            Back to employee sign in
           </Link>
         </p>
       </form>
