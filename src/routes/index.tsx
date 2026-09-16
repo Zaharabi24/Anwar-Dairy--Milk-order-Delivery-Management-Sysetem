@@ -13,6 +13,7 @@ import {
   Wallet,
   Settings2,
 } from "lucide-react";
+import { AccountMenu } from "@/components/auth/AccountMenu";
 import { Button } from "@/components/ui/button";
 import { ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
 import type { AuthUser } from "@/lib/auth-types";
@@ -72,11 +73,15 @@ function Nav({ auth }: { auth: AuthUser | null }) {
         <div className="flex items-center gap-2">
           {auth ? (
             // Signed in: the logo brought them here, so offer the way back into their own
-            // workspace. Sign In and Sign Up would both be wrong for someone who already has a
-            // session, and were what made a logo click look like a sign-out.
-            <Button asChild size="sm">
-              <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
-            </Button>
+            // workspace, with the account menu beside it for Profile, security and signing out.
+            // Sign In and Sign Up would both be wrong for someone who already has a session, and
+            // were what made a logo click look like a sign-out.
+            <>
+              <Button asChild size="sm">
+                <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
+              </Button>
+              <AccountMenu />
+            </>
           ) : (
             <>
               <Button asChild size="sm" variant="outline">
