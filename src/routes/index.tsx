@@ -14,7 +14,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
-import { LiveBatchScene } from "@/components/landing/LiveBatchScene";
+import { LiveBatchCard } from "@/components/landing/LiveBatchCard";
 import { publicBatchStatusFn } from "@/functions/public.functions";
 import { Button } from "@/components/ui/button";
 import { ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
@@ -119,7 +119,7 @@ function BatchWidget() {
     return () => clearInterval(id);
   }, [initial]);
 
-  return <LiveBatchScene batch={batch} />;
+  return <LiveBatchCard batch={batch} />;
 }
 
 const stages = [

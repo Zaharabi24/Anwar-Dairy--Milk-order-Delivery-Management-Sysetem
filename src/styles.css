@@ -174,113 +174,57 @@
 }
 
 /* ---------------------------------------------------------------------------
-   Live batch scene (landing page).
+   Active batch card (landing page).
 
-   Its own tokens, derived from the brand greens, so the pasture reads as the
-   same family as the rest of the app and stays themeable. Depth comes from
-   lightness and haze: the far hills are pale and desaturated, the foreground
-   grass darker and more saturated, which is what makes the flat layers sit at
-   different distances.
+   Two jobs only: make white milk read clearly against green, and keep the
+   numbers beside it easy to read. The panel behind the glass is a flat brand
+   green so the milk has something solid to sit against -- a gradient there
+   competes with the milk instead of supporting it.
 --------------------------------------------------------------------------- */
 :root {
-  --scene-sky-top: oklch(0.93 0.035 220);
-  --scene-sky-low: oklch(0.965 0.03 140);
-  --scene-sun: oklch(0.97 0.07 95);
-  --scene-hill-far: oklch(0.79 0.045 152);
-  --scene-hill-near: oklch(0.68 0.07 153);
-  --scene-field-far: oklch(0.6 0.085 148);
-  --scene-field-near: oklch(0.47 0.09 150);
-  --scene-grass-blade: oklch(0.41 0.085 152);
-  --scene-cow: oklch(0.33 0.035 157);
-  --scene-milk-top: oklch(0.985 0.012 96);
-  --scene-milk-body: oklch(0.955 0.02 92);
-  --scene-milk-deep: oklch(0.9 0.028 90);
-  --scene-glass-edge: oklch(1 0 0 / 0.72);
-  --scene-glass-tint: oklch(0.98 0.01 200 / 0.14);
+  --milk-panel: oklch(0.55 0.085 152);
+  --milk-panel-edge: oklch(0.47 0.09 153);
+  --milk-body: oklch(0.985 0.008 95);
+  --milk-shade: oklch(0.945 0.014 92);
+  --glass-edge: oklch(1 0 0 / 0.55);
+  --glass-body: oklch(1 0 0 / 0.1);
 }
 
-/* The milk surface drifts, so the level never looks painted on. */
-@keyframes scene-wave {
-  0% {
-    transform: translate3d(-50%, 0, 0);
+/* The surface drifts sideways; one wavelength of travel, so the loop is seamless. */
+@keyframes milk-wave {
+  from {
+    transform: translateX(0);
   }
-  100% {
-    transform: translate3d(0%, 0, 0);
+  to {
+    transform: translateX(-96px);
   }
 }
 
-/* A slow breathing of the whole body of milk, a few pixels only. */
-@keyframes scene-swell {
+/* A few pixels of rise and fall, so the body of milk settles rather than sits. */
+@keyframes milk-settle {
   0%,
   100% {
-    transform: translate3d(0, 0.5%, 0);
+    transform: translateY(1px);
   }
   50% {
-    transform: translate3d(0, -0.9%, 0);
+    transform: translateY(-1.5px);
   }
 }
 
-/* Grass sway: pivots at the base, like a blade bending rather than sliding. */
-@keyframes scene-sway {
-  0%,
-  100% {
-    transform: rotate(-1.4deg);
+/* The count lifts into place when it changes, so a new number is noticed. */
+@keyframes milk-count {
+  from {
+    opacity: 0.45;
+    transform: translateY(-4px);
   }
-  50% {
-    transform: rotate(1.6deg);
-  }
-}
-
-/* Cows graze across the field and turn back at the far side. */
-@keyframes scene-graze {
-  0% {
-    transform: translate3d(0, 0, 0) scaleX(1);
-  }
-  46% {
-    transform: translate3d(var(--graze-distance, 34px), 0, 0) scaleX(1);
-  }
-  50% {
-    transform: translate3d(var(--graze-distance, 34px), 0, 0) scaleX(-1);
-  }
-  96% {
-    transform: translate3d(0, 0, 0) scaleX(-1);
-  }
-  100% {
-    transform: translate3d(0, 0, 0) scaleX(1);
-  }
-}
-
-/* The head dips to the grass and lifts again, off the walking rhythm. */
-@keyframes scene-browse {
-  0%,
-  62%,
-  100% {
-    transform: rotate(0deg);
-  }
-  72%,
-  88% {
-    transform: rotate(7deg);
-  }
-}
-
-/* Haze drifting over the far field. */
-@keyframes scene-drift {
-  0% {
-    transform: translate3d(-4%, 0, 0);
-    opacity: 0.35;
-  }
-  50% {
-    opacity: 0.6;
-  }
-  100% {
-    transform: translate3d(4%, 0, 0);
-    opacity: 0.35;
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .scene-animate,
-  .scene-animate * {
+  .milk-animate * {
     animation: none !important;
   }
 }
