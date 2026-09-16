@@ -42,6 +42,8 @@ export interface AccountRequestRow {
   submittedIp: string | null;
   hasDateOfBirth: boolean;
   existingAccount: boolean;
+  /** The account this request created has since been deleted. */
+  accountDeleted: boolean;
 }
 
 export interface AccountRow {
@@ -57,6 +59,21 @@ export interface AccountRow {
   createdAt: string;
   /** Whether the signed-in admin may act on this account. */
   manageable: boolean;
+}
+
+/**
+ * An account that was deleted. The employees row is kept so past orders still have an owner;
+ * `companyMail` is the address that was released and can be used for a new request.
+ */
+export interface DeletedAccountRow {
+  employeeId: string;
+  fullName: string;
+  companyMail: string;
+  businessUnitName: string | null;
+  officeName: string | null;
+  deletedAt: string;
+  deletedBy: string | null;
+  retainedOrders: number;
 }
 
 export type InvitationStatus = "pending" | "accepted" | "revoked" | "expired";

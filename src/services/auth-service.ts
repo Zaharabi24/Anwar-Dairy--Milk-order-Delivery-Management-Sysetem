@@ -10,6 +10,7 @@ import {
   listAccountRequestsFn,
   listAccountsFn,
   listAuthAuditFn,
+  listDeletedAccountsFn,
   listPasswordResetsFn,
   sendTestEmailFn,
   listTeamFn,
@@ -75,6 +76,7 @@ export const authService = {
   reviewAccountRequest: (p: ReviewRequestInput) => call(() => reviewAccountRequestFn({ data: p })),
   listAccounts: () => call(() => listAccountsFn()),
   accountAction: (p: AccountActionInput) => call(() => accountActionFn({ data: p })),
+  listDeletedAccounts: () => call(() => listDeletedAccountsFn()),
   listPasswordResets: () => call(() => listPasswordResetsFn()),
   sendTestEmail: () => call(() => sendTestEmailFn()),
   listAuthAudit: (f: Partial<AccountAuditFilter>) =>

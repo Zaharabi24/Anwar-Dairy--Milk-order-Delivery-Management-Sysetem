@@ -39,6 +39,7 @@ import type {
   AccountAuditData,
   AccountRequestRow,
   AccountRow,
+  DeletedAccountRow,
   AuthAuditRow,
   AuthResult,
   AuthUser,
@@ -666,7 +667,11 @@ export async function listAccountRequests(): Promise<AuthResult<AccountRequestRo
     select r.*, bu.name as business_unit_name, o.name as office_name,
            exists (select 1 from employees e
                    where (lower(e.id) = lower(r.employee_id) or lower(e.company_email) = lower(r.company_mail))
-                     and e.account_status is not null) as existing_account
+                     and e.account_status is not null) as existing_account,
+           -- Matched on the Employee ID alone: a deleted account's email has been moved aside.
+           exists (select 1 from employees e
+                   where lower(e.id) = lower(r.employee_id) and e.deleted_at is not null)
+             as account_deleted
     from account_requests r
     join business_units bu on bu.code = r.business_unit_code
     join offices o on o.code = r.office_code
@@ -693,6 +698,7 @@ export async function listAccountRequests(): Promise<AuthResult<AccountRequestRo
       submittedIp: r.submitted_ip,
       hasDateOfBirth: r.date_of_birth != null,
       existingAccount: r.existing_account,
+      accountDeleted: r.account_deleted,
     })),
   };
 }
@@ -766,6 +772,9 @@ export async function reviewAccountRequest(
         update employees set name = ${rq.full_name}, company_email = ${rq.company_mail},
           date_of_birth = ${rq.dob}, business_unit_code = ${rq.business_unit_code},
           office_code = ${rq.office_code}, account_status = 'awaiting_password', active = true,
+          -- Reusing the row of a deleted account: it is a live account again, and its past
+          -- orders come back with it.
+          deleted_at = null, deleted_by = null, former_company_email = null, deactivated_at = null,
           updated_at = now()
         where id = ${taken.id}`;
     } else {
@@ -866,6 +875,38 @@ export async function listAccounts(): Promise<AuthResult<AccountRow[]>> {
   };
 }
 
+/**
+ * Accounts that were deleted. The employees row is kept so past orders still have an owner, so
+ * this is also the record of which orders belong to someone who no longer has access.
+ */
+export async function listDeletedAccounts(): Promise<AuthResult<DeletedAccountRow[]>> {
+  await requirePermission("employee_accounts.manage");
+  const sql = await getDb();
+  const rows = await sql<Row[]>`
+    select e.id, e.name, coalesce(e.former_company_email, e.company_email) as company_email,
+           bu.name as business_unit_name, o.name as office_name, e.deleted_at, e.deleted_by,
+           (select count(*)::int from orders where employee_id = e.id) as retained_orders
+    from employees e
+    left join business_units bu on bu.code = e.business_unit_code
+    left join offices o on o.code = e.office_code
+    where e.deleted_at is not null
+    order by e.deleted_at desc
+    limit 500`;
+  return {
+    ok: true,
+    data: rows.map((r) => ({
+      employeeId: r.id,
+      fullName: r.name,
+      companyMail: r.company_email,
+      businessUnitName: r.business_unit_name,
+      officeName: r.office_name,
+      deletedAt: iso(r.deleted_at)!,
+      deletedBy: r.deleted_by,
+      retainedOrders: r.retained_orders,
+    })),
+  };
+}
+
 /** Everything an admin can do to an account after it exists. */
 export async function accountAction(input: AccountActionInput): Promise<AuthResult<ActionOutcome>> {
   const staffAction = input.action === "change_role" || input.action === "remove_staff_access";
@@ -935,6 +976,52 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
           return {
             ok: true,
             message: `${emp.name} deactivated${cancelled.length ? ` and ${cancelled.length} pending order(s) cancelled` : ""}.`,
+          };
+        }
+
+        case "delete": {
+          // The employees row survives as a non-login historical record: orders point at it with
+          // "on delete restrict", and reconciliation, collections and billing all read them.
+          // Only the account is removed, and the email is released for a fresh request.
+          const cancelled = await tx<Row[]>`
+          update orders set status = 'Cancelled', updated_at = now()
+          where employee_id = ${emp.id} and status in ('Pending', 'Confirmed', 'CancellationRequested')
+          returning order_no`;
+          const [{ kept }] = (await tx<Row[]>`
+          select count(*)::int as kept from orders where employee_id = ${emp.id}`) as unknown as [
+            { kept: number },
+          ];
+          await tx`update user_roles set revoked_at = now(), revoked_by = ${actor.employeeId}
+                 where employee_id = ${emp.id} and revoked_at is null`;
+          // Any setup or reset link already in an inbox stops working.
+          await tx`delete from password_tokens where employee_id = ${emp.id}`;
+          await tx`update invitations set status = 'revoked', revoked_at = now(), revoked_by = ${actor.employeeId}
+                 where email = lower(${emp.company_email}) and status = 'pending'`;
+          await revokeAllSessions(tx, emp.id);
+          // account_status back to null is what "not an account" means everywhere else: the row
+          // leaves the accounts list and can't sign in. The address moves to former_company_email
+          // so the unique index on company_email no longer blocks re-registration.
+          await tx`
+          update employees set account_status = null, password_hash = null, active = false,
+            deleted_at = now(), deleted_by = ${actor.employeeId},
+            former_company_email = company_email,
+            company_email = 'deleted+' || extract(epoch from now())::bigint || '+' || id || '@anwargroup.net',
+            deactivated_at = now(), updated_at = now()
+          where id = ${emp.id}`;
+          await log("account_deleted", {
+            employee_id: emp.id,
+            name: emp.name,
+            email: emp.company_email,
+            roles,
+            retained_orders: kept,
+            cancelled_orders: cancelled.map((o) => o.order_no),
+          });
+          return {
+            ok: true,
+            message:
+              `${emp.name}'s account was deleted and ${emp.company_email} is free to request a new one` +
+              `${kept ? `. ${kept} past order(s) were kept` : ""}` +
+              `${cancelled.length ? `, and ${cancelled.length} open order(s) were cancelled` : ""}.`,
           };
         }
 

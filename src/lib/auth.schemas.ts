@@ -70,6 +70,7 @@ export const accountActionInput = z.object({
     "suspend",
     "reactivate",
     "deactivate",
+    "delete",
     "revoke_sessions",
     "resend_setup",
     "send_reset",

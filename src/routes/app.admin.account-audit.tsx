@@ -50,6 +50,7 @@ const EVENTS = [
   "account_suspended",
   "account_reactivated",
   "account_deactivated",
+  "account_deleted",
   "sessions_revoked",
   "role_changed",
 ];

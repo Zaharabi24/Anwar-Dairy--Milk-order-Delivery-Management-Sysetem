@@ -35,7 +35,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
 import { ALL_ROLES, BUSINESS_UNITS, roleLabel, type RoleValue } from "@/lib/auth-constants";
-import type { AccountRow, AccountStatus } from "@/lib/auth-types";
+import type { AccountRow, AccountStatus, DeletedAccountRow } from "@/lib/auth-types";
 import type { AccountActionInput } from "@/lib/auth.schemas";
 import { dateTime } from "@/lib/format";
 import { authService } from "@/services/auth-service";
@@ -50,6 +50,50 @@ export const Route = createFileRoute("/app/admin/accounts")({
   component: AccountsPage,
 });
 
+/**
+ * Accounts that were deleted. They keep an employees row so their past orders still have an
+ * owner, which is why they are listed here rather than vanishing: this is where an admin sees
+ * that those orders belong to someone who no longer has access.
+ */
+function DeletedAccounts({ rows }: { rows: DeletedAccountRow[] }) {
+  if (rows.length === 0) return null;
+  return (
+    <section className="mt-10">
+      <h2 className="font-display text-lg font-bold">Deleted accounts</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Access has been removed and the company mail released, so these people can submit a new
+        account request with the same address. Their past orders are kept for reporting and billing.
+      </p>
+      <TableShell minWidth={900}>
+        <thead className="border-b border-border text-left text-muted-foreground">
+          <tr>
+            <Th>Employee ID</Th>
+            <Th>Name</Th>
+            <Th>Company Mail</Th>
+            <Th>Business Unit</Th>
+            <Th>Orders kept</Th>
+            <Th>Deleted</Th>
+            <Th>Deleted by</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((d) => (
+            <tr key={d.employeeId} className="border-b border-border/60 last:border-0">
+              <Td className="font-medium">{d.employeeId}</Td>
+              <Td>{d.fullName}</Td>
+              <Td>{d.companyMail}</Td>
+              <Td>{d.businessUnitName ?? "—"}</Td>
+              <Td>{d.retainedOrders}</Td>
+              <Td>{dateTime(d.deletedAt)}</Td>
+              <Td>{d.deletedBy ?? "—"}</Td>
+            </tr>
+          ))}
+        </tbody>
+      </TableShell>
+    </section>
+  );
+}
+
 const statusLabel: Record<AccountStatus, string> = {
   active: "Active",
   awaiting_password: "Awaiting password",
@@ -63,13 +107,18 @@ const statusTone: Record<AccountStatus, "success" | "pending" | "danger" | "mute
   deactivated: "muted",
 };
 
-type Confirm = { account: AccountRow; action: "suspend" | "deactivate" };
+type Confirm = { account: AccountRow; action: "suspend" | "deactivate" | "delete" };
+
+const confirmTitle = { suspend: "Suspend", deactivate: "Deactivate", delete: "Delete" } as const;
 
 function AccountsPage() {
   const { user, can } = useAuth();
   const load = useCallback(() => authService.listAccounts(), []);
   const { data, error, loading, reload } = useAdminList(load);
   const accounts = useMemo(() => data ?? [], [data]);
+  const loadDeleted = useCallback(() => authService.listDeletedAccounts(), []);
+  const { data: deletedData, reload: reloadDeleted } = useAdminList(loadDeleted);
+  const deleted = useMemo(() => deletedData ?? [], [deletedData]);
 
   const [status, setStatus] = useState<AccountStatus | "all">("all");
   const [unit, setUnit] = useState("all");
@@ -105,7 +154,7 @@ function AccountsPage() {
     else if (delivery === "captured" || delivery === "logged")
       toast.warning(result.message ?? "Done.");
     else toast.success(result.message ?? "Done.");
-    await reload();
+    await Promise.all([reload(), reloadDeleted()]);
     return result.ok;
   }
 
@@ -307,6 +356,13 @@ function AccountsPage() {
                         >
                           Revoke all sessions
                         </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive"
+                          onSelect={() => setConfirm({ account: a, action: "delete" })}
+                        >
+                          Delete account
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </Td>
@@ -317,17 +373,20 @@ function AccountsPage() {
         </TableShell>
       )}
 
+      <DeletedAccounts rows={deleted} />
+
       <AlertDialog open={!!confirm} onOpenChange={(v) => !v && setConfirm(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>
-              {confirm?.action === "suspend" ? "Suspend" : "Deactivate"} {confirm?.account.fullName}
-              ?
+              {confirmTitle[confirm?.action ?? "suspend"]} {confirm?.account.fullName}?
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm?.action === "suspend"
                 ? "They are signed out everywhere and can't sign in until reactivated."
-                : "They are signed out everywhere and removed from booking. Their pending orders will be cancelled."}
+                : confirm?.action === "deactivate"
+                  ? "They are signed out everywhere and removed from booking. Their pending orders will be cancelled."
+                  : `This cannot be undone. ${confirm?.account.fullName} loses access immediately and the account is removed from this list. Their past orders are kept for reporting and billing, and open orders are cancelled. ${confirm?.account.companyMail} is released, so they can submit a new account request with it.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -343,7 +402,7 @@ function AccountsPage() {
                 );
               }}
             >
-              {confirm?.action === "suspend" ? "Suspend" : "Deactivate"}
+              {confirmTitle[confirm?.action ?? "suspend"]}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -103,6 +103,25 @@ function AccountRequestsPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [open, setOpen] = useState<AccountRequestRow | null>(null);
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [deleting, setDeleting] = useState<AccountRequestRow | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+
+  async function deleteAccount(request: AccountRequestRow) {
+    setDeleteBusy(true);
+    const result = await authService.accountAction({
+      employee_id: request.employeeId,
+      action: "delete",
+    });
+    setDeleteBusy(false);
+    setDeleting(null);
+    if (!result.ok) {
+      toast.error(result.message ?? "The account couldn't be deleted.");
+      return;
+    }
+    toast.success(result.message ?? `${request.fullName}'s account was deleted.`);
+    setOpen(null);
+    await reload();
+  }
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -342,16 +361,33 @@ function AccountRequestsPage() {
                     </ToneBadge>
                   </Td>
                   <Td>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpen(r);
-                      }}
-                    >
-                      {pending ? "Review" : "View"}
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpen(r);
+                        }}
+                      >
+                        {pending ? "Review" : "View"}
+                      </Button>
+                      {r.status === "approved" && r.existingAccount ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-destructive text-destructive hover:bg-destructive/10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleting(r);
+                          }}
+                        >
+                          Delete account
+                        </Button>
+                      ) : r.status === "approved" && r.accountDeleted ? (
+                        <ToneBadge tone="muted">Account deleted</ToneBadge>
+                      ) : null}
+                    </div>
                   </Td>
                 </tr>
               );
@@ -367,7 +403,35 @@ function AccountRequestsPage() {
           setOpen(null);
           await reload();
         }}
+        onDelete={setDeleting}
       />
+
+      <AlertDialog open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleting?.fullName}&apos;s account?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This cannot be undone. {deleting?.fullName} loses access immediately and the account
+              is removed from the accounts list. Their past orders are kept for reporting and
+              billing, and any open orders are cancelled. {deleting?.companyMail} is released, so
+              they can submit a new account request with the same address.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteBusy}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteBusy}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleting) void deleteAccount(deleting);
+              }}
+            >
+              Delete account
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
@@ -376,10 +440,12 @@ function RequestSheet({
   request,
   onClose,
   onDecided,
+  onDelete,
 }: {
   request: AccountRequestRow | null;
   onClose: () => void;
   onDecided: () => Promise<void>;
+  onDelete: (request: AccountRequestRow) => void;
 }) {
   const [department, setDepartment] = useState<Department>("Admin");
   const [site, setSite] = useState<Site>("Head Office – Gulshan");
@@ -498,6 +564,32 @@ function RequestSheet({
                     text={`Submitted from ${request.submittedIp ?? "unknown IP"}`}
                   />
                 </Section>
+
+                {request.status === "approved" ? (
+                  <Section title="Account">
+                    {request.existingAccount ? (
+                      <>
+                        <p className="text-sm text-muted-foreground">
+                          This request created a sign-in account. Deleting it removes access and
+                          releases {request.companyMail} for a new request. Past orders are kept.
+                        </p>
+                        <Button
+                          variant="outline"
+                          className="border-destructive text-destructive hover:bg-destructive/10"
+                          onClick={() => onDelete(request)}
+                        >
+                          Delete account
+                        </Button>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {request.accountDeleted
+                          ? "The account created by this request has been deleted. Past orders were kept, and the company mail is free for a new request."
+                          : "There is no sign-in account for this request."}
+                      </p>
+                    )}
+                  </Section>
+                ) : null}
 
                 {pending ? (
                   <Section title="Decision">

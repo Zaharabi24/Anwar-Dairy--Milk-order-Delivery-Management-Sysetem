@@ -62,6 +62,10 @@ export const listAccountsFn = createServerFn({ method: "GET" }).handler(async ()
   (await auth()).listAccounts(),
 );
 
+export const listDeletedAccountsFn = createServerFn({ method: "GET" }).handler(async () =>
+  (await auth()).listDeletedAccounts(),
+);
+
 export const accountActionFn = createServerFn({ method: "POST" })
   .validator(schema.accountActionInput)
   .handler(async ({ data }) => (await auth()).accountAction(data));
