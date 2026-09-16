@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { EMAIL_PLACEHOLDER, ROLE_HOME } from "@/lib/auth-constants";
 import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
-import { SignedInNotice } from "@/components/auth/SignedInNotice";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/staff/admin")({
@@ -27,7 +26,6 @@ export const Route = createFileRoute("/staff/admin")({
 /** Staff portal: invited operators, coordinators, System Admins and Super Admins. */
 function StaffLoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
-  const { auth } = Route.useRouteContext();
   const navigate = useNavigate();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -60,8 +58,6 @@ function StaffLoginPage() {
   return (
     <AuthShell>
       <AuthHeading title="Super Admin Sign In" />
-
-      {auth ? <SignedInNotice auth={auth} /> : null}
 
       {message ? (
         <Alert variant="destructive" className="mb-5">

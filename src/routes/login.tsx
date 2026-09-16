@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ROLE_HOME } from "@/lib/auth-constants";
 import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
-import { SignedInNotice } from "@/components/auth/SignedInNotice";
 import { authService } from "@/services/auth-service";
 
 export const Route = createFileRoute("/login")({
@@ -39,7 +38,6 @@ export const Route = createFileRoute("/login")({
 /** Employee portal. Staff (operators, coordinators, admins) use /staff/admin. */
 function LoginPage() {
   const { redirect: redirectTo } = Route.useSearch();
-  const { auth } = Route.useRouteContext();
   const navigate = useNavigate();
   const router = useRouter();
   const [employeeId, setEmployeeId] = useState("");
@@ -75,8 +73,6 @@ function LoginPage() {
         title="Sign in"
         description="Employees: use your Employee ID or company email and password to book milk."
       />
-
-      {auth ? <SignedInNotice auth={auth} /> : null}
 
       {message ? (
         <Alert variant="destructive" className="mb-5">

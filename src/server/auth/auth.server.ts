@@ -118,7 +118,7 @@ export async function failuresFor(db: Tx | Sql, identifier: string | string[]): 
   const [row] = await db<Row[]>`
     select count(*)::int as fails from login_attempts
     where lower(identifier) = any(${keys}::text[])
-      and outcome not in ('success', 'staff_reset_request', 'invite_token_fail')
+      and outcome not in ('success', 'staff_reset_request', 'invite_token_fail', 'staff_account')
       and attempted_at > now() - make_interval(mins => ${LOCK_MINUTES})`;
   return row?.fails ?? 0;
 }
@@ -201,9 +201,16 @@ export async function signIn(input: SignInInput): Promise<AuthResult<{ profile: 
     return fail(GENERIC);
   }
 
-  const roles = rolesForPortal(await activeRoles(sql, emp.id), "employee");
+  const held = await activeRoles(sql, emp.id);
+  // The employee portal is for employees only. Anyone holding a staff role signs in at
+  // /staff/admin, so no admin can pick up an employee session from the public link. The password
+  // has already been checked by this point, so naming the right door gives nothing away.
+  if (held.some(isStaffRole)) {
+    await logAttempt(sql, empId, "staff_account", "employee");
+    return fail("This is a staff account. Please sign in at /staff/admin.");
+  }
+  const roles = rolesForPortal(held, "employee");
   if (!roles.includes("employee")) {
-    // Staff-only accounts sign in through the staff portal.
     await logAttempt(sql, empId, "bad_role", "employee");
     return fail(GENERIC);
   }
@@ -346,6 +353,9 @@ export async function submitAccountRequest(
   const [existing] = await sql<Row[]>`
     select id, account_status from employees
     where lower(id) = lower(${empId}) or lower(company_email) = ${email}`;
+  if (existing && (await activeRoles(sql, existing.id)).some(isStaffRole)) {
+    return fail("This is a staff account. Staff access is arranged by a Super Admin.");
+  }
   if (existing?.account_status) {
     return fail("An account already exists for this Employee ID or email. Use Forgot Password.");
   }
