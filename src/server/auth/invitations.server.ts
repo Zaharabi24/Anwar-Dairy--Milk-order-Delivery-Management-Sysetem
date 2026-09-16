@@ -229,8 +229,12 @@ export async function createInvitation(
         }
       }
       if (employeeId) {
+        // A deleted account keeps its employees row so its orders still have an owner, and its
+        // address is moved aside. That record is the same person's history, not someone else's
+        // claim on the ID, so it must not block inviting them back.
         const [owner] = await tx<Row[]>`
-        select company_email from employees where lower(id) = lower(${employeeId})`;
+        select company_email from employees
+        where lower(id) = lower(${employeeId}) and deleted_at is null`;
         if (owner && owner.company_email.toLowerCase() !== email) {
           return fail("That Employee ID belongs to someone else.", {
             employee_id: "This Employee ID belongs to a different email.",
@@ -542,23 +546,39 @@ export async function acceptInvitation(
             account_status = 'active', activated_at = coalesce(activated_at, now()), updated_at = now()
           where id = ${account.id}`;
       } else {
-        if (inv.employee_id) {
-          const [clash] = await tx<
-            Row[]
-          >`select 1 from employees where lower(id) = lower(${inv.employee_id})`;
-          if (clash)
-            return fail(
-              "This invitation's Employee ID is already in use. Ask your Super Admin to resend it.",
-            );
+        // The Employee ID may belong to an account that was deleted. That row is kept only so the
+        // person's past orders still have an owner, so taking it back up is the right move: it
+        // restores their history to them, the same way approving a fresh sign-up does.
+        const [previous] = inv.employee_id
+          ? await tx<Row[]>`
+              select id, deleted_at from employees where lower(id) = lower(${inv.employee_id})
+              for update`
+          : [];
+        if (previous && !previous.deleted_at) {
+          return fail(
+            "This invitation's Employee ID is already in use. Ask your Super Admin to resend it.",
+          );
         }
-        const [created] = await tx<Row[]>`
-          insert into employees (id, name, company_email, phone, department, site, active,
-                                 account_status, password_hash, activated_at)
-          values (coalesce(${inv.employee_id}::text, 'STF-' || lpad(nextval('staff_id_seq')::text, 4, '0')),
-                  ${name}, ${inv.email}, '', 'Admin', 'Head Office – Gulshan', false,
-                  'active', ${newPasswordHash}, now())
-          returning id`;
-        employeeId = created.id;
+
+        if (previous) {
+          employeeId = previous.id;
+          await tx`
+            update employees set name = ${name}, company_email = ${inv.email},
+              password_hash = ${newPasswordHash}, account_status = 'active', active = false,
+              activated_at = coalesce(activated_at, now()),
+              deleted_at = null, deleted_by = null, former_company_email = null,
+              deactivated_at = null, updated_at = now()
+            where id = ${previous.id}`;
+        } else {
+          const [created] = await tx<Row[]>`
+            insert into employees (id, name, company_email, phone, department, site, active,
+                                   account_status, password_hash, activated_at)
+            values (coalesce(${inv.employee_id}::text, 'STF-' || lpad(nextval('staff_id_seq')::text, 4, '0')),
+                    ${name}, ${inv.email}, '', 'Admin', 'Head Office – Gulshan', false,
+                    'active', ${newPasswordHash}, now())
+            returning id`;
+          employeeId = created.id;
+        }
       }
     }
 
