@@ -1,3 +1,4 @@
+import { orderStatusLabels } from "@/lib/order-status";
 import type { BatchStatus, OrderStatus } from "@/lib/types";
 
 const orderStyles: Record<OrderStatus, string> = {
@@ -9,17 +10,6 @@ const orderStyles: Record<OrderStatus, string> = {
   Delivered: "bg-primary text-primary-foreground border-primary",
   Cancelled: "bg-destructive/10 text-destructive border-destructive/25",
   NotCollected: "bg-background text-destructive border-destructive",
-};
-
-const orderLabels: Record<OrderStatus, string> = {
-  Pending: "Pending",
-  Confirmed: "Order confirmed",
-  CancellationRequested: "Cancellation requested",
-  Packed: "Packed",
-  OutForDelivery: "Out for delivery",
-  Delivered: "Delivered",
-  Cancelled: "Cancelled",
-  NotCollected: "Not collected",
 };
 
 const batchStyles: Record<BatchStatus, string> = {
@@ -42,7 +32,7 @@ const base =
   "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap";
 
 export function OrderStatusBadge({ status }: { status: OrderStatus }) {
-  return <span className={`${base} ${orderStyles[status]}`}>{orderLabels[status]}</span>;
+  return <span className={`${base} ${orderStyles[status]}`}>{orderStatusLabels[status]}</span>;
 }
 
 export function BatchStatusBadge({ status }: { status: BatchStatus }) {

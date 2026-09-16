@@ -1,46 +1,44 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
 import { PageHeader, EmptyState } from "@/components/page-header";
-import { OrderStatusBadge } from "@/components/status-badge";
+import { orderStatusLabels } from "@/lib/order-status";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { useAppData } from "@/context/app-data";
 import { litres } from "@/lib/format";
 import type { Order, OrderStatus } from "@/lib/types";
 
-const nextStatus: Partial<Record<OrderStatus, OrderStatus>> = {
-  Confirmed: "Packed",
-  Packed: "OutForDelivery",
-  OutForDelivery: "Delivered",
-};
-
-const nextLabel: Partial<Record<OrderStatus, string>> = {
-  Confirmed: "Mark packed",
-  Packed: "Mark out for delivery",
-  OutForDelivery: "Mark delivered",
-};
+/**
+ * What this screen can set an order to.
+ *
+ * Packed and Delivered are the two steps of a counter handover. "Not collected" is here because
+ * it is the only way to close an order nobody came for, and the reports reconcile on it -- it used
+ * to be a separate button that only appeared once an order was out for delivery, which this
+ * screen no longer routes through.
+ */
+const SETTABLE: OrderStatus[] = ["Packed", "Delivered", "NotCollected"];
 
 export const Route = createFileRoute("/app/fulfillment")({
   head: () => ({
     meta: [
       { title: "Fulfillment — Anwar Organic" },
-      { name: "description", content: "Orders grouped by delivery point with one-tap status updates." },
+      {
+        name: "description",
+        content: "Orders grouped by delivery point with one-tap status updates.",
+      },
       { property: "og:title", content: "Fulfillment — Anwar Organic" },
-      { property: "og:description", content: "Orders grouped by delivery point with one-tap status updates." },
+      {
+        property: "og:description",
+        content: "Orders grouped by delivery point with one-tap status updates.",
+      },
     ],
   }),
   component: Fulfillment,
 });
 
 function Fulfillment() {
-  const {
-    orders,
-    employees,
-    deliveryPoints,
-    activeBatch,
-    updateOrder,
-    addDeliveryRecord,
-  } = useAppData();
+  const { orders, employees, deliveryPoints, activeBatch, updateOrder, addDeliveryRecord } =
+    useAppData();
 
   const todays = orders.filter(
     (o) =>
@@ -49,10 +47,10 @@ function Fulfillment() {
       o.status !== "Pending",
   );
 
-  function advance(order: Order) {
-    const next = nextStatus[order.status];
-    if (!next) return;
+  function setStatus(order: Order, next: OrderStatus) {
+    if (next === order.status) return;
     updateOrder(order.orderNo, { status: next }, "Fulfillment update");
+    // A handover is a record in its own right, so it is written the moment one is declared.
     if (next === "Delivered") {
       const emp = employees.find((e) => e.id === order.employeeId);
       const point = deliveryPoints.find((p) => p.id === order.deliveryPointId);
@@ -68,7 +66,7 @@ function Fulfillment() {
         remarks: "Handed over at counter",
       });
     }
-    toast.success(`${order.orderNo} → ${next === "OutForDelivery" ? "out for delivery" : next.toLowerCase()}`);
+    toast.success(`${order.orderNo} → ${orderStatusLabels[next].toLowerCase()}`);
   }
 
   const groups = deliveryPoints
@@ -87,7 +85,9 @@ function Fulfillment() {
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">
           {groups.map(({ point, list }) => {
-            const pending = list.filter((o) => o.status !== "Delivered" && o.status !== "NotCollected");
+            const pending = list.filter(
+              (o) => o.status !== "Delivered" && o.status !== "NotCollected",
+            );
             return (
               <section key={point.id} className="rounded-xl border border-border bg-card">
                 <header className="flex items-center justify-between border-b border-border px-5 py-4">
@@ -116,26 +116,7 @@ function Fulfillment() {
                             {o.orderNo} · {litres(o.litres)}
                           </p>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <OrderStatusBadge status={o.status} />
-                          {nextStatus[o.status] ? (
-                            <Button size="sm" onClick={() => advance(o)}>
-                              {nextLabel[o.status]}
-                            </Button>
-                          ) : null}
-                          {o.status === "OutForDelivery" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                updateOrder(o.orderNo, { status: "NotCollected" }, "Not collected at counter");
-                                toast.message(`${o.orderNo} marked not collected`);
-                              }}
-                            >
-                              Not collected
-                            </Button>
-                          ) : null}
-                        </div>
+                        <StatusSelect order={o} onChange={(next) => setStatus(o, next)} />
                       </motion.li>
                     );
                   })}
@@ -146,5 +127,41 @@ function Fulfillment() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The order's status, as a control rather than a label. The current value is always offered even
+ * when it isn't one this screen sets -- a Confirmed order has to show as Confirmed -- but it is
+ * disabled, because an order can move forward from here, not back.
+ */
+function StatusSelect({
+  order,
+  onChange,
+}: {
+  order: Order;
+  onChange: (next: OrderStatus) => void;
+}) {
+  const options: OrderStatus[] = SETTABLE.includes(order.status)
+    ? SETTABLE
+    : [order.status, ...SETTABLE];
+
+  return (
+    <Select value={order.status} onValueChange={(v) => onChange(v as OrderStatus)}>
+      <SelectTrigger className="w-44" aria-label={`Status for order ${order.orderNo}`}>
+        {/* The label is rendered here rather than through SelectValue, which resolves it from the
+            items -- and those live in portalled content the server never renders, so the trigger
+            came back empty until the page hydrated. The value is controlled, so this is always
+            the order's real status. */}
+        <span>{orderStatusLabels[order.status]}</span>
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((status) => (
+          <SelectItem key={status} value={status} disabled={!SETTABLE.includes(status)}>
+            {orderStatusLabels[status]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
