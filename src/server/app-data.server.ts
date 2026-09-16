@@ -107,6 +107,7 @@ const toOrder = (r: Row): Order => ({
   deliveryPointId: r.delivery_point_id,
   status: r.status,
   createdAt: iso(r.created_at),
+  updatedAt: iso(r.updated_at),
   ...(r.payment_method != null ? { paymentMethod: r.payment_method } : {}),
   ...(r.collection_time != null ? { collectionTime: r.collection_time } : {}),
 });

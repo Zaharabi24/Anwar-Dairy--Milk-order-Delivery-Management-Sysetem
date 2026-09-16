@@ -166,6 +166,7 @@ const todaySpec: Array<[number, number, string, OrderStatus, number]> = [
 
 const todayOrders: Order[] = todaySpec.map(([empIdx, litres, dp, status, hour], i) => ({
   orderNo: `ORD-${8801 + i}`,
+  // Demo rows have never been edited, so the last change is the booking itself.
   employeeId: employees[empIdx]!.id,
   batchNo: ACTIVE_BATCH_NO,
   litres,
@@ -174,6 +175,7 @@ const todayOrders: Order[] = todaySpec.map(([empIdx, litres, dp, status, hour], 
   deliveryPointId: dp,
   status,
   createdAt: atOffset(0, hour, (i * 7) % 60),
+  updatedAt: atOffset(0, hour, (i * 7) % 60),
 }));
 
 // Historical orders across the last 3 closed batches
@@ -195,6 +197,7 @@ historicalBatches.slice(0, 3).forEach((batch, bi) => {
       deliveryPointId: i % 2 === 0 ? "dp-gulshan" : "dp-savar",
       status,
       createdAt: atOffset(bi + 1, 9 + (i % 4), (i * 11) % 60),
+      updatedAt: atOffset(bi + 1, 9 + (i % 4), (i * 11) % 60),
     });
   }
 });

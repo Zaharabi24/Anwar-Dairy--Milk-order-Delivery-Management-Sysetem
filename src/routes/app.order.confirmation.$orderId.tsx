@@ -10,25 +10,11 @@ export const Route = createFileRoute("/app/order/confirmation/$orderId")({
   head: () => ({
     meta: [
       { title: "Order confirmed — Anwar Organic" },
-      { name: "description", content: "Your order code, summary and collection instructions." },
+      { name: "description", content: "Your order number, summary and collection instructions." },
     ],
   }),
   component: ConfirmationPage,
 });
-
-function QrBlock({ seed }: { seed: string }) {
-  const cells = Array.from({ length: 144 }, (_, i) => {
-    const code = seed.charCodeAt(i % seed.length) + i * 7;
-    return code % 3 === 0;
-  });
-  return (
-    <div className="grid w-32 grid-cols-12 gap-px rounded-md border border-border bg-card p-2">
-      {cells.map((on, i) => (
-        <span key={i} className={`aspect-square ${on ? "bg-foreground" : "bg-transparent"}`} />
-      ))}
-    </div>
-  );
-}
 
 function ConfirmationPage() {
   const { orderId } = Route.useParams();
@@ -66,9 +52,12 @@ function ConfirmationPage() {
           Waiting for the head office coordinator to confirm your request.
         </p>
 
-        <div className="mt-6 flex flex-col items-center gap-4">
-          <QrBlock seed={order.orderNo} />
-          <p className="font-display text-2xl font-extrabold tracking-wide">{order.orderNo}</p>
+        <div className="mt-6">
+          <p className="text-sm text-muted-foreground">Your order number</p>
+          <p className="mt-1 font-display text-3xl font-extrabold tracking-wide">{order.orderNo}</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Quote this when you collect your milk.
+          </p>
         </div>
       </div>
 

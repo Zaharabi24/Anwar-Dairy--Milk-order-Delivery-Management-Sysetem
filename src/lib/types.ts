@@ -89,6 +89,8 @@ export interface Order {
   deliveryPointId: string;
   status: OrderStatus;
   createdAt: string;
+  /** When the status last changed, for the order's history. */
+  updatedAt: string;
   paymentMethod?: PaymentMethod;
   collectionTime?: string;
 }
