@@ -29,7 +29,10 @@ export const Route = createFileRoute("/app/admin/employees")({
   head: () => ({
     meta: [
       { title: "Employees — Anwar Organic" },
-      { name: "description", content: "Add, edit and deactivate employees across departments and sites." },
+      {
+        name: "description",
+        content: "Add, edit and deactivate employees across departments and sites.",
+      },
       { property: "og:title", content: "Employees — Anwar Organic" },
       { property: "og:description", content: "Manage who can book milk from the daily batch." },
     ],
@@ -55,14 +58,18 @@ const blank: Employee = {
   phone: "",
   department: "Production",
   site: "Savar Factory",
+  businessUnitCode: null,
   active: true,
 };
 
 function EmployeesPage() {
-  const { employees, saveEmployee, deleteEmployee, setEmployeeActive } = useAppData();
+  const { employees, businessUnits, saveEmployee, deleteEmployee, setEmployeeActive } =
+    useAppData();
   const [query, setQuery] = useState("");
-  const [dept, setDept] = useState("all");
-  const [site, setSite] = useState("all");
+
+  // Names come from the business_units table, so a unit renamed there is renamed here.
+  const unitName = (code: string | null) => businessUnits.find((u) => u.code === code)?.name ?? "—";
+  const [unit, setUnit] = useState("all");
   const [draft, setDraft] = useState<Employee | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Employee | null>(null);
@@ -77,8 +84,7 @@ function EmployeesPage() {
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
     return employees
-      .filter((e) => (dept === "all" ? true : e.department === dept))
-      .filter((e) => (site === "all" ? true : e.site === site))
+      .filter((e) => (unit === "all" ? true : (e.businessUnitCode ?? "") === unit))
       .filter(
         (e) =>
           !q ||
@@ -86,7 +92,7 @@ function EmployeesPage() {
           e.id.toLowerCase().includes(q) ||
           e.companyEmail.toLowerCase().includes(q),
       );
-  }, [employees, query, dept, site]);
+  }, [employees, query, unit]);
 
   async function toggleActive(emp: Employee) {
     if (await setEmployeeActive(emp.id, !emp.active)) {
@@ -137,28 +143,15 @@ function EmployeesPage() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        <Select value={dept} onValueChange={setDept}>
+        <Select value={unit} onValueChange={setUnit}>
           <SelectTrigger className="w-48">
-            <SelectValue placeholder="Department" />
+            <SelectValue placeholder="Business unit" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All departments</SelectItem>
-            {departments.map((d) => (
-              <SelectItem key={d} value={d}>
-                {d}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={site} onValueChange={setSite}>
-          <SelectTrigger className="w-56">
-            <SelectValue placeholder="Site" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All sites</SelectItem>
-            {sites.map((s) => (
-              <SelectItem key={s} value={s}>
-                {s}
+            <SelectItem value="all">All business units</SelectItem>
+            {businessUnits.map((u) => (
+              <SelectItem key={u.code} value={u.code}>
+                {u.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -176,8 +169,7 @@ function EmployeesPage() {
               <tr>
                 <Th>ID</Th>
                 <Th>Name</Th>
-                <Th>Department</Th>
-                <Th>Site</Th>
+                <Th>Business Unit</Th>
                 <Th>Contact</Th>
                 <Th>Active</Th>
                 <Th> </Th>
@@ -194,8 +186,7 @@ function EmployeesPage() {
                 >
                   <Td className="font-medium">{e.id}</Td>
                   <Td>{e.name}</Td>
-                  <Td>{e.department}</Td>
-                  <Td>{e.site}</Td>
+                  <Td>{unitName(e.businessUnitCode)}</Td>
                   <Td>
                     {e.companyEmail}
                     <span className="block text-xs text-muted-foreground">{e.phone}</span>
@@ -241,7 +232,10 @@ function EmployeesPage() {
             <div className="space-y-4">
               <div>
                 <Label className="mb-2 block">Full name</Label>
-                <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                <Input
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -253,10 +247,36 @@ function EmployeesPage() {
                 </div>
                 <div>
                   <Label className="mb-2 block">Phone</Label>
-                  <Input value={draft.phone} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
+                  <Input
+                    value={draft.phone}
+                    onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                  />
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label className="mb-2 block">Business Unit</Label>
+                  <Select
+                    value={draft.businessUnitCode ?? "none"}
+                    onValueChange={(v) =>
+                      setDraft({ ...draft, businessUnitCode: v === "none" ? null : v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {/* Someone added straight to the roster may not belong to one yet. */}
+                      <SelectItem value="none">Not set</SelectItem>
+                      {businessUnits.map((u) => (
+                        <SelectItem key={u.code} value={u.code}>
+                          {u.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
                 <div>
                   <Label className="mb-2 block">Department</Label>
                   <Select
@@ -277,7 +297,10 @@ function EmployeesPage() {
                 </div>
                 <div>
                   <Label className="mb-2 block">Site</Label>
-                  <Select value={draft.site} onValueChange={(v) => setDraft({ ...draft, site: v as Site })}>
+                  <Select
+                    value={draft.site}
+                    onValueChange={(v) => setDraft({ ...draft, site: v as Site })}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>

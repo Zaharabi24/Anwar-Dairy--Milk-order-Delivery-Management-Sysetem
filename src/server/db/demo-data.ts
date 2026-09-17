@@ -69,6 +69,8 @@ const seedNames: Array<[string, Employee["department"], Employee["site"]]> = [
 export const employees: Employee[] = seedNames.map(([name, department, site], i) => ({
   id: `EMP-${(1001 + i).toString()}`,
   name,
+  // Demo roster entries predate the business unit, the same as a real pre-existing record.
+  businessUnitCode: null,
   companyEmail: `${name.toLowerCase().replace(/\s+/g, ".")}@anwargroup.net`,
   phone: `+88017${(10000000 + i * 371937).toString().slice(0, 8)}`,
   department,

@@ -44,6 +44,7 @@ import type {
   DailyMilkBatch,
   DeliveryPoint,
   DeliveryRecord,
+  BusinessUnit,
   Employee,
   Order,
   PaymentMethod,
@@ -78,6 +79,7 @@ interface AppData {
   setRole: (r: Role) => void;
   currentEmployee: Employee;
   employees: Employee[];
+  businessUnits: BusinessUnit[];
   batches: DailyMilkBatch[];
   batchTotals: Record<string, BatchTotals>;
   activeBatch: DailyMilkBatch | undefined;
@@ -210,6 +212,7 @@ export function AppDataProvider({
         phone: "",
         department: "Admin",
         site: "Head Office – Gulshan",
+        businessUnitCode: null,
         active: false,
       },
     [employees, user],
@@ -287,7 +290,16 @@ export function AppDataProvider({
       upsertCollection: (record: CollectionEntry) =>
         run(() => ok(upsertCollectionFn({ data: record })), false),
       saveEmployee: (employee: Employee, isNew: boolean) =>
-        run(() => saveEmployeeFn({ data: { employee, isNew } }), null),
+        run(
+          () =>
+            saveEmployeeFn({
+              data: {
+                employee: { ...employee, businessUnitCode: employee.businessUnitCode ?? "" },
+                isNew,
+              },
+            }),
+          null,
+        ),
       deleteEmployee: (id: string) => run(() => ok(deleteEmployeeFn({ data: { id } })), false),
       setEmployeeActive: (id: string, active: boolean) =>
         run(() => ok(setEmployeeActiveFn({ data: { id, active } })), false),
@@ -311,6 +323,7 @@ export function AppDataProvider({
       batches,
       batchTotals: snapshot.batchTotals,
       activeBatch: batches.find((b) => b.status === "Active" || b.status === "Paused"),
+      businessUnits: snapshot.businessUnits,
       deliveryPoints: snapshot.deliveryPoints,
       orders,
       deliveryRecords: snapshot.deliveryRecords,

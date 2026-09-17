@@ -89,6 +89,8 @@ export const saveEmployeeInput = z.object({
     phone: text(40),
     department: z.enum(departments),
     site: z.enum(sites),
+    /** A business_units code, or "" for none. Checked against the table by the foreign key. */
+    businessUnitCode: z.string().trim().max(20),
     active: z.boolean(),
   }),
   isNew: z.boolean(),

@@ -69,6 +69,7 @@ const toEmployee = (r: Row): Employee => ({
   phone: r.phone,
   department: r.department,
   site: r.site,
+  businessUnitCode: r.business_unit_code ?? null,
   active: r.active,
 });
 
@@ -212,6 +213,7 @@ export async function readSnapshot(user?: SessionUser): Promise<AppSnapshot> {
         where ${staff} or b.status <> 'Draft'
         group by b.batch_no
         order by b.seq desc`,
+      tx`select code, name from business_units where is_active order by position, name`,
       tx`select * from delivery_points order by seq`,
       tx`select * from orders where ${own}::text is null or employee_id = ${own} order by seq desc`,
       tx`select * from cancellation_requests where ${own}::text is null or employee_id = ${own} order by seq desc`,
@@ -241,6 +243,7 @@ export async function readSnapshot(user?: SessionUser): Promise<AppSnapshot> {
     clock,
     employees,
     batches,
+    units,
     points,
     orders,
     requests,
@@ -263,6 +266,7 @@ export async function readSnapshot(user?: SessionUser): Promise<AppSnapshot> {
   return {
     version: Number(clock![0]!.version),
     employees: employees!.map(toEmployee),
+    businessUnits: units!.map((u) => ({ code: u.code, name: u.name })),
     batches: batches!.map(toBatch),
     batchTotals,
     deliveryPoints: points!.map(toDeliveryPoint),
@@ -805,9 +809,11 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
         select coalesce(max(substring(id from '^EMP-([0-9]+)$')::int), 1000) + 1 as next
         from employees`) as unknown as [{ next: number }];
       const [row] = await tx<Row[]>`
-        insert into employees (id, name, company_email, phone, department, site, active)
+        insert into employees (id, name, company_email, phone, department, site,
+                               business_unit_code, active)
         values (${`EMP-${next}`}, ${employee.name}, ${employee.companyEmail}, ${employee.phone},
-                ${employee.department}, ${employee.site}, ${employee.active})
+                ${employee.department}, ${employee.site}, ${employee.businessUnitCode || null},
+                ${employee.active})
         returning *`;
       await audit(tx, {
         actor: user.fullName,
@@ -822,7 +828,8 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
     const [row] = await tx<Row[]>`
       update employees set
         name = ${employee.name}, company_email = ${employee.companyEmail}, phone = ${employee.phone},
-        department = ${employee.department}, site = ${employee.site}, active = ${employee.active},
+        department = ${employee.department}, site = ${employee.site},
+        business_unit_code = ${employee.businessUnitCode || null}, active = ${employee.active},
         updated_at = now()
       where id = ${employee.id}
       returning *`;

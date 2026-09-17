@@ -1,18 +1,7 @@
 export type Role =
-  | "Employee"
-  | "Factory Operator"
-  | "Head Office Coordinator"
-  | "System Admin"
-  | "Super Admin";
+  "Employee" | "Factory Operator" | "Head Office Coordinator" | "System Admin" | "Super Admin";
 
-export type Department =
-  | "Production"
-  | "Finance"
-  | "HR"
-  | "Sales"
-  | "IT"
-  | "Admin"
-  | "Procurement";
+export type Department = "Production" | "Finance" | "HR" | "Sales" | "IT" | "Admin" | "Procurement";
 
 export type Site = "Head Office – Gulshan" | "Savar Factory";
 
@@ -23,7 +12,15 @@ export interface Employee {
   phone: string;
   department: Department;
   site: Site;
+  /** Chosen when the account was requested. Null for anyone added straight to the roster. */
+  businessUnitCode: string | null;
   active: boolean;
+}
+
+/** A business unit, as held in the business_units table. */
+export interface BusinessUnit {
+  code: string;
+  name: string;
 }
 
 export type BatchStatus = "Draft" | "Active" | "Paused" | "SoldOut" | "Closed";
@@ -130,7 +127,6 @@ export interface AppNotification {
   read: boolean;
 }
 
-
 export interface CollectionRecord {
   orderNo: string;
   amountDue: number;
@@ -174,6 +170,7 @@ export interface AppSnapshot {
   /** Database clock (µs) when the snapshot was read; newer snapshots win. */
   version: number;
   employees: Employee[];
+  businessUnits: BusinessUnit[];
   batches: DailyMilkBatch[];
   /** Final booked/delivered litres, recorded when a batch is closed. */
   batchTotals: Record<string, BatchTotals>;
