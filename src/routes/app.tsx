@@ -46,7 +46,7 @@ export const Route = createFileRoute("/app")({
 });
 
 /** `section` starts a labelled group in the sidebar (used for the Super Admin's combined menu). */
-type NavItem = { label: string; to: string; section?: string };
+type NavItem = { label: string; to: string; section?: string; exact?: boolean; match?: string };
 
 const reportsNav: NavItem = { label: "Reports", to: "/app/reports" };
 
@@ -89,7 +89,9 @@ const commonTail: NavItem[] = [
 const navByRole: Record<Role, NavItem[]> = {
   Employee: [
     { label: "Today's offer", to: "/app/offer" },
-    { label: "Book milk", to: "/app/order/new" },
+    // Booking ends on the order's confirmation page, which sits under /app/order rather than
+    // under /app/order/new, so the menu item the person clicked stays lit through the whole step.
+    { label: "Book milk", to: "/app/order/new", match: "/app/order" },
     { label: "My orders", to: "/app/my-orders" },
   ],
   "Factory Operator": [...operatorPages, reportsNav],
@@ -175,12 +177,17 @@ function Brand() {
 
 function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  // Home is part of the list, not a special case, so it competes for the match like everything
-  // else and loses to any page that sits beneath it.
-  const all: NavItem[] = [{ label: "Home", to: "/app" }, ...items, ...commonTail];
+  // Home is part of the list rather than a special case, but it matches its own address only:
+  // every page in the app sits beneath /app, so matching loosely made it the fallback highlight
+  // on any page the menu doesn't list, pointing the reader somewhere they aren't.
+  const all: NavItem[] = [{ label: "Home", to: "/app", exact: true }, ...items, ...commonTail];
   const active = activeNavPath(
     pathname,
-    all.map((i) => i.to),
+    all.map((i) => ({
+      to: i.to,
+      ...(i.exact ? { exact: true } : {}),
+      ...(i.match ? { match: i.match } : {}),
+    })),
   );
 
   return (
