@@ -63,8 +63,16 @@ function useCountUp(target: number, start: boolean, duration = 1.6) {
 function Nav({ auth }: { auth: AuthUser | null }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur">
-      <div className="mx-auto flex h-28 max-w-6xl items-center justify-between px-5">
-        <img src={logoUrl} alt="Anwar Organic" className="h-20 w-auto" width={83} height={80} />
+      {/* The bar is sticky, so on a phone its full height is taken off every screen and sits over
+          whatever scrolls past. It shrinks below sm and is unchanged from sm up. */}
+      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:h-28">
+        <img
+          src={logoUrl}
+          alt="Anwar Organic"
+          className="h-12 w-auto sm:h-20"
+          width={83}
+          height={80}
+        />
         <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
           <a href="#how-it-works" className="hover:text-foreground">
             How it works
@@ -152,9 +160,13 @@ function HowItWorks() {
   const reduce = useReducedMotion();
 
   return (
-    <section id="how-it-works" ref={ref} className="mx-auto max-w-6xl px-5 py-20">
+    <section
+      id="how-it-works"
+      ref={ref}
+      className="mx-auto max-w-6xl scroll-mt-20 px-5 py-12 sm:scroll-mt-0 sm:py-20"
+    >
       <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">One batch a day, start to finish</h2>
-      <div className="relative mt-14">
+      <div className="relative mt-8 sm:mt-14">
         <div className="absolute left-0 right-0 top-6 hidden h-px bg-border md:block" />
         <motion.div
           className="absolute top-[1.15rem] hidden size-3 rounded-full bg-accent md:block"
@@ -162,19 +174,24 @@ function HowItWorks() {
           animate={inView ? { left: "97%" } : {}}
           transition={{ duration: reduce ? 0 : 3.2, ease: "easeInOut" }}
         />
-        <ol className="grid gap-8 md:grid-cols-5">
+        <ol className="grid gap-3 sm:gap-8 md:grid-cols-5">
           {stages.map((s, i) => (
             <motion.li
               key={s.title}
+              // Below sm each step is a card, so five steps read as five things rather than
+              // fifteen stacked blocks. From sm up the card styling is removed entirely.
+              className="rounded-xl border border-border bg-card p-4 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0"
               initial={{ opacity: 0, y: 12 }}
               animate={inView ? { opacity: 1, y: 0 } : {}}
               transition={{ delay: reduce ? 0 : i * 0.6, duration: 0.4 }}
             >
-              <div className="flex size-12 items-center justify-center rounded-full border border-border bg-card text-primary">
-                <s.icon className="size-5" />
+              <div className="flex items-center gap-3 sm:block">
+                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background text-primary sm:size-12 sm:bg-card">
+                  <s.icon className="size-5" />
+                </div>
+                <h3 className="text-base font-semibold sm:mt-4 sm:text-lg">{s.title}</h3>
               </div>
-              <h3 className="mt-4 text-lg font-semibold">{s.title}</h3>
-              <p className="mt-1 text-sm text-muted-foreground">{s.copy}</p>
+              <p className="mt-2 text-sm text-muted-foreground sm:mt-1">{s.copy}</p>
             </motion.li>
           ))}
         </ol>
@@ -207,21 +224,27 @@ const roleCards = [
 function Capabilities() {
   const strip = [...roleCards, ...roleCards];
   return (
-    <section id="for-your-team" className="overflow-hidden border-y border-border bg-card py-20">
+    <section
+      id="for-your-team"
+      className="scroll-mt-20 overflow-hidden border-y border-border bg-card py-12 sm:scroll-mt-0 sm:py-20"
+    >
       <div className="mx-auto max-w-6xl px-5">
         <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">Built for everyone in the chain</h2>
       </div>
-      <div className="group mt-10 overflow-hidden">
+      <div className="group mt-8 overflow-hidden sm:mt-10">
         <div className="marquee-track flex w-max gap-5 px-5 group-hover:[animation-play-state:paused]">
           {strip.map((c, i) => (
             <article
               key={i}
-              className={`shrink-0 rounded-xl border border-border bg-background p-6 ${
-                c.wide ? "w-[26rem]" : "w-[19rem]"
+              // A 26rem card is wider than a phone, so the widths come down below sm.
+              className={`shrink-0 rounded-xl border border-border bg-background p-5 sm:p-6 ${
+                c.wide ? "w-[18rem] sm:w-[26rem]" : "w-[15rem] sm:w-[19rem]"
               }`}
             >
               <c.icon className={`text-primary ${c.wide ? "size-7" : "size-5"}`} />
-              <h3 className={`mt-4 font-semibold ${c.wide ? "text-2xl" : "text-lg"}`}>{c.title}</h3>
+              <h3 className={`mt-4 font-semibold ${c.wide ? "text-xl sm:text-2xl" : "text-lg"}`}>
+                {c.title}
+              </h3>
               <p className="mt-2 text-sm text-muted-foreground">{c.copy}</p>
             </article>
           ))}
@@ -247,7 +270,7 @@ function Stat({
   const v = useCountUp(value, inView);
   return (
     <div ref={ref}>
-      <p className="font-display text-4xl font-extrabold">
+      <p className="font-display text-3xl font-extrabold sm:text-4xl">
         {prefix}
         {Math.round(v)}
         {suffix}
@@ -306,7 +329,8 @@ function Landing() {
       <HowItWorks />
       <Capabilities />
 
-      <section className="mx-auto grid max-w-6xl gap-10 px-5 py-20 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Two per row on a phone: one stat per row left four tall, near-empty bands. */}
+      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-8 px-5 py-12 sm:grid-cols-2 sm:gap-10 sm:py-20 lg:grid-cols-4">
         <Stat value={60} prefix="<" suffix="s" label="Average booking time" />
         <Stat value={0} label="Overbooking incidents" />
         <Stat value={100} suffix="%" label="Of changes audited" />
@@ -327,9 +351,11 @@ function Landing() {
 function SiteFooter({ auth }: { auth: AuthUser | null }) {
   return (
     <footer className="border-t border-border bg-card">
-      <div className="mx-auto max-w-6xl px-5 py-14">
-        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-[1.6fr_1fr_1fr_1.2fr]">
-          <div>
+      <div className="mx-auto max-w-6xl px-5 py-10 sm:py-14">
+        {/* Below sm the two short link columns sit side by side; the brand and the wordier
+            Access column span both. One column per block made the footer a long, empty scroll. */}
+        <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-2 sm:gap-10 md:grid-cols-[1.6fr_1fr_1fr_1.2fr]">
+          <div className="col-span-2 sm:col-span-1">
             <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
               Every production day the Savar dairy unit publishes one batch of fresh whole milk,
@@ -395,7 +421,7 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
             )}
           </FooterNav>
 
-          <FooterNav title="Access">
+          <FooterNav title="Access" className="col-span-2 sm:col-span-1">
             <li className="text-muted-foreground">
               Company accounts only, at{" "}
               <span className="font-medium text-foreground">@{ALLOWED_EMAIL_DOMAIN}</span>
@@ -406,7 +432,7 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
           </FooterNav>
         </div>
 
-        <div className="mt-12 flex flex-col-reverse items-center gap-3 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row sm:justify-between">
+        <div className="mt-10 flex flex-col-reverse items-center gap-3 border-t border-border pt-6 text-center text-sm text-muted-foreground sm:mt-12 sm:flex-row sm:justify-between sm:text-left">
           <p>© {new Date().getFullYear()} Anwar Group of Industries. All rights reserved.</p>
           <p>Anwar Agro Farms</p>
         </div>
@@ -417,9 +443,17 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
 
 const FOOTER_LINK = "text-muted-foreground transition-colors hover:text-foreground";
 
-function FooterNav({ title, children }: { title: string; children: React.ReactNode }) {
+function FooterNav({
+  title,
+  className = "",
+  children,
+}: {
+  title: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div>
+    <div className={className}>
       <h2 className="text-sm font-semibold text-foreground">{title}</h2>
       <ul className="mt-4 space-y-3 text-sm">{children}</ul>
     </div>
