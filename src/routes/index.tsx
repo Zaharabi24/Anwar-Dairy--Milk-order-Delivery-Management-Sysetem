@@ -408,7 +408,7 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
 
         <div className="mt-12 flex flex-col-reverse items-center gap-3 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row sm:justify-between">
           <p>© {new Date().getFullYear()} Anwar Group of Industries. All rights reserved.</p>
-          <p>Savar Dairy Unit · Anwar Agro Farms</p>
+          <p>Anwar Agro Farms</p>
         </div>
       </div>
     </footer>
