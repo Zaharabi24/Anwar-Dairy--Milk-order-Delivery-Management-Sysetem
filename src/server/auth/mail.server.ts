@@ -532,32 +532,94 @@ export const logoAttachment = () => {
  * read, a linked image is used instead, which is better than no logo at all.
  */
 function emailLogo(): string {
-  const img = (src: string) =>
-    `<tr><td style="padding-bottom:16px;">
-      <img src="${src}" width="72" height="70" alt="Anwar Organic"
-        style="display:block;border:0;outline:none;text-decoration:none;width:72px;height:auto;" /></td></tr>`;
-  if (logoFile()) return img(`cid:${LOGO_CID}`);
+  const row = (src: string) =>
+    `<tr><td class="gutter" align="left" style="padding:32px 32px 24px 32px;">
+      <img src="${src}" width="96" height="93" alt="Anwar Organic"
+        style="display:block;border:0;outline:none;text-decoration:none;width:96px;height:auto;" />
+    </td></tr>`;
+  if (logoFile()) return row(`cid:${LOGO_CID}`);
   const base = env("APP_URL")?.replace(/\/+$/, "");
-  if (!base || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(base)) return "";
-  return img(escapeHtml(`${base}/brand/anwar-organic-logo.png`));
+  if (!base || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(base)) {
+    return `<tr><td style="padding:32px 32px 0 32px;font-size:0;line-height:0;">&nbsp;</td></tr>`;
+  }
+  return row(escapeHtml(`${base}/brand/anwar-organic-logo.png`));
 }
 
+/** The type stack, repeated wherever text is styled because email has no stylesheet to inherit. */
+const FONT = "-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+/** A run of vertical space. Clients drop margins, so space is a row of its own. */
+const spacer = (height: number) =>
+  `<tr><td height="${height}" style="height:${height}px;font-size:0;line-height:0;">&nbsp;</td></tr>`;
+
+/**
+ * The frame every message is built in.
+ *
+ * Written to what email clients actually support rather than to what a browser would accept:
+ * padding lives on table cells, never on a table, because several clients drop the latter -- which
+ * is what pushed the logo flush against the edge and into the rule below it. Widths are attributes
+ * as well as styles, tables carry role="presentation" so screen readers read the text rather than
+ * announcing a grid, and the card is capped at 600px, the width that survives every preview pane.
+ */
 export function layout(heading: string, body: string) {
-  return `<!doctype html><html><body style="margin:0;padding:24px;background:${BG};
-    font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;">
-    <table width="100%"><tr><td align="center">
-    <table width="560" style="background:#fff;border-radius:12px;padding:32px;">
-    ${emailLogo()}
-    <tr><td style="font-size:13px;color:#64748B;letter-spacing:.04em;
-      text-transform:uppercase;padding-bottom:8px;">Anwar Organic</td></tr>
-    <tr><td style="font-size:22px;font-weight:700;color:${INK};padding-bottom:16px;">
-      ${heading}</td></tr>
-    <tr><td style="font-size:15px;line-height:1.6;color:#334155;">${body}</td></tr>
-    <tr><td style="padding-top:28px;font-size:12px;color:#94A3B8;
-      border-top:1px solid #E2E8F0;">An Anwar Agro Farms system ·
-      © 2026 Anwar Group of Industries</td></tr>
-    </table></td></tr></table></body></html>`;
+  // Collapsed to one line per construct: a newline inside a style attribute is legal but reads
+  // badly in a client's "view source", and quoted-printable would fold it anyway.
+  return compact(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>${heading}</title>
+<style>
+  body { margin:0; padding:0; width:100% !important; -webkit-text-size-adjust:100%; }
+  img { border:0; outline:none; text-decoration:none; -ms-interpolation-mode:bicubic; }
+  table { border-collapse:collapse; }
+  a { color:${BRAND}; }
+  @media only screen and (max-width:620px) {
+    .card { width:100% !important; }
+    .gutter { padding-left:20px !important; padding-right:20px !important; }
+    .cta a { display:block !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background-color:${BG};">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+  style="background-color:${BG};">
+  <tr><td align="center" style="padding:24px 12px;">
+    <table role="presentation" class="card" width="600" cellpadding="0" cellspacing="0" border="0"
+      style="width:600px;max-width:600px;background-color:#FFFFFF;border:1px solid #E2E8F0;
+      border-radius:12px;">
+      ${emailLogo()}
+      <tr><td class="gutter" align="left"
+        style="padding:0 32px;font-family:${FONT};font-size:22px;line-height:30px;
+        font-weight:700;color:${INK};mso-line-height-rule:exactly;">${heading}</td></tr>
+      ${spacer(16)}
+      <tr><td class="gutter" align="left"
+        style="padding:0 32px;font-family:${FONT};font-size:15px;line-height:24px;
+        color:#334155;mso-line-height-rule:exactly;">${body}</td></tr>
+      ${spacer(28)}
+      <tr><td class="gutter" style="padding:0 32px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr><td height="1" style="height:1px;font-size:0;line-height:0;
+            background-color:#E2E8F0;">&nbsp;</td></tr>
+        </table>
+      </td></tr>
+      ${spacer(16)}
+      <tr><td class="gutter" align="left"
+        style="padding:0 32px;font-family:${FONT};font-size:12px;line-height:18px;
+        color:#94A3B8;">An Anwar Agro Farms system &middot; &copy; 2026 Anwar Group of Industries</td></tr>
+      ${spacer(32)}
+    </table>
+  </td></tr>
+</table>
+</body>
+</html>`);
 }
+
+/** Squeezes the indentation out of a generated document without touching its text. */
+const compact = (html: string) => html.replace(/\n\s*/g, " ").replace(/\s+>/g, ">").trim();
 
 /**
  * A call to action.
@@ -571,12 +633,16 @@ export function layout(heading: string, body: string) {
 export const button = (href: string, label: string) => {
   const url = escapeHtml(href);
   const text = escapeHtml(label);
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0;">
-    <tr><td align="center" bgcolor="${BRAND}" style="background:${BRAND};border-radius:8px;">
-      <a href="${url}" target="_blank" style="display:inline-block;padding:14px 32px;
-        font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:16px;
-        font-weight:600;line-height:20px;color:#FFFFFF !important;text-decoration:none;
-        border-radius:8px;"><span style="color:#FFFFFF;">${text}</span></a>
+  return `<table role="presentation" class="cta" cellpadding="0" cellspacing="0" border="0"
+    style="margin:0;"><tr><td height="8" style="height:8px;font-size:0;line-height:0;">&nbsp;</td></tr>
+    <tr><td align="center" bgcolor="${BRAND}"
+      style="background-color:${BRAND};border-radius:6px;padding:14px 32px;
+      mso-padding-alt:14px 32px;">
+      <a href="${url}" target="_blank" rel="noopener"
+        style="display:block;font-family:${FONT};font-size:16px;line-height:20px;font-weight:700;
+        color:#FFFFFF !important;text-decoration:none;white-space:nowrap;
+        mso-line-height-rule:exactly;"><span
+        style="color:#FFFFFF;">${text}</span></a>
     </td></tr>
-  </table>`;
+    <tr><td height="8" style="height:8px;font-size:0;line-height:0;">&nbsp;</td></tr></table>`;
 };
