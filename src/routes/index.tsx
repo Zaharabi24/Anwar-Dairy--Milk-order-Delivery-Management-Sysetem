@@ -17,7 +17,7 @@ import { AccountMenu } from "@/components/auth/AccountMenu";
 import { LiveBatchCard } from "@/components/landing/LiveBatchCard";
 import { publicBatchStatusFn } from "@/functions/public.functions";
 import { Button } from "@/components/ui/button";
-import { ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
+import { ALLOWED_EMAIL_DOMAIN, ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
 import type { AuthUser } from "@/lib/auth-types";
 
 export const Route = createFileRoute("/")({
@@ -313,13 +313,115 @@ function Landing() {
         <Stat value={1} label="Batch, fully reconciled daily" />
       </section>
 
-      <footer className="border-t border-border py-10">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 text-sm text-muted-foreground">
-          <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
-          <span>An Anwar Agro Farms system</span>
-          <span>© {new Date().getFullYear()} Anwar Group of Industries</span>
+      <SiteFooter auth={auth} />
+    </div>
+  );
+}
+
+/**
+ * The site footer. The link columns point only at pages that exist, and the account column follows
+ * the session the way the header does -- offering Sign in to someone who already has one is what
+ * made a logo click look like a sign-out. Everything that isn't a link is something the system can
+ * vouch for, such as the company domain, rather than contact details we don't hold on record.
+ */
+function SiteFooter({ auth }: { auth: AuthUser | null }) {
+  return (
+    <footer className="border-t border-border bg-card">
+      <div className="mx-auto max-w-6xl px-5 py-14">
+        <div className="grid gap-10 sm:grid-cols-2 md:grid-cols-[1.6fr_1fr_1fr_1.2fr]">
+          <div>
+            <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+              Every production day the Savar dairy unit publishes one batch of fresh whole milk,
+              booked by the Anwar Agro team and collected the same day.
+            </p>
+            <p className="mt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              An Anwar Agro Farms system
+            </p>
+          </div>
+
+          <FooterNav title="Platform">
+            <li>
+              <a href="#how-it-works" className={FOOTER_LINK}>
+                How it works
+              </a>
+            </li>
+            <li>
+              <a href="#for-your-team" className={FOOTER_LINK}>
+                For your team
+              </a>
+            </li>
+          </FooterNav>
+
+          <FooterNav title="Your account">
+            {auth ? (
+              <>
+                <li>
+                  <Link to={ROLE_HOME[auth.activeRole]} className={FOOTER_LINK}>
+                    {ROLE_HOME_LABEL[auth.activeRole]}
+                  </Link>
+                </li>
+                {auth.roles.includes("employee") ? (
+                  <li>
+                    <Link to="/app/my-orders" className={FOOTER_LINK}>
+                      My orders
+                    </Link>
+                  </li>
+                ) : null}
+                <li>
+                  <Link to="/app/profile" className={FOOTER_LINK}>
+                    Profile
+                  </Link>
+                </li>
+              </>
+            ) : (
+              <>
+                <li>
+                  <Link to="/login" className={FOOTER_LINK}>
+                    Sign in
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/signup" className={FOOTER_LINK}>
+                    Sign up
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/forgot-password" className={FOOTER_LINK}>
+                    Forgot password
+                  </Link>
+                </li>
+              </>
+            )}
+          </FooterNav>
+
+          <FooterNav title="Access">
+            <li className="text-muted-foreground">
+              Company accounts only, at{" "}
+              <span className="font-medium text-foreground">@{ALLOWED_EMAIL_DOMAIN}</span>
+            </li>
+            <li className="text-muted-foreground">
+              Bookings close at the cut-off shown on each batch.
+            </li>
+          </FooterNav>
         </div>
-      </footer>
+
+        <div className="mt-12 flex flex-col-reverse items-center gap-3 border-t border-border pt-6 text-sm text-muted-foreground sm:flex-row sm:justify-between">
+          <p>© {new Date().getFullYear()} Anwar Group of Industries. All rights reserved.</p>
+          <p>Savar Dairy Unit · Anwar Agro Farms</p>
+        </div>
+      </div>
+    </footer>
+  );
+}
+
+const FOOTER_LINK = "text-muted-foreground transition-colors hover:text-foreground";
+
+function FooterNav({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
+      <ul className="mt-4 space-y-3 text-sm">{children}</ul>
     </div>
   );
 }
