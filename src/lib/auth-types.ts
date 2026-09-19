@@ -61,29 +61,6 @@ export interface AccountActivity {
 }
 export type RequestStatus = "pending" | "approved" | "rejected" | "expired";
 
-export interface AccountRequestRow {
-  id: string;
-  reference: string;
-  submittedAt: string;
-  fullName: string;
-  employeeId: string;
-  companyMail: string;
-  businessUnitCode: string;
-  businessUnitName: string;
-  officeName: string;
-  requestedRole: RoleValue;
-  grantedRole: RoleValue | null;
-  status: RequestStatus;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  decisionNote: string | null;
-  submittedIp: string | null;
-  hasDateOfBirth: boolean;
-  existingAccount: boolean;
-  /** The account this request created has since been deleted. */
-  accountDeleted: boolean;
-}
-
 export interface AccountRow {
   employeeId: string;
   fullName: string;

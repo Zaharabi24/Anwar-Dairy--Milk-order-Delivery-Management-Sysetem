@@ -17,9 +17,9 @@ export const signInFn = createServerFn({ method: "POST" })
   .validator(schema.signInInput)
   .handler(async ({ data }) => (await auth()).signIn(data));
 
-export const accountRequestFn = createServerFn({ method: "POST" })
-  .validator(schema.accountRequestInput)
-  .handler(async ({ data }) => (await auth()).submitAccountRequest(data));
+export const createAccountFn = createServerFn({ method: "POST" })
+  .validator(schema.createAccountInput)
+  .handler(async ({ data }) => (await auth()).createAccount(data));
 
 export const forgotPasswordFn = createServerFn({ method: "POST" })
   .validator(schema.forgotPasswordInput)
@@ -52,14 +52,6 @@ export const setPasswordFn = createServerFn({ method: "POST" })
   .handler(async ({ data }) => (await auth()).setPassword(data));
 
 // Admin: employee accounts
-export const listAccountRequestsFn = createServerFn({ method: "GET" }).handler(async () =>
-  (await auth()).listAccountRequests(),
-);
-
-export const reviewAccountRequestFn = createServerFn({ method: "POST" })
-  .validator(schema.reviewRequestInput)
-  .handler(async ({ data }) => (await auth()).reviewAccountRequest(data));
-
 export const listAccountsFn = createServerFn({ method: "GET" }).handler(async () =>
   (await auth()).listAccounts(),
 );

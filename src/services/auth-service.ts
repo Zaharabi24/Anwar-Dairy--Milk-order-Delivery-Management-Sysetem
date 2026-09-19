@@ -3,11 +3,10 @@
 import {
   acceptInvitationFn,
   accountActionFn,
-  accountRequestFn,
+  createAccountFn,
   copyInvitationLinkFn,
   createInvitationFn,
   forgotPasswordFn,
-  listAccountRequestsFn,
   listAccountsFn,
   listAuthAuditFn,
   listDeletedAccountsFn,
@@ -23,7 +22,6 @@ import {
   listTeamFn,
   previewInvitationFn,
   resendInvitationFn,
-  reviewAccountRequestFn,
   revokeInvitationFn,
   setPasswordFn,
   signInFn,
@@ -39,11 +37,10 @@ import type {
   AcceptInvitationInput,
   AccountActionInput,
   AccountAuditFilter,
-  AccountRequestInput,
+  CreateAccountInput,
   ChangePasswordInput,
   CreateInvitationInput,
   ForgotPasswordInput,
-  ReviewRequestInput,
   UpdateProfileInput,
 } from "@/lib/auth.schemas";
 
@@ -65,7 +62,7 @@ async function call<T>(fn: () => Promise<AuthResult<T>>): Promise<AuthResult<T>>
 export const authService = {
   // Employee portal
   signIn: (p: { employee_id: string; password: string }) => call(() => signInFn({ data: p })),
-  submitAccountRequest: (p: AccountRequestInput) => call(() => accountRequestFn({ data: p })),
+  createAccount: (p: CreateAccountInput) => call(() => createAccountFn({ data: p })),
   verifyResetIdentity: (p: ForgotPasswordInput) => call(() => forgotPasswordFn({ data: p })),
 
   // Staff portal
@@ -81,8 +78,6 @@ export const authService = {
     call(() => setPasswordFn({ data: { token, password } })),
 
   // Admin: employee accounts
-  listAccountRequests: () => call(() => listAccountRequestsFn()),
-  reviewAccountRequest: (p: ReviewRequestInput) => call(() => reviewAccountRequestFn({ data: p })),
   listAccounts: () => call(() => listAccountsFn()),
   accountAction: (p: AccountActionInput) => call(() => accountActionFn({ data: p })),
   listDeletedAccounts: () => call(() => listDeletedAccountsFn()),

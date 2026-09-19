@@ -43,7 +43,7 @@ export const INVITABLE_ROLES: { value: InvitableRole; label: string; description
   {
     value: "system_admin",
     label: "System Admin",
-    description: "Approves employee accounts and manages the directory and settings.",
+    description: "Manages the employee directory, delivery points and settings.",
   },
 ];
 
@@ -85,9 +85,9 @@ export const ROLE_HOME: Record<RoleValue, string> = {
   employee: "/app/offer",
   factory_operator: "/app/operator",
   head_office_coordinator: "/app/fulfillment",
-  // Account requests, not Settings: Settings is no longer in the menu, and signing in onto a page
-  // the sidebar doesn't list leaves nothing highlighted and no way back to it.
-  system_admin: "/app/admin/account-requests",
+  // Employees: accounts are created by the people who hold them now, so there are no requests to
+  // land on, and signing in onto a page the sidebar doesn't list leaves nothing highlighted.
+  system_admin: "/app/admin/employees",
   super_admin: "/app/admin/team",
 };
 

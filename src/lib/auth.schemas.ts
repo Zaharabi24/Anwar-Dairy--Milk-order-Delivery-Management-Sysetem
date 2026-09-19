@@ -32,14 +32,16 @@ export const switchRoleInput = z.object({
 });
 
 /** Sign Up is for employees only; staff roles come from invitations. */
-export const accountRequestInput = z.object({
-  requested_role: z.literal("employee").optional(),
+export const createAccountInput = z.object({
   business_unit_code: z.string().max(20),
   full_name: shortText,
   company_mail: shortText,
   employee_id: z.string().max(40),
   date_of_birth: z.union([isoDate, z.literal("")]),
   office_code: z.string().max(20),
+  /** Checked properly in the handler; kept loose here so the message comes from one place. */
+  password: z.string().max(200),
+  confirm_password: z.string().max(200),
 });
 
 export const forgotPasswordInput = z.object({
@@ -53,16 +55,6 @@ export const staffForgotPasswordInput = z.object({ email: z.string().trim().max(
 export const tokenInput = z.object({ token });
 
 export const setPasswordInput = z.object({ token, password: z.string().max(200) });
-
-export const reviewRequestInput = z.object({
-  request_id: z.string().uuid(),
-  decision: z.enum(["approve", "reject"]),
-  note: z.string().max(1000).optional(),
-  department: z
-    .enum(["Production", "Finance", "HR", "Sales", "IT", "Admin", "Procurement"])
-    .optional(),
-  site: z.enum(["Head Office – Gulshan", "Savar Factory"]).optional(),
-});
 
 export const accountActionInput = z.object({
   employee_id: z.string().min(1).max(40),
@@ -120,11 +112,10 @@ export const acceptInvitationInput = z.object({
 
 export type SignInInput = z.infer<typeof signInInput>;
 export type StaffSignInInput = z.infer<typeof staffSignInInput>;
-export type AccountRequestInput = z.infer<typeof accountRequestInput>;
+export type CreateAccountInput = z.infer<typeof createAccountInput>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordInput>;
 export type StaffForgotPasswordInput = z.infer<typeof staffForgotPasswordInput>;
 export type SetPasswordInput = z.infer<typeof setPasswordInput>;
-export type ReviewRequestInput = z.infer<typeof reviewRequestInput>;
 export type AccountActionInput = z.infer<typeof accountActionInput>;
 export type AccountAuditFilter = z.infer<typeof accountAuditFilter>;
 export type UpdateProfileInput = z.infer<typeof updateProfileInput>;

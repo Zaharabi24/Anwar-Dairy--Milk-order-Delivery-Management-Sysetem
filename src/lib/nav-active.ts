@@ -49,7 +49,7 @@ function isSame(pathname: string, path: string): boolean {
 
 /**
  * A URL belongs to a path when it is that path, or sits beneath it at a segment boundary. The
- * boundary matters: "/app/admin/accounts" must not claim "/app/admin/account-requests".
+ * boundary matters: "/app/admin/account" must not claim "/app/admin/account-audit".
  */
 function isUnder(pathname: string, path: string): boolean {
   const url = trim(pathname);

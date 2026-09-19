@@ -52,7 +52,6 @@ const reportsNav: NavItem = { label: "Reports", to: "/app/reports" };
 
 // Accounts is not here: it belongs to the Super Admin, below.
 const systemAdminPages: NavItem[] = [
-  { label: "Account Requests", to: "/app/admin/account-requests" },
   { label: "Password Resets", to: "/app/admin/password-resets" },
   { label: "Account audit", to: "/app/admin/account-audit" },
   { label: "Employees", to: "/app/admin/employees" },

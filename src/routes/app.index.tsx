@@ -28,11 +28,6 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
       body: "Invite operators, coordinators and System Admins.",
     },
     {
-      to: "/app/admin/account-requests",
-      title: "Account requests",
-      body: "Approve employee access.",
-    },
-    {
       to: "/app/admin/accounts",
       title: "Accounts",
       body: "Suspend, reactivate and reset accounts.",
@@ -40,7 +35,7 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
     {
       to: "/app/admin/employees",
       title: "System Admin",
-      body: "Employees, delivery points and account requests.",
+      body: "Employees, delivery points and the audit log.",
     },
     {
       to: "/app/operator",
@@ -55,11 +50,6 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
     { to: "/app/reports", title: "Reports", body: "Production, sales and collections trends." },
   ],
   "System Admin": [
-    {
-      to: "/app/admin/account-requests",
-      title: "Account requests",
-      body: "Approve who gets access.",
-    },
     { to: "/app/admin/accounts", title: "Accounts", body: "Suspend, reactivate and change roles." },
     { to: "/app/admin/employees", title: "Employees", body: "Manage the employee directory." },
     {

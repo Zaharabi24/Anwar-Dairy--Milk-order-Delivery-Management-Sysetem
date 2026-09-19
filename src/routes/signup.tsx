@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { AuthHeading, AuthShell, FieldError } from "@/components/auth/AuthShell";
@@ -14,36 +14,49 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BUSINESS_UNITS, DOB_HELPER, EMAIL_PLACEHOLDER, OFFICES } from "@/lib/auth-constants";
+import {
+  BUSINESS_UNITS,
+  DOB_HELPER,
+  EMAIL_PLACEHOLDER,
+  OFFICES,
+  ROLE_HOME,
+} from "@/lib/auth-constants";
 import { guardSignInPage, signInSearch, type SignInSearch } from "@/lib/portal-guard";
 import { validateCompanyEmail, validateDob, validateEmployeeId } from "@/lib/auth-validation";
 import { authService } from "@/services/auth-service";
+import { PasswordField } from "@/components/auth/PasswordField";
 
 export const Route = createFileRoute("/signup")({
   validateSearch: (search: Record<string, unknown>): SignInSearch => signInSearch(search),
   beforeLoad: ({ context, search }) => guardSignInPage(context.auth, "employee", search),
   head: () => ({
     meta: [
-      { title: "Request an account — Anwar Organic" },
+      { title: "Create an account — Anwar Organic" },
       {
         name: "description",
-        content: "Request access to Anwar Organic. An administrator reviews every request.",
+        content:
+          "Create your Anwar Organic account with your company email and start booking milk.",
       },
     ],
   }),
-  component: RequestAccountPage,
+  component: CreateAccountPage,
 });
 
-// Sign Up is for employees only. Staff accounts are created by invitation from a Super Admin.
+// Sign Up is for employees only, and creates the account outright. Every other role is created
+// by invitation from a Super Admin.
 type Field =
   | "business_unit_code"
   | "full_name"
   | "company_mail"
   | "employee_id"
   | "date_of_birth"
-  | "office_code";
+  | "office_code"
+  | "password"
+  | "confirm_password";
 
-function RequestAccountPage() {
+function CreateAccountPage() {
+  const navigate = useNavigate();
+  const router = useRouter();
   const [form, setForm] = useState({
     business_unit_code: "",
     full_name: "",
@@ -51,11 +64,12 @@ function RequestAccountPage() {
     employee_id: "",
     date_of_birth: "",
     office_code: OFFICES.length === 1 ? OFFICES[0]!.code : "",
+    password: "",
+    confirm_password: "",
   });
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState<{ reference: string; email: string } | null>(null);
 
   const validate = (field: Field, value: string): string | undefined => {
     switch (field) {
@@ -71,6 +85,12 @@ function RequestAccountPage() {
         return validateEmployeeId(value) ?? undefined;
       case "date_of_birth":
         return validateDob(value) ?? undefined;
+      case "password":
+        if (!value) return "Password is required.";
+        return value.length < 8 ? "Min 8 characters" : undefined;
+      case "confirm_password":
+        if (!value) return "Confirm your password.";
+        return value === form.password ? undefined : "Both passwords must match.";
     }
   };
 
@@ -96,41 +116,17 @@ function RequestAccountPage() {
     if (Object.keys(next).length) return;
 
     setSubmitting(true);
-    const result = await authService.submitAccountRequest({ ...form, requested_role: "employee" });
+    const result = await authService.createAccount(form);
     setSubmitting(false);
     if (result.ok && result.data) {
-      setDone({ reference: result.data.reference, email: form.company_mail.trim() });
+      // The account exists and the server has already set the session cookie, so the session is
+      // reloaded and they land where they can book -- the same path sign-in takes.
+      await router.invalidate();
+      await navigate({ to: ROLE_HOME[result.data.profile.activeRole] });
       return;
     }
     if (result.errors) setErrors(result.errors as Partial<Record<Field, string>>);
-    setMessage(result.message ?? "We couldn't submit your request.");
-  }
-
-  if (done) {
-    return (
-      <AuthShell width="wide">
-        <div className="text-center">
-          <CheckCircle2 className="mx-auto size-12 text-primary" />
-          <h1 className="mt-4 font-display text-2xl font-bold">Request submitted</h1>
-          <div className="mx-auto mt-5 inline-block rounded-lg border border-border px-6 py-3 font-mono text-2xl font-semibold tracking-wide">
-            {done.reference}
-          </div>
-        </div>
-        <ol className="mx-auto mt-6 max-w-md list-decimal space-y-2 pl-5 text-sm">
-          <li>An administrator will review your request.</li>
-          <li>Once approved, you will receive an email at {done.email}.</li>
-          <li>That email contains a link to set your password.</li>
-        </ol>
-        <p className="mt-5 text-center text-sm text-muted-foreground">
-          Most requests are reviewed within one working day.
-        </p>
-        <p className="mt-6 text-center text-sm">
-          <Link to="/login" className="font-medium text-primary hover:underline">
-            Back to Sign In
-          </Link>
-        </p>
-      </AuthShell>
-    );
+    setMessage(result.message ?? "We couldn't create your account.");
   }
 
   const selectClass = (field: Field) => (errors[field] ? "border-destructive" : "");
@@ -138,8 +134,8 @@ function RequestAccountPage() {
   return (
     <AuthShell width="wide">
       <AuthHeading
-        title="Request an account"
-        description="Your account request will be reviewed and approved by an administrator before you can sign in."
+        title="Create an account"
+        description="Fill this in with your company details and your account is ready to use."
       />
 
       <p className="-mt-3 mb-5 rounded-lg border border-border bg-secondary/50 px-4 py-3 text-sm text-muted-foreground">
@@ -248,9 +244,29 @@ function RequestAccountPage() {
           <FieldError message={errors.office_code} />
         </div>
 
+        <PasswordField
+          id="password"
+          label="Password"
+          value={form.password}
+          onChange={(v) => setField("password", v, true)}
+          error={errors.password}
+          autoComplete="new-password"
+          showStrength
+          required
+        />
+        <PasswordField
+          id="confirm-password"
+          label="Confirm Password"
+          value={form.confirm_password}
+          onChange={(v) => setField("confirm_password", v, true)}
+          error={errors.confirm_password}
+          autoComplete="new-password"
+          required
+        />
+
         <Button type="submit" className="w-full" size="lg" disabled={submitting || emailBlocked}>
           {submitting ? <Loader2 className="size-4 animate-spin" /> : null}
-          Submit Request
+          Create Account
         </Button>
 
         <p className="text-center text-sm">

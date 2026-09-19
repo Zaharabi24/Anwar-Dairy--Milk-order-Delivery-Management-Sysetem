@@ -32,7 +32,6 @@ import { Route as AppSecurityRouteImport } from './routes/app.security'
 import { Route as StaffAdminRouteImport } from './routes/staff.admin'
 import { Route as StaffForgotPasswordRouteImport } from './routes/staff.forgot-password'
 import { Route as AppAdminAccountAuditRouteImport } from './routes/app.admin.account-audit'
-import { Route as AppAdminAccountRequestsRouteImport } from './routes/app.admin.account-requests'
 import { Route as AppAdminAccountsRouteImport } from './routes/app.admin.accounts'
 import { Route as AppAdminAuditLogRouteImport } from './routes/app.admin.audit-log'
 import { Route as AppAdminDeliveryPointsRouteImport } from './routes/app.admin.delivery-points'
@@ -161,11 +160,6 @@ const AppAdminAccountAuditRoute = AppAdminAccountAuditRouteImport.update({
   path: '/admin/account-audit',
   getParentRoute: () => AppRoute,
 } as any)
-const AppAdminAccountRequestsRoute = AppAdminAccountRequestsRouteImport.update({
-  id: '/admin/account-requests',
-  path: '/admin/account-requests',
-  getParentRoute: () => AppRoute,
-} as any)
 const AppAdminAccountsRoute = AppAdminAccountsRouteImport.update({
   id: '/admin/accounts',
   path: '/admin/accounts',
@@ -252,7 +246,6 @@ export interface FileRoutesByFullPath {
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
   '/app/': typeof AppIndexRoute
   '/app/admin/account-audit': typeof AppAdminAccountAuditRoute
-  '/app/admin/account-requests': typeof AppAdminAccountRequestsRoute
   '/app/admin/accounts': typeof AppAdminAccountsRoute
   '/app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
@@ -289,7 +282,6 @@ export interface FileRoutesByTo {
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
   '/app': typeof AppIndexRoute
   '/app/admin/account-audit': typeof AppAdminAccountAuditRoute
-  '/app/admin/account-requests': typeof AppAdminAccountRequestsRoute
   '/app/admin/accounts': typeof AppAdminAccountsRoute
   '/app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
@@ -328,7 +320,6 @@ export interface FileRoutesById {
   '/staff/forgot-password': typeof StaffForgotPasswordRoute
   '/app/': typeof AppIndexRoute
   '/app/admin/account-audit': typeof AppAdminAccountAuditRoute
-  '/app/admin/account-requests': typeof AppAdminAccountRequestsRoute
   '/app/admin/accounts': typeof AppAdminAccountsRoute
   '/app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
@@ -368,7 +359,6 @@ export interface FileRouteTypes {
     | '/staff/forgot-password'
     | '/app/'
     | '/app/admin/account-audit'
-    | '/app/admin/account-requests'
     | '/app/admin/accounts'
     | '/app/admin/audit-log'
     | '/app/admin/delivery-points'
@@ -405,7 +395,6 @@ export interface FileRouteTypes {
     | '/staff/forgot-password'
     | '/app'
     | '/app/admin/account-audit'
-    | '/app/admin/account-requests'
     | '/app/admin/accounts'
     | '/app/admin/audit-log'
     | '/app/admin/delivery-points'
@@ -443,7 +432,6 @@ export interface FileRouteTypes {
     | '/staff/forgot-password'
     | '/app/'
     | '/app/admin/account-audit'
-    | '/app/admin/account-requests'
     | '/app/admin/accounts'
     | '/app/admin/audit-log'
     | '/app/admin/delivery-points'
@@ -635,13 +623,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminAccountAuditRouteImport
       parentRoute: typeof AppRoute
     }
-    '/app/admin/account-requests': {
-      id: '/app/admin/account-requests'
-      path: '/admin/account-requests'
-      fullPath: '/app/admin/account-requests'
-      preLoaderRoute: typeof AppAdminAccountRequestsRouteImport
-      parentRoute: typeof AppRoute
-    }
     '/app/admin/accounts': {
       id: '/app/admin/accounts'
       path: '/admin/accounts'
@@ -742,7 +723,6 @@ interface AppRouteChildren {
   AppSecurityRoute: typeof AppSecurityRoute
   AppIndexRoute: typeof AppIndexRoute
   AppAdminAccountAuditRoute: typeof AppAdminAccountAuditRoute
-  AppAdminAccountRequestsRoute: typeof AppAdminAccountRequestsRoute
   AppAdminAccountsRoute: typeof AppAdminAccountsRoute
   AppAdminAuditLogRoute: typeof AppAdminAuditLogRoute
   AppAdminDeliveryPointsRoute: typeof AppAdminDeliveryPointsRoute
@@ -770,7 +750,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppSecurityRoute: AppSecurityRoute,
   AppIndexRoute: AppIndexRoute,
   AppAdminAccountAuditRoute: AppAdminAccountAuditRoute,
-  AppAdminAccountRequestsRoute: AppAdminAccountRequestsRoute,
   AppAdminAccountsRoute: AppAdminAccountsRoute,
   AppAdminAuditLogRoute: AppAdminAuditLogRoute,
   AppAdminDeliveryPointsRoute: AppAdminDeliveryPointsRoute,

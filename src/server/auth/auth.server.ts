@@ -37,7 +37,6 @@ import {
 } from "@/lib/auth-constants";
 import type {
   AccountAuditData,
-  AccountRequestRow,
   AccountRow,
   DeletedAccountRow,
   AuthAuditRow,
@@ -52,9 +51,8 @@ import { validateDob, validateEmployeeId } from "@/lib/auth-validation";
 import type {
   AccountActionInput,
   AccountAuditFilter,
-  AccountRequestInput,
+  CreateAccountInput,
   ForgotPasswordInput,
-  ReviewRequestInput,
   SetPasswordInput,
   SignInInput,
   StaffForgotPasswordInput,
@@ -334,11 +332,22 @@ export async function switchRole(role: RoleValue): Promise<AuthResult<AuthUser>>
 }
 
 // ---------------------------------------------------------------------------
-// Account request (Sign Up) — employees only
+// Create account (Sign Up) — employees only
 
-export async function submitAccountRequest(
-  b: AccountRequestInput,
-): Promise<AuthResult<{ reference: string }>> {
+/** New accounts an address may create in an hour, so the form can't be used to make hundreds. */
+const MAX_ACCOUNTS_PER_HOUR = 3;
+
+/**
+ * Creates an employee account from the sign-up form and signs the person in.
+ *
+ * There is no approval step: the form is the account. What still stands between it and a stranger
+ * is the company mail domain, the Employee ID format, and the checks below that the identity
+ * isn't already taken -- the same checks an approver used to rely on, applied at the moment of
+ * creation rather than afterwards.
+ */
+export async function createAccount(
+  b: CreateAccountInput,
+): Promise<AuthResult<{ profile: AuthUser }>> {
   const sql = await getDb();
   const ip = clientIp();
   const email = b.company_mail.trim().toLowerCase();
@@ -355,68 +364,89 @@ export async function submitAccountRequest(
   if (!BUSINESS_UNITS.some((u) => u.code === b.business_unit_code))
     errors["business_unit_code"] = "Select your business unit.";
   if (!OFFICES.some((o) => o.code === b.office_code)) errors["office_code"] = "Select your office.";
+  if (!b.password) errors["password"] = "Password is required.";
+  else if (b.password.length < 8) errors["password"] = "Min 8 characters";
+  else if (b.password.length > 200) errors["password"] = "That password is too long.";
+  if (!b.confirm_password) errors["confirm_password"] = "Confirm your password.";
+  else if (b.password !== b.confirm_password)
+    errors["confirm_password"] = "Both passwords must match.";
   if (Object.keys(errors).length) return fail("Please fix the highlighted fields.", errors);
 
+  // Same shape of limit the request form had, counted from the audit trail now that there is no
+  // request row to count.
   const [{ recent }] = (await sql<Row[]>`
-    select count(*)::int as recent from account_requests
-    where submitted_ip = ${ip} and submitted_at > now() - interval '1 hour'`) as unknown as [
-    { recent: number },
-  ];
-  if (ip && recent >= 3) return fail("Too many requests. Try again later.");
+    select count(*)::int as recent from auth_audit
+    where event = 'account_created' and ip = ${ip}
+      and created_at > now() - interval '1 hour'`) as unknown as [{ recent: number }];
+  if (ip && recent >= MAX_ACCOUNTS_PER_HOUR)
+    return fail("Too many accounts created from here. Try again later.");
 
-  const [existing] = await sql<Row[]>`
-    select id, account_status from employees
-    where lower(id) = lower(${empId}) or lower(company_email) = ${email}`;
-  if (existing && (await activeRoles(sql, existing.id)).some(isStaffRole)) {
-    return fail("You already have an account. Use the Sign In page, or Forgot Password.");
-  }
-  if (existing?.account_status) {
-    return fail("An account already exists for this Employee ID or email. Use Forgot Password.");
-  }
-  if (existing && existing.id.toLowerCase() !== empId.toLowerCase()) {
-    return fail("This company email belongs to a different Employee ID. Contact HR.");
-  }
+  // Hashing is deliberately slow, so it happens before the transaction opens.
+  const passwordHash = await hashPassword(b.password);
 
-  await sql`update account_requests set status = 'expired' where status = 'pending' and expires_at < now()`;
-  const [pending] = await sql<Row[]>`
-    select reference from account_requests
-    where status = 'pending' and (lower(employee_id) = lower(${empId}) or lower(company_mail) = ${email})`;
-  if (pending)
-    return fail(`A request for these details is already under review (${pending.reference}).`);
+  return sql.begin(async (tx): Promise<AuthResult<{ profile: AuthUser }>> => {
+    const [taken] = await tx<Row[]>`
+      select id, account_status from employees
+      where lower(id) = lower(${empId}) or lower(company_email) = ${email}
+      for update`;
+    if (taken && (await activeRoles(tx, taken.id)).some(isStaffRole)) {
+      return fail("You already have an account. Use the Sign In page, or Forgot Password.");
+    }
+    if (taken?.account_status) {
+      return fail("An account already exists for this Employee ID or email. Use Forgot Password.");
+    }
+    if (taken && taken.id.toLowerCase() !== empId.toLowerCase()) {
+      return fail("This company email belongs to a different Employee ID. Contact HR.");
+    }
 
-  const [row] = await sql<Row[]>`
-    insert into account_requests (reference, requested_role, business_unit_code, office_code, full_name,
-                                  company_mail, employee_id, date_of_birth, submitted_ip)
-    values ('REQ-' || to_char(now(), 'YYYY') || '-' || lpad(nextval('account_request_seq')::text, 4, '0'),
-            'employee', ${b.business_unit_code}, ${b.office_code}, ${b.full_name.trim()},
-            ${email}, ${empId}, ${b.date_of_birth}, ${ip})
-    returning reference`;
-  await audit(sql, {
-    event: "request_submitted",
-    detail: { reference: row.reference, employee_id: empId, email },
-  });
+    // Reuse the roster entry when HR already has this employee, the way approving a request did:
+    // it keeps their Employee ID and any past orders attached to them.
+    if (taken) {
+      await tx`
+        update employees set name = ${b.full_name.trim()}, company_email = ${email},
+          date_of_birth = ${b.date_of_birth}, business_unit_code = ${b.business_unit_code},
+          office_code = ${b.office_code}, account_status = 'active', active = true,
+          password_hash = ${passwordHash}, activated_at = coalesce(activated_at, now()),
+          deleted_at = null, deleted_by = null, former_company_email = null, deactivated_at = null,
+          updated_at = now()
+        where id = ${taken.id}`;
+    } else {
+      await tx`
+        insert into employees (id, name, company_email, phone, department, site, active,
+                               date_of_birth, business_unit_code, office_code, account_status,
+                               password_hash, activated_at)
+        values (${empId}, ${b.full_name.trim()}, ${email}, '', 'Admin', 'Head Office – Gulshan',
+                true, ${b.date_of_birth}, ${b.business_unit_code}, ${b.office_code}, 'active',
+                ${passwordHash}, now())`;
+    }
+    const employeeId = taken?.id ?? empId;
 
-  // Anyone who can approve employee accounts is told about it.
-  const approvers = await sql<Row[]>`
-    select distinct e.company_email from employees e
-    join user_roles r on r.employee_id = e.id and r.revoked_at is null
-                     and r.role in ('system_admin', 'super_admin')
-    where e.account_status = 'active'`;
-  for (const approver of approvers) {
-    await sendMail({
-      to: approver.company_email,
-      subject: `New account request · ${row.reference}`,
-      template: "admin_new_request",
-      html: layout(
-        "A new account request is waiting",
-        `<p><strong>${escapeHtml(b.full_name)}</strong> (${escapeHtml(empId)}) has requested an
-         employee account.</p>
-         <p>Reference ${escapeHtml(row.reference)}. Review it in Account Requests.</p>
-         ${button(`${appUrl()}/app/admin/account-requests`, "Open account requests")}`,
-      ),
+    // The form only ever creates an employee; every other role comes from an invitation.
+    await tx`insert into user_roles (employee_id, role) values (${employeeId}, 'employee')
+             on conflict do nothing`;
+    await audit(tx, {
+      subject: employeeId,
+      event: "account_created",
+      detail: { employee_id: employeeId, email, business_unit: b.business_unit_code },
     });
-  }
-  return { ok: true, data: { reference: row.reference } };
+    await tx`update employees set last_login_at = now() where id = ${employeeId}`;
+    await startSession(tx, employeeId, "employee", "employee");
+    // The profile is built from what was just written rather than read back through the session:
+    // the cookie is only being set on this response, so there is no session on the request yet.
+    return {
+      ok: true,
+      data: {
+        profile: {
+          employeeId,
+          fullName: b.full_name.trim(),
+          companyMail: email,
+          roles: ["employee"],
+          activeRole: "employee",
+          portal: "employee",
+        },
+      },
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -678,187 +708,6 @@ export async function setPassword(
     });
   }
   return { ok: true, data: { profile, purpose: tk.purpose } };
-}
-
-// ---------------------------------------------------------------------------
-// Admin: employee account requests
-
-export async function listAccountRequests(): Promise<AuthResult<AccountRequestRow[]>> {
-  await requirePermission("employee_accounts.manage");
-  const sql = await getDb();
-  await sql`update account_requests set status = 'expired' where status = 'pending' and expires_at < now()`;
-  const rows = await sql<Row[]>`
-    select r.*, bu.name as business_unit_name, o.name as office_name,
-           exists (select 1 from employees e
-                   where (lower(e.id) = lower(r.employee_id) or lower(e.company_email) = lower(r.company_mail))
-                     and e.account_status is not null) as existing_account,
-           -- Matched on the Employee ID alone: a deleted account's email has been moved aside.
-           exists (select 1 from employees e
-                   where lower(e.id) = lower(r.employee_id) and e.deleted_at is not null)
-             as account_deleted
-    from account_requests r
-    join business_units bu on bu.code = r.business_unit_code
-    join offices o on o.code = r.office_code
-    order by r.submitted_at desc
-    limit 1000`;
-  return {
-    ok: true,
-    data: rows.map((r) => ({
-      id: r.id,
-      reference: r.reference,
-      submittedAt: iso(r.submitted_at)!,
-      fullName: r.full_name,
-      employeeId: r.employee_id,
-      companyMail: r.company_mail,
-      businessUnitCode: r.business_unit_code,
-      businessUnitName: r.business_unit_name,
-      officeName: r.office_name,
-      requestedRole: r.requested_role,
-      grantedRole: r.granted_role,
-      status: r.status,
-      reviewedBy: r.reviewed_by,
-      reviewedAt: iso(r.reviewed_at),
-      decisionNote: r.decision_note,
-      submittedIp: r.submitted_ip,
-      hasDateOfBirth: r.date_of_birth != null,
-      existingAccount: r.existing_account,
-      accountDeleted: r.account_deleted,
-    })),
-  };
-}
-
-export async function reviewAccountRequest(
-  input: ReviewRequestInput,
-): Promise<AuthResult<ReviewOutcome>> {
-  const actor = await requirePermission("employee_accounts.manage");
-  const sql = await getDb();
-
-  type Outcome = AuthResult<ReviewOutcome> & { mail?: MailMessage };
-  const outcome = await sql.begin(async (tx): Promise<Outcome> => {
-    const [rq] = await tx<Row[]>`
-      select r.*, to_char(r.date_of_birth, 'YYYY-MM-DD') as dob, bu.name as business_unit_name
-      from account_requests r join business_units bu on bu.code = r.business_unit_code
-      where r.id = ${input.request_id} for update of r`;
-    if (!rq) return fail("Request not found.");
-    if (rq.status !== "pending") return fail("This request has already been decided.");
-    if (
-      rq.company_mail.toLowerCase() === actor.companyMail.toLowerCase() ||
-      rq.employee_id.toLowerCase() === actor.employeeId.toLowerCase()
-    ) {
-      return fail("You cannot decide on your own request.");
-    }
-
-    if (input.decision === "reject") {
-      const note = input.note?.trim() ?? "";
-      if (note.length < 3)
-        return fail("A reason is required to reject.", { note: "A reason is required to reject." });
-      await tx`
-        update account_requests set status = 'rejected', reviewed_by = ${actor.employeeId},
-          reviewed_at = now(), decision_note = ${note}
-        where id = ${rq.id}`;
-      await audit(tx, {
-        actor: actor.employeeId,
-        event: "request_rejected",
-        detail: { reference: rq.reference, note },
-      });
-      return {
-        ok: true,
-        data: { decision: "rejected" },
-        mail: {
-          to: rq.company_mail,
-          subject: "Your Anwar Organic account request",
-          template: "request_rejected",
-          html: layout(
-            "Your account request was not approved",
-            `<p>Hello ${escapeHtml(rq.full_name)},</p>
-             <p>Request <strong>${escapeHtml(rq.reference)}</strong> was not approved.</p>
-             <p style="background:#F8FAFC;border-left:3px solid #CBD5E1;padding:12px 16px;">${escapeHtml(note)}</p>
-             <p>If you believe this is an error, contact HR.</p>`,
-          ),
-        },
-      };
-    }
-
-    // Account requests only ever grant the employee role; staff roles come from invitations.
-    const grantedRole: RoleValue = "employee";
-    const [taken] = await tx<Row[]>`
-      select id, account_status from employees
-      where lower(id) = lower(${rq.employee_id}) or lower(company_email) = lower(${rq.company_mail})`;
-    if (taken?.account_status)
-      return fail("An account already exists for this Employee ID or email.");
-    if (taken && taken.id.toLowerCase() !== rq.employee_id.toLowerCase()) {
-      return fail(`${rq.company_mail} is already used by employee ${taken.id}.`);
-    }
-
-    // Reuse the roster entry when HR already has this employee; otherwise create one.
-    if (taken) {
-      await tx`
-        update employees set name = ${rq.full_name}, company_email = ${rq.company_mail},
-          date_of_birth = ${rq.dob}, business_unit_code = ${rq.business_unit_code},
-          office_code = ${rq.office_code}, account_status = 'awaiting_password', active = true,
-          -- Reusing the row of a deleted account: it is a live account again, and its past
-          -- orders come back with it.
-          deleted_at = null, deleted_by = null, former_company_email = null, deactivated_at = null,
-          updated_at = now()
-        where id = ${taken.id}`;
-    } else {
-      await tx`
-        insert into employees (id, name, company_email, phone, department, site, active, date_of_birth,
-                               business_unit_code, office_code, account_status)
-        values (${rq.employee_id}, ${rq.full_name}, ${rq.company_mail}, '',
-                ${input.department ?? "Admin"}, ${input.site ?? "Head Office – Gulshan"}, true, ${rq.dob},
-                ${rq.business_unit_code}, ${rq.office_code}, 'awaiting_password')`;
-    }
-    const employeeId = taken?.id ?? rq.employee_id;
-
-    await tx`insert into user_roles (employee_id, role, granted_by) values (${employeeId}, 'employee', ${actor.employeeId})
-             on conflict do nothing`;
-    await tx`
-      update account_requests set status = 'approved', granted_role = ${grantedRole},
-        reviewed_by = ${actor.employeeId}, reviewed_at = now(), decision_note = ${input.note?.trim() || null}
-      where id = ${rq.id}`;
-
-    const raw = await issueToken(tx, employeeId, "setup", "employee");
-    await audit(tx, {
-      actor: actor.employeeId,
-      subject: employeeId,
-      event: "request_approved",
-      detail: { reference: rq.reference, requested: rq.requested_role, granted: grantedRole },
-    });
-
-    return {
-      ok: true,
-      data: { decision: "approved" },
-      mail: setupEmail(
-        rq.company_mail,
-        rq.full_name,
-        `${appUrl()}/set-password?token=${raw}`,
-        `<p>Your account request <strong>${escapeHtml(rq.reference)}</strong> has been approved.</p>
-         <table style="font-size:15px;color:#334155;margin:16px 0;">
-           <tr><td style="padding:4px 24px 4px 0;color:#64748B;">Employee ID</td>
-               <td style="font-weight:600;">${escapeHtml(employeeId)}</td></tr>
-           <tr><td style="padding:4px 24px 4px 0;color:#64748B;">Role</td>
-               <td style="font-weight:600;">${escapeHtml(roleLabel(grantedRole))}</td></tr>
-           <tr><td style="padding:4px 24px 4px 0;color:#64748B;">Business Unit</td>
-               <td style="font-weight:600;">${escapeHtml(rq.business_unit_name)}</td></tr>
-         </table>`,
-      ),
-    };
-  });
-
-  const { mail, ...result } = outcome;
-  if (!mail || !result.ok || !result.data) return result;
-  // After commit, so a rollback never sends a live link.
-  const sent = await sendMailDetailed(mail);
-  return {
-    ...result,
-    data: {
-      ...result.data,
-      delivery: sent.delivery,
-      emailedTo: mail.to,
-      ...(sent.error ? { mailError: sent.error } : {}),
-    },
-  };
 }
 
 // ---------------------------------------------------------------------------
