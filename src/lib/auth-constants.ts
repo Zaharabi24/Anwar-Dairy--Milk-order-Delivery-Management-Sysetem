@@ -59,11 +59,24 @@ export const ALL_ROLES: { value: RoleValue; label: string }[] = [
 /** @deprecated Sign-in no longer picks a role; kept for existing filters. */
 export const SIGNIN_ROLES = ALL_ROLES.filter((r) => r.value !== "super_admin");
 
+/**
+ * The business units the account creation form offers, in the order they are shown.
+ *
+ * These codes are foreign keys: the same list lives in the business_units table, and a request is
+ * rejected if a code here isn't there. Migration 0006 is the other half -- change one and change
+ * the other, or the form will offer a unit the database won't accept.
+ */
 export const BUSINESS_UNITS = [
-  { code: "AOPL", label: "A1 Polymar" },
-  { code: "AIL", label: "Anwar Ispat" },
-  { code: "ACSL", label: "Anwar Cement Sheet" },
-  { code: "AGL", label: "Anwar Galvanizing Ltd Head Office" },
+  { code: "ACL", label: "Anwar Cement Limited" },
+  { code: "ACSL", label: "Anwar Cement Sheet Limited" },
+  { code: "AIL", label: "Anwar Ispat Limited" },
+  { code: "AGL", label: "Anwar Galvanizing Limited" },
+  { code: "AOPL", label: "A-One Polymer Limited" },
+  { code: "ATXL", label: "Anwar Textile" },
+  { code: "ALML", label: "Anwar Landmark" },
+  { code: "AJSML", label: "Anwar Jute Spinning Mills Limited" },
+  { code: "ATECH", label: "Anwar Technologies" },
+  { code: "AORG", label: "Anwar Organic" },
 ];
 
 export const OFFICES = [{ code: "AGI_HO", label: "AGI Head Office" }];
