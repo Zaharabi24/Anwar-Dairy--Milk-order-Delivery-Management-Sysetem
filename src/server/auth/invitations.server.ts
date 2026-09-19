@@ -204,15 +204,19 @@ export async function createInvitation(
 
       const [account] = await tx<Row[]>`
       select id, name, account_status from employees where lower(company_email) = ${email}`;
-      if (account?.account_status === "suspended" || account?.account_status === "deactivated") {
-        return fail(
-          `${account.name}'s account is ${account.account_status}. Reactivate it in Accounts first.`,
-          {
-            email: `This account is ${account.account_status}.`,
-          },
-        );
+      // A suspended account is a deliberate hold, so an invitation must not become a way around
+      // it. A deactivated one is someone who was removed from the team or from the system, and
+      // inviting them back is how they return: accepting reactivates the record they already
+      // have, which keeps their Employee ID and their order history attached to them.
+      if (account?.account_status === "suspended") {
+        return fail(`${account.name}'s account is suspended. Reactivate it in Accounts first.`, {
+          email: "This account is suspended.",
+        });
       }
-      if (account?.account_status) {
+      // Only a live account can genuinely already hold the role. A deactivated one can't sign in,
+      // so a role still on its record isn't a clash -- it is what the invitation brings back, and
+      // Deactivate leaves roles in place where Remove access revokes them.
+      if (account?.account_status && account.account_status !== "deactivated") {
         const roles = await activeRoles(tx, account.id);
         if (roles.includes(role)) {
           return fail(`${account.name} is already ${roleLabel(role)}.`, {
@@ -509,7 +513,9 @@ export async function acceptInvitation(
     const [account] = await tx<Row[]>`
       select id, name, account_status, password_hash from employees
       where lower(company_email) = ${inv.email} for update`;
-    if (account?.account_status === "suspended" || account?.account_status === "deactivated") {
+    // Matches createInvitation: a suspended account stays blocked, a deactivated one is being
+    // invited back and is reactivated below.
+    if (account?.account_status === "suspended") {
       return fail("The account for this email isn't active. Contact your Super Admin.");
     }
 
@@ -541,9 +547,18 @@ export async function acceptInvitation(
       if (account) {
         // On the roster (or approved but never activated): activate that same record.
         employeeId = account.id;
+        // Someone who was deactivated is coming back, so the record stops saying otherwise. The
+        // roster flag is restored the way the explicit Reactivate action restores it -- on only
+        // if they still hold the employee role -- and is left alone for every other status.
         await tx`
           update employees set name = ${name}, password_hash = ${newPasswordHash},
-            account_status = 'active', activated_at = coalesce(activated_at, now()), updated_at = now()
+            account_status = 'active', activated_at = coalesce(activated_at, now()),
+            active = case when account_status = 'deactivated'
+                          then exists (select 1 from user_roles r
+                                       where r.employee_id = employees.id
+                                         and r.role = 'employee' and r.revoked_at is null)
+                          else active end,
+            deactivated_at = null, updated_at = now()
           where id = ${account.id}`;
       } else {
         // The Employee ID may belong to an account that was deleted. That row is kept only so the
