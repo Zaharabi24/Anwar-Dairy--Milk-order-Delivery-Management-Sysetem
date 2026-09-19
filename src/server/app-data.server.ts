@@ -3,6 +3,8 @@
 // entry and notifications) and returns a fresh snapshot for the caller.
 import { getDb, type Tx } from "./db/client.server";
 import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
+import { issueBookingLinks, sendBookingLinks } from "./auth/booking-links.server";
+import type { MailMessage } from "./auth/mail.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/auth-constants";
@@ -348,7 +350,10 @@ async function lockOrder(tx: Tx, orderNo: string): Promise<Row> {
 
 export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
   const user = await requirePermission("batches.manage");
-  return mutate(user, async (tx) => {
+  // Filled inside the transaction, sent after it commits: the mail server must not be able to
+  // hold the publish open, or roll it back by failing.
+  let bookingMail: MailMessage[] = [];
+  const outcome = await mutate(user, async (tx) => {
     const [batch] = await tx<
       Row[]
     >`select status, rate_per_litre from batches where batch_no = ${batchNo} for update`;
@@ -383,8 +388,18 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
         title: "Fresh milk available today",
         body: `Batch ${batchNo} is live at ৳${Number(batch.rate_per_litre)}/L — book before the cut-off.`,
       });
+      bookingMail = await issueBookingLinks(tx, batchNo);
     }
   });
+
+  // Not awaited: publishing is done, and the operator shouldn't watch a progress bar while every
+  // employee's email goes out one at a time. Failures are logged, per address.
+  if (bookingMail.length) {
+    void sendBookingLinks(bookingMail).catch((error) =>
+      console.error("[mail] booking links failed", error),
+    );
+  }
+  return outcome;
 }
 
 export async function createBatch({ batch }: CreateBatchInput) {

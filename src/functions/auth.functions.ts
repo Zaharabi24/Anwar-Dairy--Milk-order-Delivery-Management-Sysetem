@@ -6,6 +6,7 @@ import * as schema from "@/lib/auth.schemas";
 const auth = () => import("@/server/auth/auth.server");
 const invitations = () => import("@/server/auth/invitations.server");
 const profile = () => import("@/server/auth/profile.server");
+const bookingLinks = () => import("@/server/auth/booking-links.server");
 
 export const getAuthStateFn = createServerFn({ method: "GET" }).handler(async () =>
   (await auth()).getAuthState(),
@@ -141,3 +142,8 @@ export const previewInvitationFn = createServerFn({ method: "POST" })
 export const acceptInvitationFn = createServerFn({ method: "POST" })
   .validator(schema.acceptInvitationInput)
   .handler(async ({ data }) => (await invitations()).acceptInvitation(data));
+
+// Booking link (no session needed; the token is the credential)
+export const openBookingLinkFn = createServerFn({ method: "POST" })
+  .validator(schema.tokenInput)
+  .handler(async ({ data }) => (await bookingLinks()).openBookingLink(data.token));
