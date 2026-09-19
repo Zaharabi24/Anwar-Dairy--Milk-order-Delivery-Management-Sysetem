@@ -60,10 +60,14 @@ export function PasswordField({
         <button
           type="button"
           onClick={() => setVisible(!visible)}
+          // The icon says what the field is doing, not what the click will do: an open eye while
+          // the password is on screen, an eye with a line through it while it is hidden. The
+          // label and aria-pressed carry the action and the state for a screen reader.
           aria-label={visible ? "Hide password" : "Show password"}
+          aria-pressed={visible}
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
         >
-          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
         </button>
       </div>
 
