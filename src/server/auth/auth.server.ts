@@ -1,4 +1,4 @@
-// Sign in (employee and staff portals), employee account requests, password setup/reset
+// Sign in (employee and staff portals), employee account creation, password setup/reset
 // and the admin account console. Staff invitations live in invitations.server.ts.
 // Expected failures return { ok: false, message | errors } — the UI shows them as-is.
 import { getDb, type Sql, type Tx } from "../db/client.server";
@@ -784,8 +784,7 @@ export async function listDeletedAccounts(): Promise<AuthResult<DeletedAccountRo
 export async function accountAction(input: AccountActionInput): Promise<AuthResult<ActionOutcome>> {
   // Three screens call this, and they don't all belong to the same person:
   //   change_role / remove_staff_access  -> Team & invitations, the Super Admin's own page
-  //   delete                             -> Accounts, and the approved rows of Account Requests,
-  //                                         which a System Admin still owns
+  //   delete                             -> Accounts, which a System Admin still owns
   //   everything else                    -> Accounts, which is now the Super Admin's
   const staffAction = input.action === "change_role" || input.action === "remove_staff_access";
   const actor = await requirePermission(

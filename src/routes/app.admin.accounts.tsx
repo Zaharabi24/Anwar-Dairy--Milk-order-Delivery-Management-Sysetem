@@ -61,8 +61,8 @@ function DeletedAccounts({ rows }: { rows: DeletedAccountRow[] }) {
     <section className="mt-10">
       <h2 className="font-display text-lg font-bold">Deleted accounts</h2>
       <p className="mt-1 text-sm text-muted-foreground">
-        Access has been removed and the company mail released, so these people can submit a new
-        account request with the same address. Their past orders are kept for reporting and billing.
+        Access has been removed and the company mail released, so these people can create a new
+        account with the same address. Their past orders are kept for reporting and billing.
       </p>
       <TableShell minWidth={900}>
         <thead className="border-b border-border text-left text-muted-foreground">
@@ -236,7 +236,10 @@ function AccountsPage() {
         </div>
       ) : rows.length === 0 ? (
         <div className="mt-4">
-          <EmptyState title="No accounts match" hint="Approved account requests appear here." />
+          <EmptyState
+            title="No accounts match"
+            hint="Accounts appear here once they are created."
+          />
         </div>
       ) : (
         <TableShell minWidth={1100}>
@@ -382,7 +385,7 @@ function AccountsPage() {
                 ? "They are signed out everywhere and can't sign in until reactivated."
                 : confirm?.action === "deactivate"
                   ? "They are signed out everywhere and removed from booking. Their pending orders will be cancelled."
-                  : `This cannot be undone. ${confirm?.account.fullName} loses access immediately and the account is removed from this list. Their past orders are kept for reporting and billing, and open orders are cancelled. ${confirm?.account.companyMail} is released, so they can submit a new account request with it.`}
+                  : `This cannot be undone. ${confirm?.account.fullName} loses access immediately and the account is removed from this list. Their past orders are kept for reporting and billing, and open orders are cancelled. ${confirm?.account.companyMail} is released, so they can create a new account with it.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

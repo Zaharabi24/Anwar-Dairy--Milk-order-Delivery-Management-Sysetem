@@ -113,7 +113,7 @@ function LoginPage() {
 
         <div className="flex items-center justify-between gap-4 pt-1 text-sm">
           <Link to="/signup" className="font-medium text-primary hover:underline">
-            Request for an Account
+            Create Account
           </Link>
           <Link to="/forgot-password" className="font-medium text-primary hover:underline">
             Forgot Password
