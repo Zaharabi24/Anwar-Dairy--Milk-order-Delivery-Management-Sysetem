@@ -8,12 +8,15 @@
 // MAIL_CAPTURE=true marks the SMTP server as a local test inbox (Mailpit): messages are
 // recorded as 'captured', never as 'sent', because they don't reach real mailboxes.
 // Every message is recorded in email_outbox with its delivery status.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Transporter } from "nodemailer";
 import { getDb } from "../db/client.server";
 import type { MailDelivery } from "@/lib/auth-types";
 
-// HTML email can't read CSS variables, so the brand colour lives here.
-const BRAND = "#3F6B52";
+// HTML email can't read CSS variables, so the brand colour lives here. This is the same green as
+// --primary in styles.css, so a button in an email matches a button in the app.
+const BRAND = "#336D4B";
 const BG = "#F1F5F9";
 const INK = "#0F172A";
 
@@ -99,6 +102,7 @@ async function getGraphToken(): Promise<string> {
 
 async function sendViaGraph(msg: MailMessage) {
   const token = await getGraphToken();
+  const graphLogo = msg.html.includes(`cid:${LOGO_CID}`) ? logoAttachment() : null;
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(env("MS_SENDER_MAILBOX") ?? "")}/sendMail`,
     {
@@ -109,6 +113,21 @@ async function sendViaGraph(msg: MailMessage) {
           subject: msg.subject,
           body: { contentType: "HTML", content: msg.html },
           toRecipients: [{ emailAddress: { address: msg.to } }],
+          // Graph takes the same inline image as base64 with the content id the html refers to.
+          ...(graphLogo
+            ? {
+                attachments: [
+                  {
+                    "@odata.type": "#microsoft.graph.fileAttachment",
+                    name: graphLogo.filename,
+                    contentType: "image/png",
+                    contentId: graphLogo.cid,
+                    isInline: true,
+                    contentBytes: graphLogo.content.toString("base64"),
+                  },
+                ],
+              }
+            : {}),
         },
         saveToSentItems: false,
       }),
@@ -298,11 +317,14 @@ async function sendViaSmtp(msg: MailMessage) {
   for (const candidate of candidates) {
     try {
       const transport = await smtpTransport(candidate);
+      const logo = msg.html.includes(`cid:${LOGO_CID}`) ? logoAttachment() : null;
       const info = await transport.sendMail({
         from: sender(),
         to: msg.to,
         subject: msg.subject,
         html: msg.html,
+        // Inline, so it shows in the header rather than as something to download.
+        ...(logo ? { attachments: [{ ...logo, contentDisposition: "inline" as const }] } : {}),
       });
       if (info.rejected?.length)
         throw new Error(`SMTP server rejected ${info.rejected.join(", ")}: ${info.response}`);
@@ -463,16 +485,61 @@ export async function sendMail(msg: MailMessage): Promise<MailDelivery> {
   return (await sendMailDetailed(msg)).delivery;
 }
 
+/** The id the logo is attached under, and the one the header <img> refers to. */
+const LOGO_CID = "anwar-organic-logo";
+
 /**
- * The Anwar Organic logo for the email header. Email clients fetch images over the internet,
- * so it's only included when APP_URL is a public address (not localhost).
+ * The logo file, read once and sent with the message itself.
+ *
+ * A linked image doesn't work here: mail clients block remote images by default, so the header
+ * came through empty. An image carried by the message displays without asking. The file ships in
+ * the build output, which is all the runtime image contains (see the Dockerfile), so both layouts
+ * are tried -- the source tree in development, the build output in production.
+ */
+const logoFile = (() => {
+  let cached: Buffer | null | undefined;
+  return (): Buffer | null => {
+    if (cached !== undefined) return cached;
+    const name = join("brand", "anwar-organic-logo.png");
+    for (const path of [
+      join(process.cwd(), "public", name),
+      join(process.cwd(), ".output", "public", name),
+    ]) {
+      try {
+        const file = readFileSync(path);
+        if (file.length) {
+          cached = file;
+          return cached;
+        }
+      } catch {
+        // Try the next layout.
+      }
+    }
+    console.warn("[mail] logo file not found; falling back to a linked image");
+    cached = null;
+    return cached;
+  };
+})();
+
+/** Set when the message carries the logo, so the transports know to attach it. */
+export const logoAttachment = () => {
+  const content = logoFile();
+  return content ? { cid: LOGO_CID, filename: "anwar-organic-logo.png", content } : null;
+};
+
+/**
+ * The Anwar Organic logo for the email header. It travels with the message; if the file can't be
+ * read, a linked image is used instead, which is better than no logo at all.
  */
 function emailLogo(): string {
+  const img = (src: string) =>
+    `<tr><td style="padding-bottom:16px;">
+      <img src="${src}" width="72" height="70" alt="Anwar Organic"
+        style="display:block;border:0;outline:none;text-decoration:none;width:72px;height:auto;" /></td></tr>`;
+  if (logoFile()) return img(`cid:${LOGO_CID}`);
   const base = env("APP_URL")?.replace(/\/+$/, "");
   if (!base || /\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(:|\/|$)/i.test(base)) return "";
-  return `<tr><td style="padding-bottom:16px;">
-      <img src="${escapeHtml(`${base}/brand/anwar-organic-logo.png`)}" width="72" height="70"
-        alt="Anwar Organic" style="display:block;border:0;width:72px;height:auto;" /></td></tr>`;
+  return img(escapeHtml(`${base}/brand/anwar-organic-logo.png`));
 }
 
 export function layout(heading: string, body: string) {
@@ -492,7 +559,24 @@ export function layout(heading: string, body: string) {
     </table></td></tr></table></body></html>`;
 }
 
-export const button = (href: string, label: string) =>
-  `<div style="margin:24px 0;"><a href="${escapeHtml(href)}" style="display:inline-block;
-   background:${BRAND};color:#fff;text-decoration:none;padding:12px 24px;
-   border-radius:8px;font-weight:600;font-size:15px;">${escapeHtml(label)}</a></div>`;
+/**
+ * A call to action.
+ *
+ * Built on a table rather than a styled link: mail clients restyle bare links -- which is how
+ * "Accept invitation" arrived as dark text on a green smudge instead of a button -- and Outlook
+ * ignores padding on an inline-block. The cell paints the green and holds the shape, and the
+ * white is stated on the link, on a span inside it, and again as !important, because each of
+ * those is overridden by a different client.
+ */
+export const button = (href: string, label: string) => {
+  const url = escapeHtml(href);
+  const text = escapeHtml(label);
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:28px 0;">
+    <tr><td align="center" bgcolor="${BRAND}" style="background:${BRAND};border-radius:8px;">
+      <a href="${url}" target="_blank" style="display:inline-block;padding:14px 32px;
+        font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:16px;
+        font-weight:600;line-height:20px;color:#FFFFFF !important;text-decoration:none;
+        border-radius:8px;"><span style="color:#FFFFFF;">${text}</span></a>
+    </td></tr>
+  </table>`;
+};
