@@ -57,7 +57,8 @@ const systemAdminPages: NavItem[] = [
   { label: "Account audit", to: "/app/admin/account-audit" },
   { label: "Employees", to: "/app/admin/employees" },
   { label: "Delivery points", to: "/app/admin/delivery-points" },
-  { label: "Settings", to: "/app/admin/settings" },
+  // Settings is deliberately not listed. The page and its route still work for anyone holding
+  // the link; it is only kept out of the menu.
   { label: "Audit log", to: "/app/admin/audit-log" },
 ];
 

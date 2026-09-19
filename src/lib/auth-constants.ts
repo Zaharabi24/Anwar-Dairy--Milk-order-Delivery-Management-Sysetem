@@ -85,7 +85,9 @@ export const ROLE_HOME: Record<RoleValue, string> = {
   employee: "/app/offer",
   factory_operator: "/app/operator",
   head_office_coordinator: "/app/fulfillment",
-  system_admin: "/app/admin/settings",
+  // Account requests, not Settings: Settings is no longer in the menu, and signing in onto a page
+  // the sidebar doesn't list leaves nothing highlighted and no way back to it.
+  system_admin: "/app/admin/account-requests",
   super_admin: "/app/admin/team",
 };
 

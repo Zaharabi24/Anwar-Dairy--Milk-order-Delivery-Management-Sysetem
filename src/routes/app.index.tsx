@@ -38,9 +38,9 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
       body: "Suspend, reactivate and reset accounts.",
     },
     {
-      to: "/app/admin/settings",
+      to: "/app/admin/employees",
       title: "System Admin",
-      body: "Settings, employees and delivery points.",
+      body: "Employees, delivery points and account requests.",
     },
     {
       to: "/app/operator",
@@ -67,7 +67,6 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
       title: "Delivery points",
       body: "Manage collection points.",
     },
-    { to: "/app/admin/settings", title: "Settings", body: "Defaults for new batches." },
     { to: "/app/admin/audit-log", title: "Audit log", body: "Every change, old and new value." },
   ],
 };
