@@ -456,7 +456,11 @@ export async function previewInvitation(token: string): Promise<AuthResult<Invit
   const [account] = await sql<Row[]>`
     select id, name, account_status, password_hash is not null as has_password
     from employees where lower(company_email) = ${inv.email}`;
-  if (account?.account_status === "suspended" || account?.account_status === "deactivated") {
+  // Same rule as createInvitation and acceptInvitation: a suspended account is a deliberate hold,
+  // a deactivated one is someone being invited back, and the form below reactivates them. This is
+  // the check the page runs on load, so leaving it out of that rule shut the door before the
+  // person could even see the form.
+  if (account?.account_status === "suspended") {
     return {
       ok: true,
       data: {
