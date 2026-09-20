@@ -83,8 +83,14 @@ const sessionCookie = () => ({
 });
 
 /** (Re)issues the session cookie with a full lifetime ahead of it. */
-function issueSessionCookie(token: string): void {
-  setCookie(COOKIE_NAME, token, { ...sessionCookie(), maxAge: SESSION_TTL_SECONDS });
+function issueSessionCookie(token: string, expiresAt?: Date | null): void {
+  // A booking-link session is given the life the link has left, so the cookie lapses with the
+  // booking. Floored at a minute: a zero or negative maxAge is a session cookie to some browsers
+  // and an immediate delete to others, neither of which is what "already closed" should look like.
+  const maxAge = expiresAt
+    ? Math.max(60, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+    : SESSION_TTL_SECONDS;
+  setCookie(COOKIE_NAME, token, { ...sessionCookie(), maxAge });
 }
 
 /** All roles the account holds, straight from the database. */
@@ -116,22 +122,36 @@ export async function revokeCurrentSession(db: Sql | Tx): Promise<void> {
     where token_hash = ${sha256(token)} and revoked_at is null`;
 }
 
-/** Starts a session for an active account and sets the cookie on the current response. */
+/** How a session was authorised: a password sign-in, or a link mailed when a batch was published. */
+export type SessionOrigin = "password" | "booking_link";
+
+/**
+ * Starts a session and sets the cookie on the current response.
+ *
+ * `expiresAt` is for booking-link sessions, which end when the booking does rather than after the
+ * usual idle window -- the link authorises one batch, so the session it opens can't outlive it.
+ */
 export async function startSession(
   db: Sql | Tx,
   employeeId: string,
   role: RoleValue,
   portal: Portal = "employee",
+  options: { origin?: SessionOrigin; expiresAt?: Date } = {},
 ): Promise<void> {
   // Every sign-in goes through here, so this is the one place that has to retire the old session.
   await revokeCurrentSession(db);
   const token = randomToken(32);
+  const origin = options.origin ?? "password";
+  const expiresAt = options.expiresAt ?? null;
   await db`
-    insert into sessions (token_hash, employee_id, active_role, portal, ip, user_agent, expires_at)
-    values (${sha256(token)}, ${employeeId}, ${role}, ${portal}, ${clientIp()},
+    insert into sessions (token_hash, employee_id, active_role, portal, origin, ip, user_agent,
+                          expires_at)
+    values (${sha256(token)}, ${employeeId}, ${role}, ${portal}, ${origin}, ${clientIp()},
             ${getRequestHeader("user-agent")?.slice(0, 300) ?? null},
-            now() + make_interval(days => ${SESSION_TTL_DAYS}))`;
-  issueSessionCookie(token);
+            coalesce(${expiresAt}::timestamptz, now() + make_interval(days => ${SESSION_TTL_DAYS})))`;
+  // The cookie is dropped at the same moment as the row, so the browser stops sending a token the
+  // server would only reject.
+  issueSessionCookie(token, expiresAt);
 }
 
 export function clearSessionCookie(): void {
@@ -150,20 +170,28 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       session_id: string;
       active_role: string;
       portal: Portal;
+      origin: SessionOrigin;
       employee_id: string;
       name: string;
       company_email: string;
       stale: boolean;
     }[]
   >`
-    select s.id as session_id, s.active_role, s.portal, e.id as employee_id, e.name, e.company_email,
+    select s.id as session_id, s.active_role, s.portal, s.origin, e.id as employee_id, e.name,
+           e.company_email,
            s.last_seen_at < now() - interval '5 minutes' as stale
     from sessions s
     join employees e on e.id = s.employee_id
     where s.token_hash = ${sha256(token)}
       and s.revoked_at is null
       and s.expires_at > now()
-      and e.account_status = 'active'`;
+      -- A booking-link session belongs to someone in the Employee Database who has no account at
+      -- all, so account_status can't be what admits them. What has to hold for them is that they
+      -- are still a live, active directory entry: switch someone off, or delete them, and the
+      -- link they were mailed stops working on their very next request.
+      and case when s.origin = 'booking_link'
+               then e.active and e.deleted_at is null
+               else e.account_status = 'active' end`;
   if (!row) {
     clearSessionCookie();
     return null;
@@ -180,18 +208,28 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   // A role revoked since sign-in stops working on the very next request.
   let activeRole =
     isRoleValue(row.active_role) && roles.includes(row.active_role) ? row.active_role : null;
+  const viaBookingLink = row.origin === "booking_link";
   if (!activeRole || row.stale) {
     activeRole ??= pickDefaultRole(roles);
     // Being used counts as staying signed in: the expiry moves forward and the cookie is reissued
     // with it. Without this a session dies a fixed number of days after sign-in however active the
     // person is, which is a sign-out in the middle of their work rather than one they'd expect.
     // Idle sessions still lapse, SESSION_TTL_DAYS after the last request.
-    await sql`
-      update sessions
-      set active_role = ${activeRole}, last_seen_at = now(),
-          expires_at = now() + make_interval(days => ${SESSION_TTL_DAYS})
-      where id = ${row.session_id}`;
-    issueSessionCookie(token);
+    // Use rolls a password session's expiry forward. A booking-link session's does not move: it
+    // was cut to the batch's booking cutoff, and the whole point is that it dies there however
+    // busy the person has been.
+    if (viaBookingLink) {
+      await sql`
+        update sessions set active_role = ${activeRole}, last_seen_at = now()
+        where id = ${row.session_id}`;
+    } else {
+      await sql`
+        update sessions
+        set active_role = ${activeRole}, last_seen_at = now(),
+            expires_at = now() + make_interval(days => ${SESSION_TTL_DAYS})
+        where id = ${row.session_id}`;
+      issueSessionCookie(token);
+    }
   }
 
   return {
@@ -202,6 +240,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     roles,
     activeRole,
     portal: row.portal,
+    viaBookingLink,
   };
 }
 

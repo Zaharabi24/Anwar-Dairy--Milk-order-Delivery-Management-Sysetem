@@ -3,8 +3,11 @@
 // entry and notifications) and returns a fresh snapshot for the caller.
 import { getDb, type Tx } from "./db/client.server";
 import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
-import { issueBookingLinks, sendBookingLinks } from "./auth/booking-links.server";
-import type { MailMessage } from "./auth/mail.server";
+import {
+  issueBookingLinks,
+  sendBookingLinks,
+  type PublishMailJob,
+} from "./auth/booking-links.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/auth-constants";
@@ -70,6 +73,7 @@ const toEmployee = (r: Row): Employee => ({
   companyEmail: r.company_email,
   phone: r.phone,
   department: r.department,
+  designation: r.designation ?? "",
   site: r.site,
   businessUnitCode: r.business_unit_code ?? null,
   active: r.active,
@@ -352,7 +356,7 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
   const user = await requirePermission("batches.manage");
   // Filled inside the transaction, sent after it commits: the mail server must not be able to
   // hold the publish open, or roll it back by failing.
-  let bookingMail: MailMessage[] = [];
+  let publishMail: PublishMailJob | null = null;
   const outcome = await mutate(user, async (tx) => {
     const [batch] = await tx<
       Row[]
@@ -388,14 +392,18 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
         title: "Fresh milk available today",
         body: `Batch ${batchNo} is live at ৳${Number(batch.rate_per_litre)}/L — book before the cut-off.`,
       });
-      bookingMail = await issueBookingLinks(tx, batchNo);
+      publishMail = await issueBookingLinks(tx, batchNo, {
+        name: user.fullName,
+        employeeId: user.employeeId,
+      });
     }
   });
 
   // Not awaited: publishing is done, and the operator shouldn't watch a progress bar while every
-  // employee's email goes out one at a time. Failures are logged, per address.
-  if (bookingMail.length) {
-    void sendBookingLinks(bookingMail).catch((error) =>
+  // employee's email goes out one at a time. Each address's outcome lands on its own batch_emails
+  // row, so Publish Records and Email Records fill in as the send proceeds.
+  if (publishMail) {
+    void sendBookingLinks(publishMail).catch((error) =>
       console.error("[mail] booking links failed", error),
     );
   }
@@ -813,23 +821,47 @@ export async function markNotificationsRead() {
 export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
   const user = await requirePermission("roster.manage");
   return mutate(user, async (tx): Promise<Employee> => {
-    const [taken] = await tx<Row[]>`
-      select id from employees
-      where lower(company_email) = lower(${employee.companyEmail}) and id <> ${employee.id}`;
-    if (taken) throw new AppError(`${employee.companyEmail} is already used by ${taken.id}.`);
+    // Two people in the directory genuinely share one address, so a repeat is not by itself an
+    // error. What can't be shared is an address someone signs in with: it is their identity at
+    // the door and where a password reset is sent.
+    if (employee.companyEmail) {
+      const [taken] = await tx<Row[]>`
+        select id from employees
+        where lower(company_email) = lower(${employee.companyEmail})
+          and id <> ${employee.id} and account_status is not null`;
+      if (taken) {
+        throw new AppError(`${employee.companyEmail} is the sign-in address for ${taken.id}.`);
+      }
+    }
 
     if (isNew) {
       await lock(tx, LOCK_EMPLOYEE_ID);
+      // Directory entries are keyed by the company's own employee ID, which is what the file
+      // supplies and what everyone already knows themselves by. An ID typed on the form is used
+      // as given; only when one isn't offered does the system fall back to minting an EMP- one.
+      const typed = employee.id.trim();
+      if (typed) {
+        const [clash] = await tx<Row[]>`select id from employees where lower(id) = lower(${typed})`;
+        if (clash) throw new AppError(`Employee ID ${typed} is already in the directory.`);
+      }
       const [{ next }] = (await tx<Row[]>`
         select coalesce(max(substring(id from '^EMP-([0-9]+)$')::int), 1000) + 1 as next
         from employees`) as unknown as [{ next: number }];
+      const newId = typed || `EMP-${next}`;
       const [row] = await tx<Row[]>`
-        insert into employees (id, name, company_email, phone, department, site,
+        insert into employees (id, name, company_email, phone, department, designation, site,
                                business_unit_code, active)
-        values (${`EMP-${next}`}, ${employee.name}, ${employee.companyEmail}, ${employee.phone},
-                ${employee.department}, ${employee.site}, ${employee.businessUnitCode || null},
-                ${employee.active})
+        values (${newId}, ${employee.name}, ${employee.companyEmail}, ${employee.phone},
+                ${employee.department}, ${employee.designation}, ${employee.site},
+                ${employee.businessUnitCode || null}, ${employee.active})
         returning *`;
+      // Being in the directory is what makes someone bookable: it is this role that lets the link
+      // mailed on publish open a booking session and place an order in their name. It grants no
+      // sign-in, which needs account_status (migration 0002).
+      await tx`
+        insert into user_roles (employee_id, role, granted_by)
+        values (${newId}, 'employee', ${user.fullName})
+        on conflict do nothing`;
       await audit(tx, {
         actor: user.fullName,
         action: "Added employee",
@@ -843,7 +875,8 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
     const [row] = await tx<Row[]>`
       update employees set
         name = ${employee.name}, company_email = ${employee.companyEmail}, phone = ${employee.phone},
-        department = ${employee.department}, site = ${employee.site},
+        department = ${employee.department}, designation = ${employee.designation},
+        site = ${employee.site},
         business_unit_code = ${employee.businessUnitCode || null}, active = ${employee.active},
         updated_at = now()
       where id = ${employee.id}

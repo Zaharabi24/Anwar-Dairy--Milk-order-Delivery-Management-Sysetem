@@ -23,56 +23,96 @@ import {
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
-import type { Department, Employee, Site } from "@/lib/types";
+import type { Employee } from "@/lib/types";
 
 export const Route = createFileRoute("/app/admin/employees")({
   head: () => ({
     meta: [
-      { title: "Employees — Anwar Organic" },
+      { title: "Employee Database — Anwar Organic" },
       {
         name: "description",
-        content: "Add, edit and deactivate employees across departments and sites.",
+        content:
+          "The company directory the daily batch email goes to. Add, edit, activate and deactivate employees.",
       },
-      { property: "og:title", content: "Employees — Anwar Organic" },
-      { property: "og:description", content: "Manage who can book milk from the daily batch." },
+      { property: "og:title", content: "Employee Database — Anwar Organic" },
+      {
+        property: "og:description",
+        content: "Manage who is told about the daily batch and who can book from it.",
+      },
     ],
   }),
-  component: EmployeesPage,
+  component: EmployeeDatabasePage,
 });
-
-const departments: Department[] = [
-  "Production",
-  "Finance",
-  "HR",
-  "Sales",
-  "IT",
-  "Admin",
-  "Procurement",
-];
-const sites: Site[] = ["Head Office – Gulshan", "Savar Factory"];
 
 const blank: Employee = {
   id: "",
   name: "",
   companyEmail: "",
   phone: "",
-  department: "Production",
-  site: "Savar Factory",
+  department: "",
+  designation: "",
+  site: "Head Office",
   businessUnitCode: null,
   active: true,
 };
 
-function EmployeesPage() {
+/** The values already in use, offered as suggestions so entry stays consistent without a fixed list. */
+function suggestions(values: string[]): string[] {
+  return [...new Set(values.map((v) => v.trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
+function EmployeeDatabasePage() {
   const { employees, businessUnits, saveEmployee, deleteEmployee, setEmployeeActive } =
     useAppData();
   const [query, setQuery] = useState("");
-
-  // Names come from the business_units table, so a unit renamed there is renamed here.
-  const unitName = (code: string | null) => businessUnits.find((u) => u.code === code)?.name ?? "—";
   const [unit, setUnit] = useState("all");
+  const [department, setDepartment] = useState("all");
+  const [location, setLocation] = useState("all");
+  const [status, setStatus] = useState("all");
   const [draft, setDraft] = useState<Employee | null>(null);
   const [isNew, setIsNew] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Employee | null>(null);
+
+  // Names come from the business_units table, so a unit renamed there is renamed here.
+  const unitName = (code: string | null) => businessUnits.find((u) => u.code === code)?.name ?? "—";
+
+  const departments = useMemo(() => suggestions(employees.map((e) => e.department)), [employees]);
+  const designations = useMemo(() => suggestions(employees.map((e) => e.designation)), [employees]);
+  const locations = useMemo(() => suggestions(employees.map((e) => e.site)), [employees]);
+
+  // An address on two records is not an error -- two people in the directory really do share one --
+  // but it means one of them won't be mailed, so the row says so rather than leaving it to be found.
+  const sharedAddresses = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const e of employees) {
+      const key = e.companyEmail.trim().toLowerCase();
+      if (key) seen.set(key, (seen.get(key) ?? 0) + 1);
+    }
+    return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k));
+  }, [employees]);
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return employees
+      .filter((e) => (unit === "all" ? true : (e.businessUnitCode ?? "") === unit))
+      .filter((e) => (department === "all" ? true : e.department === department))
+      .filter((e) => (location === "all" ? true : e.site === location))
+      .filter((e) => (status === "all" ? true : status === "active" ? e.active : !e.active))
+      .filter(
+        (e) =>
+          !q ||
+          e.name.toLowerCase().includes(q) ||
+          e.id.toLowerCase().includes(q) ||
+          e.companyEmail.toLowerCase().includes(q) ||
+          e.department.toLowerCase().includes(q) ||
+          e.designation.toLowerCase().includes(q) ||
+          e.phone.toLowerCase().includes(q),
+      );
+  }, [employees, query, unit, department, location, status]);
+
+  const mailable = employees.filter((e) => e.active && e.companyEmail.trim()).length;
 
   async function remove() {
     const emp = pendingDelete;
@@ -80,19 +120,6 @@ function EmployeesPage() {
     setPendingDelete(null);
     if (await deleteEmployee(emp.id)) toast.success(`${emp.name} deleted`);
   }
-
-  const rows = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return employees
-      .filter((e) => (unit === "all" ? true : (e.businessUnitCode ?? "") === unit))
-      .filter(
-        (e) =>
-          !q ||
-          e.name.toLowerCase().includes(q) ||
-          e.id.toLowerCase().includes(q) ||
-          e.companyEmail.toLowerCase().includes(q),
-      );
-  }, [employees, query, unit]);
 
   async function toggleActive(emp: Employee) {
     if (await setEmployeeActive(emp.id, !emp.active)) {
@@ -102,11 +129,14 @@ function EmployeesPage() {
 
   async function save() {
     if (!draft) return;
-    if (!draft.name.trim() || !draft.companyEmail.trim()) {
-      toast.error("Name and company email are required.");
+    if (!draft.name.trim()) {
+      toast.error("Name is required.");
       return;
     }
-    // The database assigns new employee IDs and records the audit entry.
+    if (isNew && !draft.id.trim()) {
+      toast.error("Employee ID is required.");
+      return;
+    }
     const saved = await saveEmployee(draft, isNew);
     if (!saved) return;
     toast.success(`${saved.name} ${isNew ? "added" : "updated"}`);
@@ -116,8 +146,8 @@ function EmployeesPage() {
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
-        title="Employees"
-        description="Everyone eligible to book from the daily batch."
+        title="Employee Database"
+        description="The company directory. Everyone active here is emailed when a batch is published, and can book from it."
         action={
           <Button
             onClick={() => {
@@ -130,19 +160,56 @@ function EmployeesPage() {
         }
       />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Total employees" value={employees.length} />
+      <div className="grid gap-4 sm:grid-cols-4">
+        <StatCard label="In the directory" value={employees.length} />
         <StatCard label="Active" value={employees.filter((e) => e.active).length} emphasis />
         <StatCard label="Inactive" value={employees.filter((e) => !e.active).length} />
+        <StatCard label="Reachable by email" value={mailable} />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Input
           className="max-w-xs"
-          placeholder="Search name, ID or email"
+          placeholder="Search name, ID, email, department"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <Select value={department} onValueChange={setDepartment}>
+          <SelectTrigger className="w-52">
+            <SelectValue placeholder="Department" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All departments</SelectItem>
+            {departments.map((d) => (
+              <SelectItem key={d} value={d}>
+                {d}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={location} onValueChange={setLocation}>
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Location" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All locations</SelectItem>
+            {locations.map((l) => (
+              <SelectItem key={l} value={l}>
+                {l}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={status} onValueChange={setStatus}>
+          <SelectTrigger className="w-36">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Any status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={unit} onValueChange={setUnit}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="Business unit" />
@@ -158,19 +225,24 @@ function EmployeesPage() {
         </Select>
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
+      <p className="mt-3 text-xs text-muted-foreground">
+        Showing {rows.length} of {employees.length}
+      </p>
+
+      <div className="mt-2 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (
           <div className="p-6">
             <EmptyState title="No employees match" hint="Try clearing the filters." />
           </div>
         ) : (
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[980px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
-                <Th>ID</Th>
+                <Th>Employee ID</Th>
                 <Th>Name</Th>
-                <Th>Business Unit</Th>
+                <Th>Department</Th>
                 <Th>Contact</Th>
+                <Th>Location</Th>
                 <Th>Active</Th>
                 <Th> </Th>
               </tr>
@@ -185,12 +257,34 @@ function EmployeesPage() {
                   className="border-b border-border/60 last:border-0"
                 >
                   <Td className="font-medium">{e.id}</Td>
-                  <Td>{e.name}</Td>
-                  <Td>{unitName(e.businessUnitCode)}</Td>
                   <Td>
-                    {e.companyEmail}
-                    <span className="block text-xs text-muted-foreground">{e.phone}</span>
+                    {e.name}
+                    <span className="block text-xs text-muted-foreground">
+                      {e.designation || "—"}
+                    </span>
                   </Td>
+                  <Td>
+                    {e.department || "—"}
+                    <span className="block text-xs text-muted-foreground">
+                      {unitName(e.businessUnitCode)}
+                    </span>
+                  </Td>
+                  <Td>
+                    {e.companyEmail ? (
+                      <>
+                        {e.companyEmail}
+                        {sharedAddresses.has(e.companyEmail.trim().toLowerCase()) ? (
+                          <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                            shared address
+                          </span>
+                        ) : null}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">No email on file</span>
+                    )}
+                    <span className="block text-xs text-muted-foreground">{e.phone || "—"}</span>
+                  </Td>
+                  <Td>{e.site || "—"}</Td>
                   <Td>
                     <Switch checked={e.active} onCheckedChange={() => toggleActive(e)} />
                   </Td>
@@ -223,19 +317,52 @@ function EmployeesPage() {
         )}
       </div>
 
+      {/* Suggestions for the free-text fields, shared by every row's form. */}
+      <datalist id="department-options">
+        {departments.map((d) => (
+          <option key={d} value={d} />
+        ))}
+      </datalist>
+      <datalist id="designation-options">
+        {designations.map((d) => (
+          <option key={d} value={d} />
+        ))}
+      </datalist>
+      <datalist id="location-options">
+        {locations.map((l) => (
+          <option key={l} value={l} />
+        ))}
+      </datalist>
+
       <Dialog open={!!draft} onOpenChange={(v) => !v && setDraft(null)}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{isNew ? "Add employee" : `Edit ${draft?.name}`}</DialogTitle>
           </DialogHeader>
           {draft ? (
             <div className="space-y-4">
-              <div>
-                <Label className="mb-2 block">Full name</Label>
-                <Input
-                  value={draft.name}
-                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-                />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label className="mb-2 block">Full name</Label>
+                  <Input
+                    value={draft.name}
+                    onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-2 block">Employee ID</Label>
+                  <Input
+                    value={draft.id}
+                    disabled={!isNew}
+                    placeholder="e.g. 019258"
+                    onChange={(e) => setDraft({ ...draft, id: e.target.value })}
+                  />
+                  {!isNew ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      The ID identifies this person everywhere and can't be changed here.
+                    </p>
+                  ) : null}
+                </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -244,9 +371,12 @@ function EmployeesPage() {
                     value={draft.companyEmail}
                     onChange={(e) => setDraft({ ...draft, companyEmail: e.target.value })}
                   />
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Where the batch email goes. Without one this person can't be mailed.
+                  </p>
                 </div>
                 <div>
-                  <Label className="mb-2 block">Phone</Label>
+                  <Label className="mb-2 block">Official phone number</Label>
                   <Input
                     value={draft.phone}
                     onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
@@ -254,6 +384,30 @@ function EmployeesPage() {
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label className="mb-2 block">Department</Label>
+                  <Input
+                    list="department-options"
+                    value={draft.department}
+                    onChange={(e) => setDraft({ ...draft, department: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-2 block">Designation</Label>
+                  <Input
+                    list="designation-options"
+                    value={draft.designation}
+                    onChange={(e) => setDraft({ ...draft, designation: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <Label className="mb-2 block">Location</Label>
+                  <Input
+                    list="location-options"
+                    value={draft.site}
+                    onChange={(e) => setDraft({ ...draft, site: e.target.value })}
+                  />
+                </div>
                 <div>
                   <Label className="mb-2 block">Business Unit</Label>
                   <Select
@@ -266,7 +420,7 @@ function EmployeesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      {/* Someone added straight to the roster may not belong to one yet. */}
+                      {/* Someone added straight to the directory may not belong to one yet. */}
                       <SelectItem value="none">Not set</SelectItem>
                       {businessUnits.map((u) => (
                         <SelectItem key={u.code} value={u.code}>
@@ -276,43 +430,18 @@ function EmployeesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-
+              </div>
+              <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
                 <div>
-                  <Label className="mb-2 block">Department</Label>
-                  <Select
-                    value={draft.department}
-                    onValueChange={(v) => setDraft({ ...draft, department: v as Department })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {departments.map((d) => (
-                        <SelectItem key={d} value={d}>
-                          {d}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Label className="block">Active</Label>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Inactive employees are never emailed when a batch is published.
+                  </p>
                 </div>
-                <div>
-                  <Label className="mb-2 block">Site</Label>
-                  <Select
-                    value={draft.site}
-                    onValueChange={(v) => setDraft({ ...draft, site: v as Site })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {sites.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
+                <Switch
+                  checked={draft.active}
+                  onCheckedChange={(v) => setDraft({ ...draft, active: v })}
+                />
               </div>
             </div>
           ) : null}
@@ -343,8 +472,9 @@ function EmployeesPage() {
             <DialogTitle>Delete {pendingDelete?.name}?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
-            This removes {pendingDelete?.name} ({pendingDelete?.id}) from the employee list. Past
-            orders and records stay in the system.
+            This removes {pendingDelete?.name} ({pendingDelete?.id}) from the Employee Database.
+            Past orders and records stay in the system. To stop the batch email reaching someone who
+            has left, deactivating them is usually the better move.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingDelete(null)}>

@@ -71,6 +71,7 @@ export const employees: Employee[] = seedNames.map(([name, department, site], i)
   name,
   // Demo roster entries predate the business unit, the same as a real pre-existing record.
   businessUnitCode: null,
+  designation: "",
   companyEmail: `${name.toLowerCase().replace(/\s+/g, ".")}@anwargroup.net`,
   phone: `+88017${(10000000 + i * 371937).toString().slice(0, 8)}`,
   department,

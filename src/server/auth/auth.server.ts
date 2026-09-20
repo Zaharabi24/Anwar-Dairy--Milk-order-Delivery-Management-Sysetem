@@ -94,6 +94,7 @@ export function toAuthUser(user: SessionUser): AuthUser {
     roles: user.roles,
     activeRole: user.activeRole,
     portal: user.portal,
+    viaBookingLink: user.viaBookingLink,
   };
 }
 
@@ -237,6 +238,7 @@ export async function signIn(input: SignInInput): Promise<AuthResult<{ profile: 
         roles,
         activeRole,
         portal,
+        viaBookingLink: false,
       },
     },
   };
@@ -301,6 +303,7 @@ export async function staffSignIn(
         roles,
         activeRole: role,
         portal: "staff",
+        viaBookingLink: false,
       },
     },
   };
@@ -443,6 +446,7 @@ export async function createAccount(
           roles: ["employee"],
           activeRole: "employee",
           portal: "employee",
+          viaBookingLink: false,
         },
       },
     };
@@ -688,6 +692,7 @@ export async function setPassword(
       roles,
       activeRole: role,
       portal,
+      viaBookingLink: false,
     };
   });
   if (!profile) return fail("This link is invalid or has expired.");

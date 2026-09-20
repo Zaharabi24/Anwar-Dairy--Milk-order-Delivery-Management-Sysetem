@@ -35,6 +35,7 @@ import { Route as AppAdminAccountAuditRouteImport } from './routes/app.admin.acc
 import { Route as AppAdminAccountsRouteImport } from './routes/app.admin.accounts'
 import { Route as AppAdminAuditLogRouteImport } from './routes/app.admin.audit-log'
 import { Route as AppAdminDeliveryPointsRouteImport } from './routes/app.admin.delivery-points'
+import { Route as AppAdminEmailRecordsRouteImport } from './routes/app.admin.email-records'
 import { Route as AppAdminEmployeesRouteImport } from './routes/app.admin.employees'
 import { Route as AppAdminPasswordResetsRouteImport } from './routes/app.admin.password-resets'
 import { Route as AppAdminSettingsRouteImport } from './routes/app.admin.settings'
@@ -42,6 +43,7 @@ import { Route as AppAdminTeamRouteImport } from './routes/app.admin.team'
 import { Route as AppOperatorIndexRouteImport } from './routes/app.operator.index'
 import { Route as AppOperatorNewBatchRouteImport } from './routes/app.operator.new-batch'
 import { Route as AppOperatorPublishRouteImport } from './routes/app.operator.publish'
+import { Route as AppOperatorPublishRecordsRouteImport } from './routes/app.operator.publish-records'
 import { Route as AppOrderNewRouteImport } from './routes/app.order.new'
 import { Route as AppOrderConfirmationOrderIdRouteImport } from './routes/app.order.confirmation.$orderId'
 
@@ -175,6 +177,11 @@ const AppAdminDeliveryPointsRoute = AppAdminDeliveryPointsRouteImport.update({
   path: '/admin/delivery-points',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminEmailRecordsRoute = AppAdminEmailRecordsRouteImport.update({
+  id: '/admin/email-records',
+  path: '/admin/email-records',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdminEmployeesRoute = AppAdminEmployeesRouteImport.update({
   id: '/admin/employees',
   path: '/admin/employees',
@@ -210,6 +217,12 @@ const AppOperatorPublishRoute = AppOperatorPublishRouteImport.update({
   path: '/operator/publish',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOperatorPublishRecordsRoute =
+  AppOperatorPublishRecordsRouteImport.update({
+    id: '/operator/publish-records',
+    path: '/operator/publish-records',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppOrderNewRoute = AppOrderNewRouteImport.update({
   id: '/order/new',
   path: '/order/new',
@@ -249,12 +262,14 @@ export interface FileRoutesByFullPath {
   '/app/admin/accounts': typeof AppAdminAccountsRoute
   '/app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
+  '/app/admin/email-records': typeof AppAdminEmailRecordsRoute
   '/app/admin/employees': typeof AppAdminEmployeesRoute
   '/app/admin/password-resets': typeof AppAdminPasswordResetsRoute
   '/app/admin/settings': typeof AppAdminSettingsRoute
   '/app/admin/team': typeof AppAdminTeamRoute
   '/app/operator/new-batch': typeof AppOperatorNewBatchRoute
   '/app/operator/publish': typeof AppOperatorPublishRoute
+  '/app/operator/publish-records': typeof AppOperatorPublishRecordsRoute
   '/app/order/new': typeof AppOrderNewRoute
   '/app/operator/': typeof AppOperatorIndexRoute
   '/app/order/confirmation/$orderId': typeof AppOrderConfirmationOrderIdRoute
@@ -285,12 +300,14 @@ export interface FileRoutesByTo {
   '/app/admin/accounts': typeof AppAdminAccountsRoute
   '/app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
+  '/app/admin/email-records': typeof AppAdminEmailRecordsRoute
   '/app/admin/employees': typeof AppAdminEmployeesRoute
   '/app/admin/password-resets': typeof AppAdminPasswordResetsRoute
   '/app/admin/settings': typeof AppAdminSettingsRoute
   '/app/admin/team': typeof AppAdminTeamRoute
   '/app/operator/new-batch': typeof AppOperatorNewBatchRoute
   '/app/operator/publish': typeof AppOperatorPublishRoute
+  '/app/operator/publish-records': typeof AppOperatorPublishRecordsRoute
   '/app/order/new': typeof AppOrderNewRoute
   '/app/operator': typeof AppOperatorIndexRoute
   '/app/order/confirmation/$orderId': typeof AppOrderConfirmationOrderIdRoute
@@ -323,12 +340,14 @@ export interface FileRoutesById {
   '/app/admin/accounts': typeof AppAdminAccountsRoute
   '/app/admin/audit-log': typeof AppAdminAuditLogRoute
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
+  '/app/admin/email-records': typeof AppAdminEmailRecordsRoute
   '/app/admin/employees': typeof AppAdminEmployeesRoute
   '/app/admin/password-resets': typeof AppAdminPasswordResetsRoute
   '/app/admin/settings': typeof AppAdminSettingsRoute
   '/app/admin/team': typeof AppAdminTeamRoute
   '/app/operator/new-batch': typeof AppOperatorNewBatchRoute
   '/app/operator/publish': typeof AppOperatorPublishRoute
+  '/app/operator/publish-records': typeof AppOperatorPublishRecordsRoute
   '/app/order/new': typeof AppOrderNewRoute
   '/app/operator/': typeof AppOperatorIndexRoute
   '/app/order/confirmation/$orderId': typeof AppOrderConfirmationOrderIdRoute
@@ -362,12 +381,14 @@ export interface FileRouteTypes {
     | '/app/admin/accounts'
     | '/app/admin/audit-log'
     | '/app/admin/delivery-points'
+    | '/app/admin/email-records'
     | '/app/admin/employees'
     | '/app/admin/password-resets'
     | '/app/admin/settings'
     | '/app/admin/team'
     | '/app/operator/new-batch'
     | '/app/operator/publish'
+    | '/app/operator/publish-records'
     | '/app/order/new'
     | '/app/operator/'
     | '/app/order/confirmation/$orderId'
@@ -398,12 +419,14 @@ export interface FileRouteTypes {
     | '/app/admin/accounts'
     | '/app/admin/audit-log'
     | '/app/admin/delivery-points'
+    | '/app/admin/email-records'
     | '/app/admin/employees'
     | '/app/admin/password-resets'
     | '/app/admin/settings'
     | '/app/admin/team'
     | '/app/operator/new-batch'
     | '/app/operator/publish'
+    | '/app/operator/publish-records'
     | '/app/order/new'
     | '/app/operator'
     | '/app/order/confirmation/$orderId'
@@ -435,12 +458,14 @@ export interface FileRouteTypes {
     | '/app/admin/accounts'
     | '/app/admin/audit-log'
     | '/app/admin/delivery-points'
+    | '/app/admin/email-records'
     | '/app/admin/employees'
     | '/app/admin/password-resets'
     | '/app/admin/settings'
     | '/app/admin/team'
     | '/app/operator/new-batch'
     | '/app/operator/publish'
+    | '/app/operator/publish-records'
     | '/app/order/new'
     | '/app/operator/'
     | '/app/order/confirmation/$orderId'
@@ -644,6 +669,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminDeliveryPointsRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/admin/email-records': {
+      id: '/app/admin/email-records'
+      path: '/admin/email-records'
+      fullPath: '/app/admin/email-records'
+      preLoaderRoute: typeof AppAdminEmailRecordsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/admin/employees': {
       id: '/app/admin/employees'
       path: '/admin/employees'
@@ -693,6 +725,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppOperatorPublishRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/operator/publish-records': {
+      id: '/app/operator/publish-records'
+      path: '/operator/publish-records'
+      fullPath: '/app/operator/publish-records'
+      preLoaderRoute: typeof AppOperatorPublishRecordsRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/order/new': {
       id: '/app/order/new'
       path: '/order/new'
@@ -726,12 +765,14 @@ interface AppRouteChildren {
   AppAdminAccountsRoute: typeof AppAdminAccountsRoute
   AppAdminAuditLogRoute: typeof AppAdminAuditLogRoute
   AppAdminDeliveryPointsRoute: typeof AppAdminDeliveryPointsRoute
+  AppAdminEmailRecordsRoute: typeof AppAdminEmailRecordsRoute
   AppAdminEmployeesRoute: typeof AppAdminEmployeesRoute
   AppAdminPasswordResetsRoute: typeof AppAdminPasswordResetsRoute
   AppAdminSettingsRoute: typeof AppAdminSettingsRoute
   AppAdminTeamRoute: typeof AppAdminTeamRoute
   AppOperatorNewBatchRoute: typeof AppOperatorNewBatchRoute
   AppOperatorPublishRoute: typeof AppOperatorPublishRoute
+  AppOperatorPublishRecordsRoute: typeof AppOperatorPublishRecordsRoute
   AppOrderNewRoute: typeof AppOrderNewRoute
   AppOperatorIndexRoute: typeof AppOperatorIndexRoute
   AppOrderConfirmationOrderIdRoute: typeof AppOrderConfirmationOrderIdRoute
@@ -753,12 +794,14 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminAccountsRoute: AppAdminAccountsRoute,
   AppAdminAuditLogRoute: AppAdminAuditLogRoute,
   AppAdminDeliveryPointsRoute: AppAdminDeliveryPointsRoute,
+  AppAdminEmailRecordsRoute: AppAdminEmailRecordsRoute,
   AppAdminEmployeesRoute: AppAdminEmployeesRoute,
   AppAdminPasswordResetsRoute: AppAdminPasswordResetsRoute,
   AppAdminSettingsRoute: AppAdminSettingsRoute,
   AppAdminTeamRoute: AppAdminTeamRoute,
   AppOperatorNewBatchRoute: AppOperatorNewBatchRoute,
   AppOperatorPublishRoute: AppOperatorPublishRoute,
+  AppOperatorPublishRecordsRoute: AppOperatorPublishRecordsRoute,
   AppOrderNewRoute: AppOrderNewRoute,
   AppOperatorIndexRoute: AppOperatorIndexRoute,
   AppOrderConfirmationOrderIdRoute: AppOrderConfirmationOrderIdRoute,

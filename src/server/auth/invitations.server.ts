@@ -634,6 +634,7 @@ export async function acceptInvitation(
           roles,
           activeRole: inv.role,
           portal: "staff",
+          viaBookingLink: false,
         },
       },
       ...(inviter

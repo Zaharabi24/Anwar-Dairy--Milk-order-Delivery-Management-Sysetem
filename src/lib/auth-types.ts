@@ -18,6 +18,12 @@ export interface AuthUser {
   roles: RoleValue[];
   activeRole: RoleValue;
   portal: Portal;
+  /**
+   * True when this session was opened by the link mailed on publish, rather than by signing in.
+   * The person may have no account at all, so the landing page offers them booking and not Sign
+   * In or Sign Up, and the session ends when the batch's bookings close.
+   */
+  viaBookingLink: boolean;
 }
 
 export type AccountStatus = "awaiting_password" | "active" | "suspended" | "deactivated";

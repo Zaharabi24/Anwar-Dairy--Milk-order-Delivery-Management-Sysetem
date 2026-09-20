@@ -14,8 +14,6 @@ const orderStatuses = [
   "NotCollected",
 ] as const;
 const paymentMethods = ["Cash", "bKash", "Payroll deduction"] as const;
-const departments = ["Production", "Finance", "HR", "Sales", "IT", "Admin", "Procurement"] as const;
-const sites = ["Head Office – Gulshan", "Savar Factory"] as const;
 
 const id = z.string().trim().min(1).max(60);
 const text = (max: number) => z.string().max(max);
@@ -85,10 +83,20 @@ export const saveEmployeeInput = z.object({
   employee: z.object({
     id: z.string().max(60),
     name: z.string().trim().min(1, "Name is required.").max(120),
-    companyEmail: z.string().trim().email("Enter a valid company email.").max(200),
+    // Three people in the directory have no address on file. They are still employees and still
+    // belong in it -- they are simply carried inactive, because an address is what the batch mail
+    // needs. So "" is allowed, and anything else has to be a real address.
+    companyEmail: z
+      .string()
+      .trim()
+      .max(200)
+      .refine((v) => v === "" || z.string().email().safeParse(v).success, {
+        message: "Enter a valid company email, or leave it blank.",
+      }),
     phone: text(40),
-    department: z.enum(departments),
-    site: z.enum(sites),
+    department: z.string().trim().max(120),
+    designation: z.string().trim().max(120),
+    site: z.string().trim().max(120),
     /** A business_units code, or "" for none. Checked against the table by the foreign key. */
     businessUnitCode: z.string().trim().max(20),
     active: z.boolean(),

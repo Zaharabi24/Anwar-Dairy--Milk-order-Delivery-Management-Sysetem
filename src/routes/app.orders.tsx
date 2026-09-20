@@ -52,7 +52,10 @@ export const Route = createFileRoute("/app/orders")({
       { title: "Orders — Anwar Organic" },
       { name: "description", content: "Search, filter and adjust incoming employee orders." },
       { property: "og:title", content: "Orders — Anwar Organic" },
-      { property: "og:description", content: "Search, filter and adjust incoming employee orders." },
+      {
+        property: "og:description",
+        content: "Search, filter and adjust incoming employee orders.",
+      },
     ],
   }),
   component: OrdersPage,
@@ -94,12 +97,18 @@ function OrdersPage() {
         return (
           o.orderNo.toLowerCase().includes(q) ||
           (emp?.name.toLowerCase().includes(q) ?? false) ||
+          (emp?.department.toLowerCase().includes(q) ?? false) ||
+          (emp?.designation.toLowerCase().includes(q) ?? false) ||
+          (emp?.companyEmail.toLowerCase().includes(q) ?? false) ||
+          (emp?.phone.toLowerCase().includes(q) ?? false) ||
           o.employeeId.toLowerCase().includes(q)
         );
       });
   }, [orders, employees, activeBatch, query, status, point]);
 
-  const totalLitres = rows.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.litres, 0);
+  const totalLitres = rows
+    .filter((o) => o.status !== "Cancelled")
+    .reduce((s, o) => s + o.litres, 0);
   const totalValue = rows.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.amount, 0);
 
   return (
@@ -127,20 +136,28 @@ function OrdersPage() {
           onChange={(e) => setQuery(e.target.value)}
         />
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-48"><SelectValue placeholder="Status" /></SelectTrigger>
+          <SelectTrigger className="w-48">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             {statuses.map((s) => (
-              <SelectItem key={s} value={s}>{s}</SelectItem>
+              <SelectItem key={s} value={s}>
+                {s}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Select value={point} onValueChange={setPoint}>
-          <SelectTrigger className="w-56"><SelectValue placeholder="Delivery point" /></SelectTrigger>
+          <SelectTrigger className="w-56">
+            <SelectValue placeholder="Delivery point" />
+          </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All delivery points</SelectItem>
             {deliveryPoints.map((p) => (
-              <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+              <SelectItem key={p.id} value={p.id}>
+                {p.name}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -148,13 +165,23 @@ function OrdersPage() {
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (
-          <div className="p-6"><EmptyState title="No orders match" hint="Try clearing the filters." /></div>
+          <div className="p-6">
+            <EmptyState title="No orders match" hint="Try clearing the filters." />
+          </div>
         ) : (
-          <table className="w-full min-w-[820px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
-                <Th>Order</Th><Th>Employee</Th><Th>Litres</Th><Th>Amount</Th>
-                <Th>Point</Th><Th>Placed</Th><Th>Status</Th><Th> </Th>
+                <Th>Order</Th>
+                <Th>Employee</Th>
+                <Th>Department</Th>
+                <Th>Contact</Th>
+                <Th>Litres</Th>
+                <Th>Amount</Th>
+                <Th>Point</Th>
+                <Th>Placed</Th>
+                <Th>Status</Th>
+                <Th> </Th>
               </tr>
             </thead>
             <tbody>
@@ -163,7 +190,24 @@ function OrdersPage() {
                 return (
                   <tr key={o.orderNo} className="border-b border-border/60 last:border-0">
                     <Td className="font-medium">{o.orderNo}</Td>
-                    <Td>{emp?.name ?? o.employeeId}<span className="block text-xs text-muted-foreground">{emp?.department}</span></Td>
+                    {/* Straight from the Employee Database, so an order placed from an emailed
+                        link arrives here already identified -- name, ID, and how to reach them. */}
+                    <Td>
+                      {emp?.name ?? o.employeeId}
+                      <span className="block text-xs text-muted-foreground">{o.employeeId}</span>
+                    </Td>
+                    <Td>
+                      {emp?.department || "—"}
+                      <span className="block text-xs text-muted-foreground">
+                        {emp?.designation || "—"}
+                      </span>
+                    </Td>
+                    <Td>
+                      {emp?.companyEmail || "—"}
+                      <span className="block text-xs text-muted-foreground">
+                        {emp?.phone || "—"}
+                      </span>
+                    </Td>
                     <Td>{litres(o.litres)}</Td>
                     <Td>{taka(o.amount)}</Td>
                     <Td>{deliveryPoints.find((p) => p.id === o.deliveryPointId)?.name}</Td>
@@ -233,7 +277,9 @@ function OrdersPage() {
 
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Adjust {editing?.orderNo}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Adjust {editing?.orderNo}</DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label className="mb-2 block">Litres</Label>
@@ -263,7 +309,11 @@ function OrdersPage() {
             </div>
             <div>
               <Label className="mb-2 block">Reason (required)</Label>
-              <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. employee requested less" />
+              <Input
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="e.g. employee requested less"
+              />
             </div>
           </div>
           <DialogFooter className="gap-2">

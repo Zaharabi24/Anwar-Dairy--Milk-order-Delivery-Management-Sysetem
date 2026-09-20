@@ -15,6 +15,7 @@ export type Permission =
   | "employee_accounts.manage"
   | "accounts.manage"
   | "account_audit.view"
+  | "email_records.view"
   | "staff.invite"
   | "staff.manage";
 
@@ -28,6 +29,8 @@ const SYSTEM_ADMIN: Permission[] = [
   "settings.manage",
   "employee_accounts.manage",
   "account_audit.view",
+  // Who was told about which batch, and whether it reached them.
+  "email_records.view",
 ];
 
 const GRANTS: Record<RoleValue, readonly Permission[]> = {

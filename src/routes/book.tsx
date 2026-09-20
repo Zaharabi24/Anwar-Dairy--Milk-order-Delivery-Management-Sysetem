@@ -4,15 +4,15 @@ import { Button } from "@/components/ui/button";
 import { openBookingLinkFn } from "@/functions/auth.functions";
 
 /**
- * The link mailed to every employee when a batch is published.
+ * The link mailed to everyone in the Employee Database when a batch is published.
  *
- * It signs them in and sends them to the landing page, where the batch card and the booking
- * button are. The work happens in beforeLoad so the session cookie is set on the redirect itself
- * -- the landing page is then rendered for someone already signed in, with no flash of the
- * signed-out version.
+ * It opens a booking session and sends them to the landing page, where the batch card and the
+ * Book Milk button are. The work happens in the loader so the session cookie is set on the
+ * redirect itself -- the landing page is then rendered for someone already recognised, with no
+ * flash of the signed-out version.
  *
- * A link that has expired or been withdrawn is answered here rather than being bounced to the
- * sign-in form with no explanation.
+ * A link that has expired or been withdrawn is answered here rather than being bounced to a
+ * sign-in form the person has no account for.
  */
 export const Route = createFileRoute("/book")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -45,15 +45,15 @@ function LinkProblem() {
         />
         <div className="mt-8 rounded-xl border border-border bg-card p-8">
           <h1 className="font-display text-xl font-bold">
-            {expired ? "This booking link has expired" : "This booking link can't be used"}
+            {expired ? "Bookings for this batch have closed" : "This booking link can't be used"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {expired
-              ? "Booking links last two weeks. Sign in to see whether a batch is open today."
-              : "The link may have been withdrawn, or the address may be incomplete. Sign in to see today's batch."}
+              ? "A booking link works until the batch's booking close time, and that time has passed. The next batch comes with a fresh link."
+              : "The link may have been withdrawn, or the address may be incomplete. Your next batch email will carry a new one."}
           </p>
           <Button asChild className="mt-6 w-full">
-            <Link to="/login">Sign in</Link>
+            <Link to="/">Back to Anwar Organic</Link>
           </Button>
         </div>
       </div>

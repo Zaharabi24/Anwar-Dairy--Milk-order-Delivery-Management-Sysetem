@@ -81,7 +81,15 @@ function Nav({ auth }: { auth: AuthUser | null }) {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          {auth ? (
+          {auth?.viaBookingLink ? (
+            // Arrived from the link mailed when the batch was published. They have no account and
+            // need none: the link is their authorisation, and booking is the single thing they
+            // came to do. Sign In, Sign Up and the account menu are all beside the point for
+            // someone with nothing to sign in to, so the bar carries the one button that matters.
+            <Button asChild size="sm">
+              <Link to="/app/order/new">Book Milk</Link>
+            </Button>
+          ) : auth ? (
             // Signed in: the logo brought them here, so offer the way back into their own
             // workspace, with the account menu beside it for Profile, security and signing out.
             // Sign In and Sign Up would both be wrong for someone who already has a session, and
@@ -294,7 +302,18 @@ function Landing() {
             pick your litres before the cut-off and collect it at your usual point.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            {auth ? (
+            {auth?.viaBookingLink ? (
+              // Booking is the point of the visit, so it leads; the batch is still one click away
+              // for anyone who wants to look before they order.
+              <>
+                <Button asChild size="lg">
+                  <Link to="/app/order/new">Book Milk</Link>
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <a href="#how-it-works">See today's batch</a>
+                </Button>
+              </>
+            ) : auth ? (
               <>
                 <Button asChild size="lg">
                   <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
@@ -378,7 +397,21 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
           </FooterNav>
 
           <FooterNav title="Your account">
-            {auth ? (
+            {auth?.viaBookingLink ? (
+              // No account to link to, so the column offers the two things the link does allow.
+              <>
+                <li>
+                  <Link to="/app/order/new" className={FOOTER_LINK}>
+                    Book Milk
+                  </Link>
+                </li>
+                <li>
+                  <Link to="/app/my-orders" className={FOOTER_LINK}>
+                    My orders
+                  </Link>
+                </li>
+              </>
+            ) : auth ? (
               <>
                 <li>
                   <Link to={ROLE_HOME[auth.activeRole]} className={FOOTER_LINK}>

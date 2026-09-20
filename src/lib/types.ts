@@ -1,19 +1,31 @@
 export type Role =
   "Employee" | "Factory Operator" | "Head Office Coordinator" | "System Admin" | "Super Admin";
 
-export type Department = "Production" | "Finance" | "HR" | "Sales" | "IT" | "Admin" | "Procurement";
+/**
+ * Department and location are open text, not fixed lists.
+ *
+ * The Employee Database carries thirty-six departments and gains more as the group reorganises,
+ * so a closed list here would mean a schema change every time HR names a new one. The screens
+ * offer what is already in use as suggestions, which keeps entry consistent without the system
+ * refusing a department that genuinely exists.
+ */
+export type Department = string;
 
-export type Site = "Head Office – Gulshan" | "Savar Factory";
+export type Site = string;
 
+/** One person in the Employee Database, in the columns the directory is kept in. */
 export interface Employee {
   id: string;
   name: string;
   companyEmail: string;
   phone: string;
   department: Department;
+  designation: string;
+  /** The directory's Location column. */
   site: Site;
-  /** Chosen when the account was requested. Null for anyone added straight to the roster. */
+  /** Chosen when the account was requested. Null for anyone added straight to the directory. */
   businessUnitCode: string | null;
+  /** Inactive means never mailed when a batch is published, and no link that still works. */
   active: boolean;
 }
 

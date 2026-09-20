@@ -1,16 +1,17 @@
-// Booking links: when a batch is published, every employee gets a personal link that opens the
-// platform already signed in, on the landing page, ready to book.
+// Booking links: when a batch is published, everyone active in the Employee Database gets a
+// personal link that opens the platform ready to book, with no sign-in step.
 //
-// The link signs someone in, so it is a credential and is treated as one: the token is random,
-// stored only as a hash, tied to one employee, expires on its own, and every use is recorded.
+// The link is the whole authorisation, so it is treated as a credential: the token is random,
+// stored only as a hash, tied to one person and one batch, and it stops working the moment
+// bookings close -- the batch's own cutoff is the expiry, not a fixed number of days.
+//
+// Every publish also writes its own record: one batch_publications row for the send, and one
+// batch_emails row per person, carrying their directory details as they stood that day.
 import type { Sql, Tx } from "../db/client.server";
 import { getDb } from "../db/client.server";
 import { randomToken, sha256 } from "./crypto.server";
-import { appUrl, startSession } from "./session.server";
+import { appUrl, clientIp, startSession } from "./session.server";
 import { escapeHtml, layout, button, sendMailDetailed, type MailMessage } from "./mail.server";
-
-/** How long a link keeps working. */
-export const BOOKING_LINK_TTL_DAYS = 14;
 
 type Row = Record<string, string | number | boolean | Date | null>;
 
@@ -54,8 +55,8 @@ function bookingEmail(input: {
   to: string;
   name: string;
   batch: BatchForMail;
+  collectionPoint: string;
   link: string;
-  expiresAt: Date;
 }): MailMessage {
   const { batch } = input;
   const rate = Number(batch.rate_per_litre);
@@ -83,44 +84,117 @@ function bookingEmail(input: {
          ${row("Time left to book", left)}
          ${row("Bookings close", `${dhaka(batch.booking_cutoff)} (Dhaka)`)}
          ${row("Collect on", `${dhakaDate(batch.delivery_date)}, ${batch.delivery_window}`)}
+         ${row("Collection point", input.collectionPoint)}
        </table>
-       ${button(input.link, "Book my milk")}
-       <p style="font-size:13px;color:#64748B;">This link is yours alone and signs you in, so
-       please don't forward it. It stops working on ${escapeHtml(dhakaDate(input.expiresAt))}, and
-       you can always sign in as usual instead.</p>
+       ${button(input.link, "Book Milk")}
+       <p style="font-size:13px;color:#64748B;">This link is yours alone and books in your name,
+       so please don't forward it. It stops working when bookings close at
+       ${escapeHtml(dhaka(batch.booking_cutoff))} (Dhaka).</p>
        ${batch.note ? `<p style="font-size:13px;color:#64748B;">${escapeHtml(batch.note)}</p>` : ""}`,
     ),
   };
 }
 
+/** One queued message and the batch_emails row it has to report back to. */
+export interface QueuedBookingMail {
+  emailId: string;
+  message: MailMessage;
+}
+
+export interface PublishMailJob {
+  publicationId: string;
+  queued: QueuedBookingMail[];
+}
+
 /**
- * Issues a link for every employee who can book, and returns the emails to send.
+ * Records the publish, issues a link for everyone active in the Employee Database, and returns
+ * the mail to send.
  *
  * The mail is not sent here: this runs inside the transaction that publishes the batch, and a
  * mail server that is slow or down must not hold that transaction open or roll the publish back.
  */
-export async function issueBookingLinks(tx: Tx, batchNo: string): Promise<MailMessage[]> {
+export async function issueBookingLinks(
+  tx: Tx,
+  batchNo: string,
+  publishedBy: { name: string; employeeId: string },
+): Promise<PublishMailJob | null> {
   const [batch] = (await tx<Row[]>`
     select batch_no, rate_per_litre, saleable_litres, booking_cutoff, delivery_date,
            delivery_window, note
     from batches where batch_no = ${batchNo}`) as unknown as [BatchForMail | undefined];
-  if (!batch) return [];
+  if (!batch) return null;
 
-  // Everyone who holds the employee role on a live account, which is exactly who can book.
+  // Where the milk is collected, as named on the batch. Listed in the email so nobody has to open
+  // the app to find out where to go.
+  const points = await tx<Row[]>`
+    select p.name
+    from batch_delivery_points bdp
+    join delivery_points p on p.id = bdp.delivery_point_id
+    where bdp.batch_no = ${batchNo}
+    order by bdp.position, p.name`;
+  const collectionPoint = points.map((p) => p["name"] as string).join(", ") || "To be confirmed";
+
+  // The Employee Database is the mailing list. Active only -- switching someone off is exactly
+  // how a System Admin stops the batch mail reaching them -- and never anyone deleted.
+  //
+  // The employee role is what everyone in the directory is given (migration 0009, and every
+  // manual add since), and it is what the link needs to open a booking session. Requiring it here
+  // keeps the mail and the link in step: nobody is sent a link that would fail to open, which is
+  // what a staff-only account -- an operator or a coordinator, in the directory but not bookable
+  // -- would otherwise receive.
   const employees = await tx<Row[]>`
-    select e.id, e.name, e.company_email
+    select e.id, e.name, e.company_email, e.department, e.designation, e.phone, e.site
     from employees e
-    join user_roles r on r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null
-    where e.account_status = 'active' and e.deleted_at is null
-    order by e.id`;
+    where e.active and e.deleted_at is null
+      and exists (select 1 from user_roles r
+                  where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
+    order by e.name, e.id`;
 
-  const expiresAt = new Date(Date.now() + BOOKING_LINK_TTL_DAYS * 86_400_000);
-  const mail: MailMessage[] = [];
+  // Booking close time is the link's expiry. They are the same instant by definition: the link
+  // exists to place an order, and after the cutoff there is no order to place.
+  const expiresAt = new Date(batch.booking_cutoff);
+
+  const [publication] = (await tx<Row[]>`
+    insert into batch_publications
+      (batch_no, published_by, published_by_id, booking_cutoff, delivery_date, delivery_window,
+       rate_per_litre, saleable_litres, collection_points, recipients)
+    values (${batchNo}, ${publishedBy.name}, ${publishedBy.employeeId}, ${batch.booking_cutoff},
+            ${batch.delivery_date}, ${batch.delivery_window}, ${Number(batch.rate_per_litre)},
+            ${batch.saleable_litres}, ${collectionPoint}, ${employees.length})
+    returning id`) as unknown as [{ id: string }];
+
+  const queued: QueuedBookingMail[] = [];
 
   for (const employee of employees) {
+    const address = ((employee["company_email"] as string) ?? "").trim();
+    const name = (employee["name"] as string) || "there";
+
+    // The directory details are copied onto the record, not joined to it: this is what was sent
+    // on the day, and someone changing department later must not rewrite that.
+    const record = {
+      publication_id: publication.id,
+      batch_no: batchNo,
+      employee_id: employee["id"] as string,
+      employee_name: name,
+      employee_ref: employee["id"] as string,
+      to_address: address,
+      department: (employee["department"] as string) ?? "",
+      designation: (employee["designation"] as string) ?? "",
+      phone: (employee["phone"] as string) ?? "",
+      location: (employee["site"] as string) ?? "",
+      link_expires_at: expiresAt,
+    };
+
+    // Somebody active but with no address on file. They stay on the record, marked skipped, so
+    // the reason they heard nothing is on the page rather than left to be guessed at.
+    if (!address) {
+      await tx`insert into batch_emails ${tx({ ...record, status: "skipped" })}`;
+      continue;
+    }
+
     const token = randomToken(32);
-    // One link per employee per batch: publishing again refreshes the same one rather than
-    // leaving the previous link working alongside it.
+    // One link per person per batch: publishing again refreshes the same one rather than leaving
+    // the previous link working alongside it.
     await tx`
       insert into booking_links (token_hash, employee_id, batch_no, expires_at)
       values (${sha256(token)}, ${employee["id"] as string}, ${batchNo}, ${expiresAt})
@@ -128,52 +202,97 @@ export async function issueBookingLinks(tx: Tx, batchNo: string): Promise<MailMe
         set token_hash = excluded.token_hash, expires_at = excluded.expires_at,
             created_at = now(), first_used_at = null, last_used_at = null,
             use_count = 0, last_used_ip = null, revoked_at = null`;
-    mail.push(
-      bookingEmail({
-        to: employee["company_email"] as string,
-        name: (employee["name"] as string) || "there",
+
+    const [emailRow] = (await tx<Row[]>`
+      insert into batch_emails ${tx(record)} returning id`) as unknown as [{ id: string }];
+
+    queued.push({
+      emailId: emailRow.id,
+      message: bookingEmail({
+        to: address,
+        name,
         batch,
+        collectionPoint,
         link: `${appUrl()}/book?token=${token}`,
-        expiresAt,
       }),
-    );
+    });
   }
-  return mail;
+
+  return { publicationId: publication.id, queued };
 }
 
 /**
- * Sends the batch emails one at a time, after the publish has committed.
+ * Sends the batch emails one at a time, after the publish has committed, and marks each one off.
  *
  * Sequential on purpose: a company mail server handles a steady queue better than a burst, and a
  * failure to one address must not stop the rest. Nothing is thrown -- the batch is already
  * published, and an undelivered email is not a reason to fail that.
  */
-export async function sendBookingLinks(mail: MailMessage[]): Promise<void> {
-  if (!mail.length) return;
-  let sent = 0;
-  let failed = 0;
-  for (const message of mail) {
+export async function sendBookingLinks(job: PublishMailJob): Promise<void> {
+  const sql: Sql = await getDb();
+
+  for (const { emailId, message } of job.queued) {
     try {
-      const { delivery } = await sendMailDetailed(message);
-      if (delivery === "failed") failed++;
-      else sent++;
+      const { delivery, error } = await sendMailDetailed(message);
+      await sql`
+        update batch_emails set status = ${delivery}, error = ${error ?? null}, sent_at = now()
+        where id = ${emailId}`;
     } catch (error) {
-      failed++;
       console.error(`[mail] booking link to ${message.to} failed`, error);
+      await sql`
+        update batch_emails
+        set status = 'failed', error = ${String(error).slice(0, 2000)}, sent_at = now()
+        where id = ${emailId}`;
     }
   }
-  console.info(`[mail] booking links: ${sent} sent, ${failed} failed, ${mail.length} total`);
+
+  await finishPublication(sql, job.publicationId);
+}
+
+/** Totals the send once the last message has been attempted, and closes the publication record. */
+async function finishPublication(sql: Sql, publicationId: string): Promise<void> {
+  const [totals] = (await sql<Row[]>`
+    update batch_publications p set
+      sent_count = t.delivered,
+      failed_count = t.failed,
+      status = case
+                 when t.total = 0 then 'no_recipients'
+                 when t.delivered = 0 then 'failed'
+                 when t.failed > 0 or t.skipped > 0 then 'partial'
+                 else 'sent'
+               end,
+      completed_at = now()
+    from (
+      select count(*) as total,
+             count(*) filter (where status in ('sent', 'captured', 'logged')) as delivered,
+             count(*) filter (where status = 'failed') as failed,
+             count(*) filter (where status = 'skipped') as skipped
+      from batch_emails where publication_id = ${publicationId}
+    ) t
+    where p.id = ${publicationId}
+    returning p.sent_count, p.failed_count, p.recipients`) as unknown as [Row | undefined];
+
+  if (totals) {
+    console.info(
+      `[mail] booking links: ${totals["sent_count"]} sent, ${totals["failed_count"]} failed, ` +
+        `${totals["recipients"]} in the directory`,
+    );
+  }
 }
 
 export type BookingLinkResult =
   { ok: true; batchNo: string } | { ok: false; reason: "invalid" | "expired" };
 
 /**
- * Opens a booking link: checks it, then signs that employee in.
+ * Opens a booking link: checks it, then opens a booking session for that person.
  *
  * The link stays usable until it expires rather than dying on first open. Mail clients and
  * security scanners fetch links before a person ever sees them, and a single-use link is spent by
  * the time it is clicked; a link that works twice is worth more here than one that works once.
+ *
+ * The session it opens is cut to the same instant the link expires, so closing the booking closes
+ * the door behind it -- someone mid-page when the cutoff passes is not left holding an open
+ * session against a batch that no longer takes orders.
  */
 export async function openBookingLink(token: string): Promise<BookingLinkResult> {
   if (!token || token.length < 20) return { ok: false, reason: "invalid" };
@@ -185,23 +304,27 @@ export async function openBookingLink(token: string): Promise<BookingLinkResult>
       from booking_links l
       join employees e on e.id = l.employee_id
       where l.token_hash = ${sha256(token)}
-        and e.account_status = 'active' and e.deleted_at is null
+        and e.active and e.deleted_at is null
         and exists (select 1 from user_roles r
                     where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
       for update of l`;
     if (!link || link["revoked_at"]) return { ok: false, reason: "invalid" } as BookingLinkResult;
-    if (new Date(link["expires_at"] as string).getTime() <= Date.now()) {
+
+    const expiresAt = new Date(link["expires_at"] as string);
+    if (expiresAt.getTime() <= Date.now()) {
       return { ok: false, reason: "expired" } as BookingLinkResult;
     }
 
     await tx`
       update booking_links
       set use_count = use_count + 1, last_used_at = now(),
-          first_used_at = coalesce(first_used_at, now())
+          first_used_at = coalesce(first_used_at, now()), last_used_ip = ${clientIp()}
       where token_hash = ${sha256(token)}`;
 
-    // The same session an ordinary sign-in creates: employee portal, employee role.
-    await startSession(tx, link["employee_id"] as string, "employee", "employee");
+    await startSession(tx, link["employee_id"] as string, "employee", "employee", {
+      origin: "booking_link",
+      expiresAt,
+    });
     return { ok: true, batchNo: link["batch_no"] as string } as BookingLinkResult;
   })) as BookingLinkResult;
 }

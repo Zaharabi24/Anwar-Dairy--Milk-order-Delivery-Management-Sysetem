@@ -54,7 +54,8 @@ const reportsNav: NavItem = { label: "Reports", to: "/app/reports" };
 const systemAdminPages: NavItem[] = [
   { label: "Password Resets", to: "/app/admin/password-resets" },
   { label: "Account audit", to: "/app/admin/account-audit" },
-  { label: "Employees", to: "/app/admin/employees" },
+  { label: "Employee Database", to: "/app/admin/employees" },
+  { label: "Email records", to: "/app/admin/email-records" },
   { label: "Delivery points", to: "/app/admin/delivery-points" },
   // Settings is deliberately not listed. The page and its route still work for anyone holding
   // the link; it is only kept out of the menu.
@@ -65,6 +66,7 @@ const operatorPages: NavItem[] = [
   { label: "Dashboard", to: "/app/operator" },
   { label: "New batch", to: "/app/operator/new-batch" },
   { label: "Publish", to: "/app/operator/publish" },
+  { label: "Publish records", to: "/app/operator/publish-records" },
 ];
 
 const coordinatorPages: NavItem[] = [
@@ -84,6 +86,15 @@ const commonTail: NavItem[] = [
     { label: "Privacy & security", to: "/app/security" },
   ]),
 ];
+
+/**
+ * The menu for someone who arrived on the link mailed when the batch was published.
+ *
+ * They have no account, so "Your account" has nothing to show them: Profile, a password and the
+ * list of signed-in devices all describe something they don't have. What the link entitles them
+ * to is booking and seeing what they booked, and that is the whole menu.
+ */
+const bookingLinkTail: NavItem[] = [{ label: "Notifications", to: "/app/notifications" }];
 
 const navByRole: Record<Role, NavItem[]> = {
   Employee: [
@@ -174,12 +185,20 @@ function Brand() {
   );
 }
 
-function NavLinks({ items, onNavigate }: { items: NavItem[]; onNavigate?: () => void }) {
+function NavLinks({
+  items,
+  tail,
+  onNavigate,
+}: {
+  items: NavItem[];
+  tail: NavItem[];
+  onNavigate?: () => void;
+}) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   // Home is part of the list rather than a special case, but it matches its own address only:
   // every page in the app sits beneath /app, so matching loosely made it the fallback highlight
   // on any page the menu doesn't list, pointing the reader somewhere they aren't.
-  const all: NavItem[] = [{ label: "Home", to: "/app", exact: true }, ...items, ...commonTail];
+  const all: NavItem[] = [{ label: "Home", to: "/app", exact: true }, ...items, ...tail];
   const active = activeNavPath(
     pathname,
     all.map((i) => ({
@@ -220,7 +239,12 @@ function AppShell() {
   const { role, roles, setRole, notifications, unreadCount, markNotificationsRead } = useAppData();
   const { user, signOut } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const items = navByRole[role];
+  const viaBookingLink = !!user?.viaBookingLink;
+  // Booking and My orders are what the link is for; today's offer is the page it opens onto.
+  const items = viaBookingLink
+    ? navByRole.Employee.filter((i) => i.to !== "/app/offer")
+    : navByRole[role];
+  const tail = viaBookingLink ? bookingLinkTail : commonTail;
   const [mobileOpen, setMobileOpen] = useState(false);
   const router = useRouter();
   const allowed = rolesFor(pathname);
@@ -233,7 +257,7 @@ function AppShell() {
   // Warm every page this role can reach while the browser is idle, so the
   // first click on any menu item renders with no chunk-loading pause.
   useEffect(() => {
-    const targets = ["/app", ...items.map((i) => i.to), ...commonTail.map((i) => i.to)];
+    const targets = ["/app", ...items.map((i) => i.to), ...tail.map((i) => i.to)];
     const warm = () => {
       for (const to of targets) void router.preloadRoute({ to }).catch(() => {});
     };
@@ -248,14 +272,14 @@ function AppShell() {
     }
     const id = window.setTimeout(warm, 200);
     return () => window.clearTimeout(id);
-  }, [items, router]);
+  }, [items, tail, router]);
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
       <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-sidebar px-4 py-6 md:flex">
         <Brand />
         <div className="mt-8">
-          <NavLinks items={items} />
+          <NavLinks items={items} tail={tail} />
         </div>
       </aside>
 
@@ -272,7 +296,7 @@ function AppShell() {
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
                 <Brand />
                 <div className="mt-8">
-                  <NavLinks items={items} onNavigate={() => setMobileOpen(false)} />
+                  <NavLinks items={items} tail={tail} onNavigate={() => setMobileOpen(false)} />
                 </div>
               </SheetContent>
             </Sheet>

@@ -18,19 +18,28 @@ import {
 const reversed = <T>(list: T[]) => [...list].reverse();
 
 export async function seedDemoData(tx: postgres.TransactionSql): Promise<boolean> {
+  // Delivery points are seeded on their own, because a batch can't be created without one and
+  // the Employee Database import (migration 0009) fills the employees table before this runs --
+  // which would otherwise leave a fresh database with a full directory and nowhere to collect.
+  const [points] = await tx<{ empty: boolean }[]>`
+    select not exists (select 1 from delivery_points) as empty`;
+  if (points?.empty) {
+    await tx`insert into delivery_points ${tx(
+      deliveryPoints.map((p) => ({
+        id: p.id,
+        name: p.name,
+        address: p.address,
+        coordinator_name: p.coordinatorName,
+        active: p.active,
+      })),
+    )}`;
+  }
+
+  // The demo roster, batches and orders only make sense on a database that has neither. Once the
+  // real directory is in place, eight invented employees are not something to add beside it.
   const [state] = await tx<{ empty: boolean }[]>`
     select not exists (select 1 from employees) and not exists (select 1 from batches) as empty`;
   if (!state?.empty) return false;
-
-  await tx`insert into delivery_points ${tx(
-    deliveryPoints.map((p) => ({
-      id: p.id,
-      name: p.name,
-      address: p.address,
-      coordinator_name: p.coordinatorName,
-      active: p.active,
-    })),
-  )}`;
 
   await tx`insert into employees ${tx(
     reversed(employees).map((e) => ({
