@@ -17,7 +17,6 @@ import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ROLE_HOME, roleLabel } from "@/lib/auth-constants";
 import type { AuthUser, InvitationPreview } from "@/lib/auth-types";
-import { validateConfirm, validatePassword } from "@/lib/auth-validation";
 import { dateTime } from "@/lib/format";
 import { authService } from "@/services/auth-service";
 
@@ -43,8 +42,6 @@ function AcceptInvitePage() {
   const router = useRouter();
   const [preview, setPreview] = useState<Preview>({ state: "loading" });
   const [fullName, setFullName] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -106,11 +103,10 @@ function AcceptInvitePage() {
   }
 
   const existing = preview.existingAccount;
-  const passwordError = password ? validatePassword(password) : null;
-  const confirmError = confirm ? validateConfirm(password, confirm) : null;
-  const canSubmit = existing
-    ? currentPassword.length > 0
-    : !!fullName.trim() && !validatePassword(password) && !validateConfirm(password, confirm);
+  // A new joiner only confirms their name: the emailed link is what proves who they are, and they
+  // land on their dashboard signed in. A password is chosen later, or never, if they keep using
+  // Forgot password.
+  const canSubmit = existing ? currentPassword.length > 0 : !!fullName.trim();
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -121,7 +117,7 @@ function AcceptInvitePage() {
     const result = await authService.acceptInvitation(
       existing
         ? { token, current_password: currentPassword }
-        : { token, full_name: fullName.trim(), password },
+        : { token, full_name: fullName.trim() },
     );
     setSubmitting(false);
     if (!result.ok || !result.data) {
@@ -196,25 +192,6 @@ function AcceptInvitePage() {
               />
               <FieldError message={errors["full_name"]} />
             </div>
-            <PasswordField
-              id="password"
-              label="Password"
-              value={password}
-              onChange={setPassword}
-              placeholder="Min 8 characters"
-              autoComplete="new-password"
-              error={errors["password"] ?? passwordError}
-              showStrength
-            />
-            <PasswordField
-              id="confirm-password"
-              label="Confirm Password"
-              value={confirm}
-              onChange={setConfirm}
-              placeholder="Re-enter your password"
-              autoComplete="new-password"
-              error={confirmError}
-            />
           </>
         )}
 

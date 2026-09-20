@@ -493,11 +493,9 @@ export async function acceptInvitation(
   const sql = await getDb();
   if (!(await tokenLookupAllowed(sql))) return fail("Too many attempts. Try again later.");
 
-  // Hash outside the transaction; it's deliberately slow.
-  const newPasswordHash =
-    input.password && input.password.length >= 8 && input.password.length <= 200
-      ? await hashPassword(input.password)
-      : null;
+  // Accepting an invitation no longer sets a password: the link is the proof, and the person
+  // lands on their dashboard signed in. They choose a password later, from Privacy & security or
+  // through Forgot password, which needs only their email address.
 
   type Outcome = AuthResult<{ profile: AuthUser }> & { notify?: { to: string; mail: MailMessage } };
   const outcome = await sql.begin(async (tx): Promise<Outcome> => {
@@ -543,8 +541,6 @@ export async function acceptInvitation(
       const errors: FieldErrors = {};
       const name = input.full_name?.trim() ?? "";
       if (!name) errors["full_name"] = "Full name is required.";
-      if (!input.password) errors["password"] = "Password is required.";
-      else if (!newPasswordHash) errors["password"] = "Min 8 characters";
       if (Object.keys(errors).length) return fail("Please fix the highlighted fields.", errors);
       fullName = name;
 
@@ -555,7 +551,7 @@ export async function acceptInvitation(
         // roster flag is restored the way the explicit Reactivate action restores it -- on only
         // if they still hold the employee role -- and is left alone for every other status.
         await tx`
-          update employees set name = ${name}, password_hash = ${newPasswordHash},
+          update employees set name = ${name},
             account_status = 'active', activated_at = coalesce(activated_at, now()),
             active = case when account_status = 'deactivated'
                           then exists (select 1 from user_roles r
@@ -583,7 +579,7 @@ export async function acceptInvitation(
           employeeId = previous.id;
           await tx`
             update employees set name = ${name}, company_email = ${inv.email},
-              password_hash = ${newPasswordHash}, account_status = 'active', active = false,
+              account_status = 'active', active = false,
               activated_at = coalesce(activated_at, now()),
               deleted_at = null, deleted_by = null, former_company_email = null,
               deactivated_at = null, updated_at = now()
@@ -591,10 +587,10 @@ export async function acceptInvitation(
         } else {
           const [created] = await tx<Row[]>`
             insert into employees (id, name, company_email, phone, department, site, active,
-                                   account_status, password_hash, activated_at)
+                                   account_status, activated_at)
             values (coalesce(${inv.employee_id}::text, 'STF-' || lpad(nextval('staff_id_seq')::text, 4, '0')),
                     ${name}, ${inv.email}, '', 'Admin', 'Head Office – Gulshan', false,
-                    'active', ${newPasswordHash}, now())
+                    'active', now())
             returning id`;
           employeeId = created.id;
         }
