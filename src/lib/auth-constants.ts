@@ -96,11 +96,16 @@ export const ROLE_HOME: Record<RoleValue, string> = {
  * place as ROLE_HOME, so the button names where it is actually going.
  */
 export const ROLE_HOME_LABEL: Record<RoleValue, string> = {
+  // An employee's home is the day's offer, and booking from it is the thing they came to do, so
+  // the button names that rather than a dashboard they don't think of themselves as having.
   employee: "See today's offer",
+  // Every other role names its own workspace. "Admin console" stood for two different roles at
+  // once, and "Fulfillment" named a page without saying whose it was -- so a System Admin and a
+  // Super Admin were offered the same words for different places.
   factory_operator: "Operator dashboard",
-  head_office_coordinator: "Fulfillment",
-  system_admin: "Admin console",
-  super_admin: "Admin console",
+  head_office_coordinator: "Coordinator dashboard",
+  system_admin: "System Admin dashboard",
+  super_admin: "Super Admin dashboard",
 };
 
 export const ROLE_PRECEDENCE: RoleValue[] = [
