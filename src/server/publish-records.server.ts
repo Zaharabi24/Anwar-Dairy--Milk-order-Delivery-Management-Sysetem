@@ -6,7 +6,11 @@
 // not what would happen if it ran again today.
 import { getDb } from "./db/client.server";
 import { requirePermission } from "./auth/session.server";
-import { drainPublicationMail, resumePendingPublications } from "./auth/booking-links.server";
+import {
+  enqueuePublication,
+  isQueueEnabled,
+  resumePendingPublications,
+} from "./mail/mail-queue.server";
 import type { EmailRecordQuery } from "@/lib/records.schemas";
 import type { EmailRecordPage, EmailRecordRow, PublishRecord } from "@/lib/records-types";
 
@@ -25,11 +29,10 @@ const iso = (value: unknown): string | null =>
 export async function listPublishRecords(): Promise<PublishRecord[]> {
   await requirePermission("batches.manage");
 
-  // Opening this page finishes any send that was cut short. A publish queues 360 messages and
-  // then sends them in the background; a redeploy, a restart or a runtime that stops work once
-  // the response is sent will interrupt that, and the rows left behind would otherwise wait
-  // forever. Capped so the page still renders promptly -- whatever is left is picked up next time.
-  await resumePendingPublications({ maxMessages: 60, timeBudgetMs: 4000 }).catch((error) =>
+  // Opening this page puts back anything a restart left behind. With Redis the jobs are already
+  // there and this costs one query; without it, this is what restarts the in-process sender.
+  // Either way it returns at once -- it hands work over, it does not wait for the mail to go.
+  await resumePendingPublications().catch((error: unknown) =>
     console.error("[mail] resuming pending publications failed", error),
   );
 
@@ -43,8 +46,8 @@ export async function listPublishRecords(): Promise<PublishRecord[]> {
            (select count(*) from batch_emails e
              where e.publication_id = p.id and e.status = 'skipped') as skipped_count,
            (select count(*) from batch_emails e
-             where e.publication_id = p.id and e.attempts < 3
-               and e.status in ('queued', 'sending', 'failed')) as pending_count,
+             where e.publication_id = p.id and e.attempts < 5
+               and e.status in ('queued', 'sending')) as pending_count,
            (select coalesce(sum(o.litres), 0) from orders o
              where o.batch_no = p.batch_no and o.status <> 'Cancelled') as booked_litres,
            (select count(*) from orders o
@@ -89,8 +92,9 @@ export async function listPublishRecords(): Promise<PublishRecord[]> {
 export async function listEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPage> {
   await requirePermission("email_records.view");
 
-  // Same as Publish Records: looking at the records is a good moment to finish sending them.
-  await resumePendingPublications({ maxMessages: 60, timeBudgetMs: 4000 }).catch((error) =>
+  // Same as Publish Records: looking at the records is a good moment to make sure the rest is
+  // on its way.
+  await resumePendingPublications().catch((error: unknown) =>
     console.error("[mail] resuming pending publications failed", error),
   );
 
@@ -166,13 +170,14 @@ export async function listPublishedBatchNumbers(): Promise<string[]> {
 }
 
 /**
- * Sends the rest of one publication's mail now, for the operator who doesn't want to wait for the
- * next page load to nudge it along.
+ * Puts a publication's outstanding mail back on the queue, for the operator who wants to be sure
+ * it is moving rather than wait for the next page load to do it.
  *
- * Capped per call so the request answers quickly; the button can be pressed again, and the page
- * shows how many are left.
+ * It does not wait for the sending. The rate is the provider's, not ours: a full directory is
+ * around a quarter of an hour whoever asks for it, and the page shows how far it has got.
  */
 export async function resumePublicationMail(input: { publicationId: string }) {
   await requirePermission("batches.manage");
-  return drainPublicationMail(input.publicationId, { maxMessages: 120, timeBudgetMs: 20_000 });
+  const queued = await enqueuePublication(input.publicationId);
+  return { queued, durable: isQueueEnabled() };
 }

@@ -78,9 +78,9 @@ function PublishRecords() {
     try {
       const result = await resumePublicationMailFn({ data: { publicationId: id } });
       toast.success(
-        result.remaining > 0
-          ? `${result.sent} more sent, ${result.remaining} still to go.`
-          : `${result.sent} more sent. Nothing left to send.`,
+        result.queued > 0
+          ? `${result.queued} message${result.queued === 1 ? "" : "s"} back on the queue. They go out at the rate the mail server accepts.`
+          : "Nothing left to send.",
       );
       await router.invalidate();
     } catch {
@@ -122,7 +122,7 @@ function PublishRecords() {
         <StatCard
           label={totalPending ? "Still to send" : "Failed"}
           value={totalPending || totalFailed}
-          {...(totalPending ? { hint: "Resumes on its own each time this page is opened" } : {})}
+          {...(totalPending ? { hint: "Going out at the rate the mail server accepts" } : {})}
         />
       </div>
 
@@ -259,7 +259,7 @@ function PublishRow({
         <Td>
           {r.pendingCount ? (
             <Button variant="outline" size="sm" disabled={resuming} onClick={onResume}>
-              {resuming ? "Sending…" : "Send the rest"}
+              {resuming ? "Queueing…" : "Send the rest"}
             </Button>
           ) : null}
         </Td>
@@ -290,7 +290,7 @@ function PublishRow({
               {r.pendingCount ? (
                 <Detail
                   label="Still to send"
-                  value={`${r.pendingCount} — the send was interrupted and picks up again whenever this page is opened`}
+                  value={`${r.pendingCount} — queued, and going out at the rate the mail server accepts`}
                 />
               ) : null}
             </dl>

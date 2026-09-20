@@ -15,6 +15,21 @@ services:
       timeout: 5s
       retries: 20
 
+  # Holds the batch mail queue. Publishing to the Employee Database is hundreds of messages that
+  # Microsoft 365 only accepts 30 a minute of, so the send is a quarter of an hour of paced work;
+  # keeping it here is what lets it survive a restart or a redeploy partway through.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
   web:
     build:
       context: .
@@ -24,6 +39,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_healthy
       mailpit:
         condition: service_started
     environment:
@@ -32,6 +49,15 @@ services:
       PORT: 3000
       TZ: ${TZ:-Asia/Dhaka}
       DATABASE_URL: postgres://${POSTGRES_USER:-anwar}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-anwar_fresh}
+
+      # Batch mail queue. Without it the app still sends, in-process and at the same rate, but a
+      # restart partway through a send has to be picked up again rather than simply carrying on.
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+
+      # Messages a minute, across the whole app. Microsoft 365 refuses client submissions above
+      # 30 a minute per account ("421 4.4.2 ... submission rate ... exceeded"), so this stays
+      # under it. Raise it only to match what your provider actually allows.
+      MAIL_RATE_PER_MINUTE: ${MAIL_RATE_PER_MINUTE:-25}
 
       # Base URL used in password setup/reset emails, e.g. https://fresh.anwargroup.net
       APP_URL: ${APP_URL:-}
@@ -100,3 +126,4 @@ services:
 
 volumes:
   db-data:
+  redis-data:

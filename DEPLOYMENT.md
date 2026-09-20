@@ -231,6 +231,8 @@ holds no data.
 | `SMTP_ANONYMOUS_FALLBACK` | `true` | `false` requires authentication and never relays without credentials — see [Several mail servers](#several-mail-servers) |
 | `MAILPIT_UI_AUTH` | — | `username:password` sign-in for the Mailpit inbox. **Set it** — the inbox shows invitation and password links |
 | `MAIL_FROM` | `no-reply@anwargroup.net` | From address for SMTP |
+| `REDIS_URL` | `redis://redis:6379` | Batch mail queue — see [The batch mail queue](#the-batch-mail-queue). Unset it to send in-process instead |
+| `MAIL_RATE_PER_MINUTE` | `25` | Messages a minute, across the whole app. Microsoft 365 refuses above 30 per account |
 | `SEED_DEMO_DATA` | `false` | **Keep `false` in production.** Demo accounts share a known password |
 | `DEMO_PASSWORD` | `Demo@12345` | Only used with demo data |
 | `SESSION_TTL_DAYS` | `7` | Days of **inactivity** before a session lapses. Each request renews it, so someone using the app is never signed out mid-session. Leave it unset rather than blank — a blank value is ignored (with a warning in the log) and 7 is used |
@@ -242,6 +244,40 @@ holds no data.
 With no email transport configured, messages aren't delivered. They're recorded in `email_outbox`
 and their links are printed in the `web` logs. The Team page warns when an invitation couldn't be
 emailed and offers "Copy invite link".
+
+## The batch mail queue
+
+Publishing a batch emails everyone active in the Employee Database — around 360 people. That is
+not a request's worth of work, for one reason that no amount of code can argue with: **Microsoft
+365 accepts 30 client submissions a minute per account.** Above that it answers
+
+```
+421 4.4.2 Message submission rate for this client has exceeded the configured limit
+```
+
+and drops the connection, so a burst doesn't just lose one message, it loses the run. So the send
+is paced at `MAIL_RATE_PER_MINUTE` (25, leaving room for password resets sharing the mailbox) and
+a full directory takes about a quarter of an hour. That is the floor for any approach that goes
+through 365; the queue is there to make the quarter of an hour reliable, not shorter.
+
+How it works:
+
+- Publishing writes one `batch_emails` row per recipient and answers immediately. Nothing is sent
+  inside the request.
+- A **BullMQ worker on Redis** sends them, one at a time, inside the rate limit. The limiter lives
+  in Redis, so two app instances still send 25 a minute *between them*.
+- A refusal that means "not now" (any 4xx, a dropped connection, a throttle) is retried up to five
+  times with exponential backoff starting at 30 seconds. A refusal that means "no" fails once.
+- The worker starts with the app, so a send interrupted by a restart or a redeploy carries on by
+  itself. Opening **Publish Records** or **Email Records** also puts anything outstanding back on
+  the queue, and Publish Records has a **Send the rest** button.
+- Every message's outcome is on its own row, so **Email Records** shows exactly who was written
+  to, when, and why anything hasn't arrived.
+
+**Without `REDIS_URL`** the app still works: the same messages go out from the same queue table at
+the same rate, sent in-process. What you lose is durability — a restart partway through stops that
+run, and it resumes on the next publish or the next look at the records rather than immediately.
+Redis is strongly preferred in production and is already in `docker-compose.yml`.
 
 ## Email delivery
 

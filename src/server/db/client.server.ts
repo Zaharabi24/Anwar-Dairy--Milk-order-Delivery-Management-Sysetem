@@ -24,6 +24,21 @@ export function getDb(): Promise<Sql> {
     .then(({ sql, startupMail }) => {
       // Sent once the pool is ready (sendMail itself uses getDb, so it can't run inside connect).
       for (const mail of startupMail) queueMicrotask(() => void sendMail(mail));
+      // The mail worker starts with the app, not with the first publish: a queue left part-sent
+      // by a restart has to carry on by itself, without waiting for somebody to open a page.
+      queueMicrotask(() => {
+        void import("../mail/mail-queue.server")
+          .then(({ startMailWorker, resumePendingPublications }) => {
+            startMailWorker();
+            return resumePendingPublications();
+          })
+          .then((result) => {
+            if (result?.pending) {
+              console.info(`[mail] ${result.pending} message(s) still to send from a previous run`);
+            }
+          })
+          .catch((error: unknown) => console.error("[mail] could not start the queue", error));
+      });
       // Say at boot whether email will really reach people, instead of finding out from users.
       queueMicrotask(() => {
         void verifyMailTransport().then((check) => {

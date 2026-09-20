@@ -7,7 +7,8 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
 - Tailwind + shadcn/ui
 - Bun: `bun.lock` is the lockfile, never use npm
 - PostgreSQL 17 through the `postgres` driver, with plain SQL migrations. No Supabase
-- Email: Microsoft Graph, or SMTP (Mailpit locally)
+- Email: Microsoft Graph, or SMTP (Mailpit locally). Batch mail goes out through a BullMQ queue
+  on Redis, paced to the provider's rate limit; see `src/server/mail/`
 - Docker Compose, deployed on Dokploy behind Traefik
 
 ## Ports
@@ -16,6 +17,7 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
 | Vite dev server | 8080 |
 | Production Node server | 3000 (`.output/server/index.mjs`) |
 | PostgreSQL | 5432 |
+| Redis (batch mail queue) | 6379 |
 | Mailpit inbox | 8025 (SMTP 1025) |
 
 ## Layout
@@ -56,7 +58,7 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
 
 ## Commands
 ```sh
-docker compose up -d db mailpit   # local database + mail catcher
+docker compose up -d db redis mailpit  # database, mail queue, mail catcher
 bun run dev                        # dev server on :8080 (settings in .env.local)
 bunx tsc --noEmit                  # type check
 bun run build                      # set NITRO_PRESET=node-server for a Node build

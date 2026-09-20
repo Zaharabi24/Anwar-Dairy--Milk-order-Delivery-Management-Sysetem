@@ -3,7 +3,8 @@
 // entry and notifications) and returns a fresh snapshot for the caller.
 import { getDb, type Tx } from "./db/client.server";
 import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
-import { drainPublicationMail, recordPublication } from "./auth/booking-links.server";
+import { recordPublication } from "./auth/booking-links.server";
+import { enqueuePublication } from "./mail/mail-queue.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/auth-constants";
@@ -395,17 +396,14 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
     }
   });
 
-  // The queue is written and committed, so the mail is safe whatever happens next. Starting the
-  // send here is an optimisation, not the mechanism: it gets most of it out while the operator is
-  // still on the page. What guarantees delivery is that anything left over is still queued, and
-  // Publish Records and Email Records resume it whenever they are opened.
-  //
-  // Not awaited, and capped: the operator should not watch a progress bar for 360 messages, and a
-  // runtime that stops work once the response is sent should not have been relied on for them.
+  // The rows are committed, so the mail is safe whatever happens next. Handing them to the queue
+  // is the last step: the worker sends them at the rate the provider allows, retries what it has
+  // to, and carries on across restarts. The operator gets their answer in the meantime -- a full
+  // directory is a quarter of an hour of paced sending, which is nobody's page load.
   if (publicationId) {
     const id = publicationId as string;
-    void drainPublicationMail(id).catch((error) =>
-      console.error("[mail] booking links failed", error),
+    void enqueuePublication(id).catch((error: unknown) =>
+      console.error("[mail] queueing booking links failed", error),
     );
   }
   return outcome;

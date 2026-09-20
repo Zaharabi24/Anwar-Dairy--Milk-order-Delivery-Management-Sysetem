@@ -12,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Transporter } from "nodemailer";
 import { getDb } from "../db/client.server";
+import { isRateLimited, MAIL_RATE_PER_MINUTE } from "../mail/rate.server";
 import type { MailDelivery } from "@/lib/auth-types";
 
 // HTML email can't read CSS variables, so the brand colour lives here. This is the same green as
@@ -283,8 +284,20 @@ async function smtpTransport(candidate: SmtpCandidate): Promise<Transporter> {
           forceAuth: true,
         }
       : {}),
+    // One connection, and no faster than the provider takes.
+    //
+    // Microsoft 365 counts client submissions per account and refuses above 30 a minute with
+    // "421 4.4.2 Message submission rate for this client has exceeded the configured limit" --
+    // then drops the connection, so a burst becomes a run of failures rather than one. Three
+    // parallel connections reached that in seconds when a published batch went to the whole
+    // directory. Nodemailer's own limiter is the innermost guard: the queue paces the batch mail,
+    // and this makes sure a password reset arriving at the same moment can't push the account
+    // over the line anyway.
     pool: true,
-    maxConnections: 3,
+    maxConnections: 1,
+    maxMessages: 100,
+    rateDelta: 60_000,
+    rateLimit: MAIL_RATE_PER_MINUTE,
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 20_000,
@@ -340,6 +353,11 @@ async function sendViaSmtp(msg: MailMessage) {
       if (preferredId === candidate.id) preferredId = undefined;
       if (candidates.length > 1)
         console.warn(`[mail] ${candidate.label} wouldn't take the message: ${why}`);
+      // A rate limit is not this host refusing the message -- it is this host saying "not yet".
+      // Trying the next candidate answers the wrong question, and when that candidate is the
+      // unauthenticated one it turns a plain "slow down" into "530 Client was not authenticated
+      // to send anonymous mail", which reads like a broken password. Stop and let it be retried.
+      if (isRateLimited(error)) throw error;
     }
   }
   throw candidates.length > 1 ? new MailHostsRefusedError(refusals) : lastError;
