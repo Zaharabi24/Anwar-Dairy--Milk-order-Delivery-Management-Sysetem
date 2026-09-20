@@ -524,24 +524,17 @@ export async function acceptInvitation(
     let employeeId: string;
     let fullName: string;
     if (account?.account_status === "active" && account.password_hash) {
-      // Existing account: prove ownership with the current password, then add the role.
-      if ((await failuresFor(tx, inv.email)) >= LOCK_AFTER) {
-        return fail(`Too many attempts. Try again in ${LOCK_MINUTES} minutes.`);
-      }
-      if (
-        !input.current_password ||
-        !(await verifyPassword(input.current_password, account.password_hash))
-      ) {
-        await logAttempt(tx, inv.email, "bad_password", "staff");
-        return fail("That password isn't right.", { current_password: "Incorrect password." });
-      }
+      // Already has an account: the role is simply added to it. Their password is not touched and
+      // is not asked for -- the emailed link is what proves this is them, the same proof that
+      // signs in a new joiner, and the same proof staff password reset already accepts.
       employeeId = account.id;
       fullName = account.name;
     } else {
-      const errors: FieldErrors = {};
-      const name = input.full_name?.trim() ?? "";
-      if (!name) errors["full_name"] = "Full name is required.";
-      if (Object.keys(errors).length) return fail("Please fix the highlighted fields.", errors);
+      // A name if one was offered, otherwise the one the Super Admin typed on the invitation, and
+      // failing both the address itself. Never a question put to the person: they clicked a link
+      // to start work, and a name is something they can correct in Profile.
+      const name =
+        input.full_name?.trim() || inv.full_name?.trim() || inv.email.split("@")[0] || "New member";
       fullName = name;
 
       if (account) {
