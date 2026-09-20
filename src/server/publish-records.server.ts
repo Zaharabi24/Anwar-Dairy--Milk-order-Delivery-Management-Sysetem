@@ -6,6 +6,7 @@
 // not what would happen if it ran again today.
 import { getDb } from "./db/client.server";
 import { requirePermission } from "./auth/session.server";
+import { drainPublicationMail, resumePendingPublications } from "./auth/booking-links.server";
 import type { EmailRecordQuery } from "@/lib/records.schemas";
 import type { EmailRecordPage, EmailRecordRow, PublishRecord } from "@/lib/records-types";
 
@@ -23,6 +24,15 @@ const iso = (value: unknown): string | null =>
  */
 export async function listPublishRecords(): Promise<PublishRecord[]> {
   await requirePermission("batches.manage");
+
+  // Opening this page finishes any send that was cut short. A publish queues 360 messages and
+  // then sends them in the background; a redeploy, a restart or a runtime that stops work once
+  // the response is sent will interrupt that, and the rows left behind would otherwise wait
+  // forever. Capped so the page still renders promptly -- whatever is left is picked up next time.
+  await resumePendingPublications({ maxMessages: 60, timeBudgetMs: 4000 }).catch((error) =>
+    console.error("[mail] resuming pending publications failed", error),
+  );
+
   const sql = await getDb();
 
   const rows = await sql<Row[]>`
@@ -32,6 +42,9 @@ export async function listPublishRecords(): Promise<PublishRecord[]> {
            b.status as batch_status, b.product,
            (select count(*) from batch_emails e
              where e.publication_id = p.id and e.status = 'skipped') as skipped_count,
+           (select count(*) from batch_emails e
+             where e.publication_id = p.id and e.attempts < 3
+               and e.status in ('queued', 'sending', 'failed')) as pending_count,
            (select coalesce(sum(o.litres), 0) from orders o
              where o.batch_no = p.batch_no and o.status <> 'Cancelled') as booked_litres,
            (select count(*) from orders o
@@ -44,6 +57,7 @@ export async function listPublishRecords(): Promise<PublishRecord[]> {
   return rows.map((r) => ({
     id: String(r["id"]),
     batchNo: r["batch_no"] as string,
+    pendingCount: Number(r["pending_count"]),
     product: (r["product"] as string) ?? "",
     batchStatus: (r["batch_status"] as string) ?? "",
     publishedAt: iso(r["published_at"])!,
@@ -74,6 +88,12 @@ export async function listPublishRecords(): Promise<PublishRecord[]> {
  */
 export async function listEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPage> {
   await requirePermission("email_records.view");
+
+  // Same as Publish Records: looking at the records is a good moment to finish sending them.
+  await resumePendingPublications({ maxMessages: 60, timeBudgetMs: 4000 }).catch((error) =>
+    console.error("[mail] resuming pending publications failed", error),
+  );
+
   const sql = await getDb();
 
   const search = query.search.trim().toLowerCase();
@@ -143,4 +163,16 @@ export async function listPublishedBatchNumbers(): Promise<string[]> {
     from batch_publications group by batch_no
     order by max(published_at) desc limit 200`;
   return rows.map((r) => r["batch_no"] as string);
+}
+
+/**
+ * Sends the rest of one publication's mail now, for the operator who doesn't want to wait for the
+ * next page load to nudge it along.
+ *
+ * Capped per call so the request answers quickly; the button can be pressed again, and the page
+ * shows how many are left.
+ */
+export async function resumePublicationMail(input: { publicationId: string }) {
+  await requirePermission("batches.manage");
+  return drainPublicationMail(input.publicationId, { maxMessages: 120, timeBudgetMs: 20_000 });
 }

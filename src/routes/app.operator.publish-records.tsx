@@ -1,6 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,7 +13,7 @@ import {
 } from "@/components/ui/select";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { listPublishRecordsFn } from "@/functions/records.functions";
+import { listPublishRecordsFn, resumePublicationMailFn } from "@/functions/records.functions";
 import { dateShort, taka, timeShort } from "@/lib/format";
 import type { PublishRecord, PublishStatus } from "@/lib/records-types";
 
@@ -63,9 +65,30 @@ function StatusBadge({ status }: { status: PublishStatus }) {
 
 function PublishRecords() {
   const records = Route.useLoaderData();
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
+  const [resuming, setResuming] = useState<string | null>(null);
+
+  // Opening this page already resumed anything unfinished. This is for the operator who wants to
+  // push the rest out now rather than wait, and it can be pressed again until nothing is left.
+  async function resume(id: string) {
+    setResuming(id);
+    try {
+      const result = await resumePublicationMailFn({ data: { publicationId: id } });
+      toast.success(
+        result.remaining > 0
+          ? `${result.sent} more sent, ${result.remaining} still to go.`
+          : `${result.sent} more sent. Nothing left to send.`,
+      );
+      await router.invalidate();
+    } catch {
+      toast.error("Couldn't send the rest just now. Try again.");
+    } finally {
+      setResuming(null);
+    }
+  }
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -83,6 +106,7 @@ function PublishRecords() {
   const totalRecipients = records.reduce((n, r) => n + r.recipients, 0);
   const totalSent = records.reduce((n, r) => n + r.sentCount, 0);
   const totalFailed = records.reduce((n, r) => n + r.failedCount, 0);
+  const totalPending = records.reduce((n, r) => n + r.pendingCount, 0);
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -95,7 +119,11 @@ function PublishRecords() {
         <StatCard label="Batches published" value={records.length} />
         <StatCard label="Emails addressed" value={totalRecipients} />
         <StatCard label="Delivered" value={totalSent} emphasis />
-        <StatCard label="Failed" value={totalFailed} />
+        <StatCard
+          label={totalPending ? "Still to send" : "Failed"}
+          value={totalPending || totalFailed}
+          {...(totalPending ? { hint: "Resumes on its own each time this page is opened" } : {})}
+        />
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
@@ -144,6 +172,7 @@ function PublishRecords() {
                 <Th>Email status</Th>
                 <Th>Booked</Th>
                 <Th> </Th>
+                <Th> </Th>
               </tr>
             </thead>
             <tbody>
@@ -154,6 +183,8 @@ function PublishRecords() {
                   index={i}
                   open={open === r.id}
                   onToggle={() => setOpen(open === r.id ? null : r.id)}
+                  resuming={resuming === r.id}
+                  onResume={() => void resume(r.id)}
                 />
               ))}
             </tbody>
@@ -169,11 +200,15 @@ function PublishRow({
   index,
   open,
   onToggle,
+  resuming,
+  onResume,
 }: {
   record: PublishRecord;
   index: number;
   open: boolean;
   onToggle: () => void;
+  resuming: boolean;
+  onResume: () => void;
 }) {
   return (
     <>
@@ -203,6 +238,7 @@ function PublishRow({
             {r.sentCount} sent
             {r.failedCount ? `, ${r.failedCount} failed` : ""}
             {r.skippedCount ? `, ${r.skippedCount} no address` : ""}
+            {r.pendingCount ? `, ${r.pendingCount} to go` : ""}
           </span>
         </Td>
         <Td>
@@ -220,10 +256,17 @@ function PublishRow({
             {open ? "Hide" : "Details"}
           </button>
         </Td>
+        <Td>
+          {r.pendingCount ? (
+            <Button variant="outline" size="sm" disabled={resuming} onClick={onResume}>
+              {resuming ? "Sending…" : "Send the rest"}
+            </Button>
+          ) : null}
+        </Td>
       </motion.tr>
       {open ? (
         <tr className="border-b border-border/60 bg-secondary/40 last:border-0">
-          <td colSpan={8} className="px-4 py-4">
+          <td colSpan={9} className="px-4 py-4">
             <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
               <Detail label="Rate" value={`${taka(r.ratePerLitre)} per litre`} />
               <Detail label="Offered" value={`${r.saleableLitres} litres`} />
@@ -244,6 +287,12 @@ function PublishRow({
                 label="Addressed"
                 value={`${r.recipients} in the directory, ${r.sentCount} delivered`}
               />
+              {r.pendingCount ? (
+                <Detail
+                  label="Still to send"
+                  value={`${r.pendingCount} — the send was interrupted and picks up again whenever this page is opened`}
+                />
+              ) : null}
             </dl>
           </td>
         </tr>

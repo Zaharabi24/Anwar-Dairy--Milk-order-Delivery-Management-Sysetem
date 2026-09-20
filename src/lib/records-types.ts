@@ -24,6 +24,8 @@ export interface PublishRecord {
   failedCount: number;
   /** In the directory and active, but with no address to send to. */
   skippedCount: number;
+  /** Still to send, including failures worth retrying. Above zero means the send is unfinished. */
+  pendingCount: number;
   status: PublishStatus;
   completedAt: string | null;
   bookedLitres: number;

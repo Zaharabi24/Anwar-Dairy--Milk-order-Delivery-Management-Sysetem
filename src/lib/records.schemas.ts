@@ -28,3 +28,7 @@ export const EMPTY_EMAIL_QUERY: EmailRecordQuery = {
   limit: 100,
   offset: 0,
 };
+
+export const resumePublicationInput = z.object({
+  publicationId: z.string().trim().min(1).max(40),
+});

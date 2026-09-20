@@ -3,11 +3,7 @@
 // entry and notifications) and returns a fresh snapshot for the caller.
 import { getDb, type Tx } from "./db/client.server";
 import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
-import {
-  issueBookingLinks,
-  sendBookingLinks,
-  type PublishMailJob,
-} from "./auth/booking-links.server";
+import { drainPublicationMail, recordPublication } from "./auth/booking-links.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
 import { ROLE_LABEL } from "@/lib/auth-constants";
@@ -354,9 +350,9 @@ async function lockOrder(tx: Tx, orderNo: string): Promise<Row> {
 
 export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
   const user = await requirePermission("batches.manage");
-  // Filled inside the transaction, sent after it commits: the mail server must not be able to
+  // Queued inside the transaction, sent after it commits: the mail server must not be able to
   // hold the publish open, or roll it back by failing.
-  let publishMail: PublishMailJob | null = null;
+  let publicationId: string | null = null;
   const outcome = await mutate(user, async (tx) => {
     const [batch] = await tx<
       Row[]
@@ -392,18 +388,23 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
         title: "Fresh milk available today",
         body: `Batch ${batchNo} is live at ৳${Number(batch.rate_per_litre)}/L — book before the cut-off.`,
       });
-      publishMail = await issueBookingLinks(tx, batchNo, {
+      publicationId = await recordPublication(tx, batchNo, {
         name: user.fullName,
         employeeId: user.employeeId,
       });
     }
   });
 
-  // Not awaited: publishing is done, and the operator shouldn't watch a progress bar while every
-  // employee's email goes out one at a time. Each address's outcome lands on its own batch_emails
-  // row, so Publish Records and Email Records fill in as the send proceeds.
-  if (publishMail) {
-    void sendBookingLinks(publishMail).catch((error) =>
+  // The queue is written and committed, so the mail is safe whatever happens next. Starting the
+  // send here is an optimisation, not the mechanism: it gets most of it out while the operator is
+  // still on the page. What guarantees delivery is that anything left over is still queued, and
+  // Publish Records and Email Records resume it whenever they are opened.
+  //
+  // Not awaited, and capped: the operator should not watch a progress bar for 360 messages, and a
+  // runtime that stops work once the response is sent should not have been relied on for them.
+  if (publicationId) {
+    const id = publicationId as string;
+    void drainPublicationMail(id).catch((error) =>
       console.error("[mail] booking links failed", error),
     );
   }
