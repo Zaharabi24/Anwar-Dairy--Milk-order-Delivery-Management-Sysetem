@@ -10,7 +10,6 @@ import {
   PackageCheck,
   User,
   ClipboardList,
-  Wallet,
   Settings2,
 } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
@@ -217,7 +216,6 @@ const roleCards = [
     title: "Head Office Coordinator",
     copy: "Work one delivery list, grouped by pickup point.",
   },
-  { icon: Wallet, title: "Finance", copy: "See who paid, how, and what's still outstanding." },
   { icon: Settings2, title: "System Admin", copy: "Manage people, pickup points and daily caps." },
 ];
 
