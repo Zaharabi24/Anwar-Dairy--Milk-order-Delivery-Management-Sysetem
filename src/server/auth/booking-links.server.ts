@@ -40,9 +40,12 @@ export async function recordPublication(
 ): Promise<string | null> {
   const [batch] = (await tx<Row[]>`
     select batch_no, booking_cutoff, delivery_date, delivery_window, rate_per_litre,
-           saleable_litres
-    from batches where batch_no = ${batchNo}`) as unknown as [BatchForMail | undefined];
+           saleable_litres, audience
+    from batches where batch_no = ${batchNo}`) as unknown as [
+    (BatchForMail & { audience: string }) | undefined,
+  ];
   if (!batch) return null;
+  const toEveryone = batch.audience !== "selected";
 
   // Where the milk is collected, as named on the batch. Listed in the email so nobody has to open
   // the app to find out where to go.
@@ -72,6 +75,11 @@ export async function recordPublication(
   //
   // Where there are two, the account holder wins. That is the identity they already sign in as
   // and the one their order history hangs off.
+  //
+  // A batch announced to chosen people narrows the same query rather than replacing it, so every
+  // rule still applies to them: active, not deleted, able to book, one address one email. The
+  // list is re-checked here and not trusted from when the batch was created -- somebody switched
+  // off in between is not written to.
   const employees = await tx<Row[]>`
     select * from (
       select distinct on (lower(e.company_email))
@@ -80,6 +88,8 @@ export async function recordPublication(
       where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
         and exists (select 1 from user_roles r
                     where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
+        and (${toEveryone} or exists (select 1 from batch_recipients br
+                                      where br.batch_no = ${batchNo} and br.employee_id = e.id))
       order by lower(e.company_email), (e.account_status is not null) desc, e.id
     ) one_each
     order by name, id`;

@@ -39,6 +39,14 @@ export const createBatchInput = z.object({
     deliveryWindow: text(100),
     deliveryPoints: z.array(id).min(1).max(50),
     note: text(1000),
+    /** Who hears about it: everyone in the Employee Database, or the people chosen below. */
+    audience: z.enum(["all", "selected"]),
+    /**
+     * Only read when the audience is "selected", and used as a filter over the directory rather
+     * than as the recipient list itself, so an id here can never reach somebody the directory
+     * wouldn't.
+     */
+    recipientIds: z.array(id).max(5_000),
   }),
 });
 

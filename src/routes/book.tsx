@@ -6,10 +6,10 @@ import { openBookingLinkFn } from "@/functions/auth.functions";
 /**
  * The link mailed to everyone in the Employee Database when a batch is published.
  *
- * It opens a booking session and sends them to the landing page, where the batch card and the
- * Book Milk button are. The work happens in the loader so the session cookie is set on the
- * redirect itself -- the landing page is then rendered for someone already recognised, with no
- * flash of the signed-out version.
+ * It opens a booking session and sends them to Today's Offer, where the batch and the Book Milk
+ * button are. The work happens in the loader so the session cookie is set on the redirect itself
+ * -- the offer is then rendered for someone already recognised, with no flash of a signed-out
+ * page and no sign-in step anywhere in between.
  *
  * A link that has expired or been withdrawn is answered here rather than being bounced to a
  * sign-in form the person has no account for.
@@ -25,7 +25,10 @@ export const Route = createFileRoute("/book")({
     // lives -- so they are told, instead of being shown an error about a link they never had.
     if (!token) return { reason: "no-link" as const };
     const result = await openBookingLinkFn({ data: { token } });
-    if (result.ok) throw redirect({ to: "/" });
+    // Straight to Today's Offer. The link is already theirs -- it opened a session for one
+    // person -- so the offer, and the booking that follows it, are their own without anything
+    // being carried in the address.
+    if (result.ok) throw redirect({ to: "/app/offer" });
     return { reason: result.reason };
   },
   component: LinkProblem,

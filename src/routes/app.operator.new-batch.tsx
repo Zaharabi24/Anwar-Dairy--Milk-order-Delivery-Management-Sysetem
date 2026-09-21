@@ -16,7 +16,11 @@ import {
 import { DateField } from "@/components/ui/date-field";
 import { addDays, atTime, sameDay, startOfDay } from "@/lib/dates";
 import { PageHeader } from "@/components/page-header";
+import { Checkbox } from "@/components/ui/checkbox";
+import { EmptyState } from "@/components/page-header";
+import { FILTER_SEARCH } from "@/components/ui/control-styles";
 import { useAppData } from "@/context/app-data";
+import type { BatchAudience } from "@/lib/types";
 import { taka } from "@/lib/format";
 
 export const Route = createFileRoute("/app/operator/new-batch")({
@@ -51,7 +55,7 @@ function to12Hour(value: string) {
 }
 
 function NewBatch() {
-  const { batches, deliveryPoints, addBatch } = useAppData();
+  const { batches, deliveryPoints, employees, addBatch } = useAppData();
   const navigate = useNavigate();
 
   const [producedText, setProducedText] = useState("640");
@@ -73,7 +77,31 @@ function NewBatch() {
   // once it reaches the foreign key.
   const [chosen, setChosen] = useState<string[] | null>(null);
 
+  // Who hears about the batch. Everyone is the default, which is what publishing has always done.
+  const [audience, setAudience] = useState<BatchAudience>("all");
+  const [recipients, setRecipients] = useState<Set<string>>(new Set());
+  const [recipientQuery, setRecipientQuery] = useState("");
+
   const activePoints = useMemo(() => deliveryPoints.filter((p) => p.active), [deliveryPoints]);
+
+  // Only people who can actually be written to. Offering somebody switched off, or with no
+  // address, would promise a delivery that can't happen.
+  const reachable = useMemo(
+    () => employees.filter((e) => e.active && e.companyEmail.trim()),
+    [employees],
+  );
+  const matchingEmployees = useMemo(() => {
+    const q = recipientQuery.trim().toLowerCase();
+    if (!q) return reachable;
+    return reachable.filter(
+      (e) =>
+        e.name.toLowerCase().includes(q) ||
+        e.id.toLowerCase().includes(q) ||
+        e.companyEmail.toLowerCase().includes(q) ||
+        e.department.toLowerCase().includes(q) ||
+        e.designation.toLowerCase().includes(q),
+    );
+  }, [reachable, recipientQuery]);
   // Filtered every render, so a point that is removed or deactivated drops out of the selection
   // instead of failing at save time.
   const points = (chosen ?? activePoints.map((p) => p.id)).filter((id) =>
@@ -118,6 +146,7 @@ function NewBatch() {
     saleable > produced ||
     minOrder > maxOrder ||
     points.length === 0 ||
+    (audience === "selected" && recipients.size === 0) ||
     cutoffPassed;
 
   async function submit() {
@@ -139,6 +168,8 @@ function NewBatch() {
       deliveryWindow: window,
       deliveryPoints: points,
       note,
+      audience,
+      recipientIds: audience === "selected" ? [...recipients] : [],
     });
     if (!saved) return;
     toast.success(`${saved.batchNo} saved as draft`);
@@ -315,6 +346,117 @@ function NewBatch() {
           ) : null}
         </div>
 
+        {/* Who is told when this is published. Decided here with the litres and the cutoff, not
+            at the moment of publishing, so it is reviewed on the publish screen like everything
+            else about the batch. */}
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div>
+            <h2 className="text-sm font-semibold">Who gets the email</h2>
+            <p className="text-xs text-muted-foreground">
+              Everyone chosen receives their own booking link when the batch is published.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <AudienceChoice
+              chosen={audience === "all"}
+              onChoose={() => setAudience("all")}
+              title="All employees"
+              detail="Everyone active in the Employee Database."
+              count={reachable.length}
+            />
+            <AudienceChoice
+              chosen={audience === "selected"}
+              onChoose={() => setAudience("selected")}
+              title="Selected employees"
+              detail="Only the people you pick below."
+              count={recipients.size}
+            />
+          </div>
+
+          {audience === "selected" ? (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <Input
+                  className={FILTER_SEARCH}
+                  placeholder="Search name, ID, email, department"
+                  value={recipientQuery}
+                  onChange={(e) => setRecipientQuery(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={matchingEmployees.length === 0}
+                  onClick={() => setRecipients(new Set(matchingEmployees.map((e) => e.id)))}
+                >
+                  Select all {recipientQuery.trim() ? "matching" : ""} ({matchingEmployees.length})
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={recipients.size === 0}
+                  onClick={() => setRecipients(new Set())}
+                >
+                  Clear
+                </Button>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
+                {matchingEmployees.length === 0 ? (
+                  <div className="p-6">
+                    <EmptyState title="Nobody matches" hint="Try a different search." />
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-border">
+                    {matchingEmployees.slice(0, 300).map((e) => (
+                      <li key={e.id}>
+                        <label className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary">
+                          <Checkbox
+                            checked={recipients.has(e.id)}
+                            onCheckedChange={() =>
+                              setRecipients((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(e.id)) next.delete(e.id);
+                                else next.add(e.id);
+                                return next;
+                              })
+                            }
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm font-medium">{e.name}</span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {e.id} · {e.companyEmail}
+                            </span>
+                          </span>
+                          <span className="hidden shrink-0 text-right text-xs text-muted-foreground sm:block">
+                            {e.department || "—"}
+                          </span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+              {matchingEmployees.length > 300 ? (
+                <p className="text-xs text-muted-foreground">
+                  Showing the first 300 of {matchingEmployees.length}. Narrow the search to reach
+                  the rest — &quot;Select all matching&quot; still takes every one of them.
+                </p>
+              ) : null}
+              {recipients.size === 0 ? (
+                <p className="text-sm text-destructive">Pick at least one employee.</p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {recipients.size} {recipients.size === 1 ? "employee" : "employees"} will be
+                  emailed when this batch is published.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </div>
+
         <Field label="Note for employees">
           <Textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} />
         </Field>
@@ -377,5 +519,36 @@ function StepperInput({
         </Button>
       </div>
     </div>
+  );
+}
+
+function AudienceChoice({
+  chosen,
+  onChoose,
+  title,
+  detail,
+  count,
+}: {
+  chosen: boolean;
+  onChoose: () => void;
+  title: string;
+  detail: string;
+  count: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onChoose}
+      aria-pressed={chosen}
+      className={`rounded-lg border p-4 text-left transition-colors ${
+        chosen ? "border-primary bg-primary/5" : "border-border hover:bg-secondary"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">{title}</span>
+        <span className="text-sm text-muted-foreground">{count}</span>
+      </div>
+      <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+    </button>
   );
 }

@@ -104,6 +104,8 @@ export const activeBatch: DailyMilkBatch = {
   deliveryPoints: ["dp-gulshan", "dp-savar"],
   note: "Chilled at 4°C. Please bring your own carry bag.",
   status: "Active",
+  audience: "all" as const,
+  recipientIds: [],
 };
 
 const historyShape = [
@@ -136,6 +138,8 @@ export const historicalBatches: DailyMilkBatch[] = historyShape.map((h, i) => {
     deliveryPoints: ["dp-gulshan", "dp-savar"],
     note: "Chilled at 4°C.",
     status: "Closed",
+    audience: "all" as const,
+    recipientIds: [],
   };
 });
 

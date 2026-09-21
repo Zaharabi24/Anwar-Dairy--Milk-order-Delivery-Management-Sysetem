@@ -13,7 +13,10 @@ export const Route = createFileRoute("/app/operator/publish")({
       { title: "Review and publish — Anwar Organic" },
       { name: "description", content: "Preview the batch as employees see it, then publish it." },
       { property: "og:title", content: "Review and publish — Anwar Organic" },
-      { property: "og:description", content: "Preview the batch as employees see it, then publish it." },
+      {
+        property: "og:description",
+        content: "Preview the batch as employees see it, then publish it.",
+      },
     ],
   }),
   component: Publish,
@@ -22,7 +25,8 @@ export const Route = createFileRoute("/app/operator/publish")({
 function Publish() {
   const { batches, deliveryPoints, setBatchStatus } = useAppData();
   const navigate = useNavigate();
-  const draft = batches.find((b) => b.status === "Draft") ?? batches.find((b) => b.status === "Active");
+  const draft =
+    batches.find((b) => b.status === "Draft") ?? batches.find((b) => b.status === "Active");
 
   if (!draft) {
     return (
@@ -58,15 +62,32 @@ function Publish() {
         </div>
         <dl className="grid gap-x-8 gap-y-4 p-6 sm:grid-cols-2">
           <Row label="Production date" value={dateShort(draft.productionDate)} />
-          <Row label="Booking cutoff" value={`${dateShort(draft.bookingCutoff)}, ${timeShort(draft.bookingCutoff)}`} />
+          <Row
+            label="Booking cutoff"
+            value={`${dateShort(draft.bookingCutoff)}, ${timeShort(draft.bookingCutoff)}`}
+          />
           <Row label="Delivery date" value={dateShort(draft.deliveryDate)} />
           <Row label="Delivery window" value={draft.deliveryWindow} />
-          <Row label="Order limits" value={`${draft.minOrder}–${draft.maxOrder} L, cap ${draft.employeeCap} L`} />
+          <Row
+            label="Order limits"
+            value={`${draft.minOrder}–${draft.maxOrder} L, cap ${draft.employeeCap} L`}
+          />
           <Row
             label="Delivery points"
             value={draft.deliveryPoints
               .map((id) => deliveryPoints.find((p) => p.id === id)?.name ?? id)
               .join(", ")}
+          />
+          {/* The last thing to check before it goes out, and the one that can't be taken back. */}
+          <Row
+            label="Email goes to"
+            value={
+              draft.audience === "selected"
+                ? `${draft.recipientIds.length} selected ${
+                    draft.recipientIds.length === 1 ? "employee" : "employees"
+                  }`
+                : "All active employees"
+            }
           />
           <div className="sm:col-span-2">
             <dt className="text-sm text-muted-foreground">Note</dt>

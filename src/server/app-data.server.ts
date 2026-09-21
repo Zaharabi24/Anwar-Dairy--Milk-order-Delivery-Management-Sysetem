@@ -101,6 +101,8 @@ const toBatch = (r: Row): DailyMilkBatch => ({
   deliveryPoints: r.delivery_points ?? [],
   note: r.note,
   status: r.status,
+  audience: r.audience ?? "all",
+  recipientIds: r.recipient_ids ?? [],
 });
 
 const toOrder = (r: Row): Order => ({
@@ -213,10 +215,13 @@ export async function readSnapshot(user?: SessionUser): Promise<AppSnapshot> {
         order by e.seq desc`,
       tx`
         select b.*,
-               coalesce(array_agg(bdp.delivery_point_id order by bdp.position)
-                          filter (where bdp.delivery_point_id is not null), '{}') as delivery_points
+               coalesce(array_agg(distinct bdp.delivery_point_id)
+                          filter (where bdp.delivery_point_id is not null), '{}') as delivery_points,
+               coalesce(array_agg(distinct br.employee_id)
+                          filter (where br.employee_id is not null), '{}') as recipient_ids
         from batches b
         left join batch_delivery_points bdp on bdp.batch_no = b.batch_no
+        left join batch_recipients br on br.batch_no = b.batch_no
         where ${staff} or b.status <> 'Draft'
         group by b.batch_no
         order by b.seq desc`,
@@ -474,10 +479,29 @@ export async function createBatch({ batch }: CreateBatchInput) {
       delivery_window: batch.deliveryWindow,
       note: batch.note,
       status: "Draft",
+      audience: batch.audience,
     })}`;
     await tx`insert into batch_delivery_points ${tx(
       points.map((id, position) => ({ batch_no: batchNo, delivery_point_id: id, position })),
     )}`;
+
+    // The chosen recipients, filtered through the directory on the way in: an id that isn't an
+    // active employee is simply not stored, so it can't turn into a recipient later.
+    if (batch.audience === "selected") {
+      const chosen = [...new Set(batch.recipientIds)];
+      if (!chosen.length) {
+        throw new AppError("Choose who gets the email, or set it to go to all employees.");
+      }
+      const known = await tx<Row[]>`
+        select id from employees
+        where id = any(${chosen}::text[]) and active and deleted_at is null`;
+      if (!known.length) {
+        throw new AppError("None of the people chosen are active in the Employee Database.");
+      }
+      await tx`insert into batch_recipients ${tx(
+        known.map((e) => ({ batch_no: batchNo, employee_id: e.id as string })),
+      )}`;
+    }
 
     await audit(tx, {
       actor: user.fullName,
@@ -486,7 +510,13 @@ export async function createBatch({ batch }: CreateBatchInput) {
       oldValue: "—",
       newValue: "Draft",
     });
-    return { ...batch, deliveryPoints: points, batchNo, status: "Draft" };
+    return {
+      ...batch,
+      deliveryPoints: points,
+      batchNo,
+      status: "Draft",
+      recipientIds: batch.audience === "selected" ? [...new Set(batch.recipientIds)] : [],
+    };
   });
 }
 

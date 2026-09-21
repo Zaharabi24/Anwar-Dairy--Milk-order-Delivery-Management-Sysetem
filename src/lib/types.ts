@@ -37,6 +37,9 @@ export interface BusinessUnit {
 
 export type BatchStatus = "Draft" | "Active" | "Paused" | "SoldOut" | "Closed";
 
+/** Who a batch is announced to when it is published. */
+export type BatchAudience = "all" | "selected";
+
 export interface DailyMilkBatch {
   batchNo: string;
   productionDate: string;
@@ -53,6 +56,10 @@ export interface DailyMilkBatch {
   deliveryPoints: string[];
   note: string;
   status: BatchStatus;
+  /** Everyone in the Employee Database, or the people the operator chose. */
+  audience: BatchAudience;
+  /** The chosen recipients when `audience` is "selected"; empty otherwise. */
+  recipientIds: string[];
 }
 
 export interface DeliveryPoint {

@@ -170,7 +170,7 @@ function OfferPage() {
               Booking takes under a minute — stock updates the moment you confirm.
             </p>
             <Button asChild size="lg">
-              <Link to="/app/order/new">Book now</Link>
+              <Link to="/app/order/new">Book Milk</Link>
             </Button>
           </div>
         )}
