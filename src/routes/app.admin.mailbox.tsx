@@ -26,6 +26,7 @@ import {
   listCampaignRecipientsFn,
   listCampaignsFn,
   previewCampaignFn,
+  resendFailedMailFn,
   resumeCampaignFn,
   sendCampaignFn,
 } from "@/functions/mailbox.functions";
@@ -648,6 +649,23 @@ function History({ initial }: { initial: CampaignSummary[] }) {
     }
   }
 
+  async function retryFailed(c: CampaignSummary) {
+    setBusy(true);
+    try {
+      const r = await resendFailedMailFn({ data: { campaignId: c.id } });
+      toast.success(
+        r.queued > 0
+          ? `${r.queued} failed message${r.queued === 1 ? "" : "s"} back on the queue.`
+          : "Nothing failed on this send.",
+      );
+      setCampaigns(await listCampaignsFn());
+    } catch {
+      toast.error("Couldn't retry those just now.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function resume(c: CampaignSummary) {
     setBusy(true);
     try {
@@ -736,6 +754,16 @@ function History({ initial }: { initial: CampaignSummary[] }) {
                           onClick={() => void resume(c)}
                         >
                           Send the rest
+                        </Button>
+                      ) : null}
+                      {c.failedCount ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void retryFailed(c)}
+                        >
+                          Resend {c.failedCount} failed
                         </Button>
                       ) : null}
                     </div>

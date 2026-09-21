@@ -7,7 +7,12 @@
 // directory before anything is written to it.
 import { getDb } from "./db/client.server";
 import { requirePermission } from "./auth/session.server";
-import { enqueueCampaign, isQueueEnabled, resumePendingCampaigns } from "./mail/mail-queue.server";
+import {
+  enqueueCampaign,
+  isQueueEnabled,
+  resendFailedCampaign,
+  resumePendingCampaigns,
+} from "./mail/mail-queue.server";
 import { campaignEmail } from "./mail/campaign-mail.server";
 import { AppError } from "@/lib/app-error";
 import type { ComposeInput, PreviewInput } from "@/lib/mailbox.schemas";
@@ -226,5 +231,12 @@ export async function listCampaignRecipients(input: {
 export async function resumeCampaign(input: { campaignId: string }) {
   await requirePermission("mailbox.send");
   const queued = await enqueueCampaign(input.campaignId);
+  return { queued, durable: isQueueEnabled() };
+}
+
+/** Tries the messages that finally failed, and only those. Delivered ones are never touched. */
+export async function resendFailedMail(input: { campaignId: string }) {
+  await requirePermission("mailbox.send");
+  const queued = await resendFailedCampaign(input.campaignId);
   return { queued, durable: isQueueEnabled() };
 }

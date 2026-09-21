@@ -20,3 +20,7 @@ export const listPublishedBatchNumbersFn = createServerFn({ method: "GET" }).han
 export const resumePublicationMailFn = createServerFn({ method: "POST" })
   .validator(resumePublicationInput)
   .handler(async ({ data }) => (await server()).resumePublicationMail(data));
+
+export const resendFailedBatchMailFn = createServerFn({ method: "POST" })
+  .validator(resumePublicationInput)
+  .handler(async ({ data }) => (await server()).resendFailedBatchMail(data));

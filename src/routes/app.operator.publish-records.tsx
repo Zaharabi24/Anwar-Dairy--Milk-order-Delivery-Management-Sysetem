@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { listPublishRecordsFn, resumePublicationMailFn } from "@/functions/records.functions";
+import {
+  listPublishRecordsFn,
+  resendFailedBatchMailFn,
+  resumePublicationMailFn,
+} from "@/functions/records.functions";
 import { dateShort, taka, timeShort } from "@/lib/format";
 import type { PublishRecord, PublishStatus } from "@/lib/records-types";
 
@@ -72,6 +76,26 @@ function PublishRecords() {
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
   const [resuming, setResuming] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
+
+  // Only the ones that finally failed. Anything delivered is untouched -- the queue skips a row
+  // that is already sent, so nobody can receive a second copy of a message that arrived.
+  async function retryFailed(id: string) {
+    setRetrying(id);
+    try {
+      const result = await resendFailedBatchMailFn({ data: { publicationId: id } });
+      toast.success(
+        result.queued > 0
+          ? `${result.queued} failed message${result.queued === 1 ? "" : "s"} back on the queue.`
+          : "Nothing failed on this send.",
+      );
+      await router.invalidate();
+    } catch {
+      toast.error("Couldn't retry those just now. Try again.");
+    } finally {
+      setRetrying(null);
+    }
+  }
 
   // Opening this page already resumed anything unfinished. This is for the operator who wants to
   // push the rest out now rather than wait, and it can be pressed again until nothing is left.
@@ -187,6 +211,8 @@ function PublishRecords() {
                   onToggle={() => setOpen(open === r.id ? null : r.id)}
                   resuming={resuming === r.id}
                   onResume={() => void resume(r.id)}
+                  retrying={retrying === r.id}
+                  onRetryFailed={() => void retryFailed(r.id)}
                 />
               ))}
             </tbody>
@@ -204,6 +230,8 @@ function PublishRow({
   onToggle,
   resuming,
   onResume,
+  retrying,
+  onRetryFailed,
 }: {
   record: PublishRecord;
   index: number;
@@ -211,6 +239,8 @@ function PublishRow({
   onToggle: () => void;
   resuming: boolean;
   onResume: () => void;
+  retrying: boolean;
+  onRetryFailed: () => void;
 }) {
   return (
     <>
@@ -259,11 +289,18 @@ function PublishRow({
           </button>
         </Td>
         <Td>
-          {r.pendingCount ? (
-            <Button variant="outline" size="sm" disabled={resuming} onClick={onResume}>
-              {resuming ? "Queueing…" : "Send the rest"}
-            </Button>
-          ) : null}
+          <div className="flex flex-col gap-2">
+            {r.pendingCount ? (
+              <Button variant="outline" size="sm" disabled={resuming} onClick={onResume}>
+                {resuming ? "Queueing…" : "Send the rest"}
+              </Button>
+            ) : null}
+            {r.failedCount ? (
+              <Button variant="outline" size="sm" disabled={retrying} onClick={onRetryFailed}>
+                {retrying ? "Queueing…" : `Resend ${r.failedCount} failed`}
+              </Button>
+            ) : null}
+          </div>
         </Td>
       </motion.tr>
       {open ? (

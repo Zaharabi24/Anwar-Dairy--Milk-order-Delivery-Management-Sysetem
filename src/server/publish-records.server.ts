@@ -9,6 +9,7 @@ import { requirePermission } from "./auth/session.server";
 import {
   enqueuePublication,
   isQueueEnabled,
+  resendFailedPublication,
   resumePendingPublications,
 } from "./mail/mail-queue.server";
 import type { EmailRecordQuery } from "@/lib/records.schemas";
@@ -196,5 +197,17 @@ export async function listPublishedBatchNumbers(): Promise<string[]> {
 export async function resumePublicationMail(input: { publicationId: string }) {
   await requirePermission("batches.manage");
   const queued = await enqueuePublication(input.publicationId);
+  return { queued, durable: isQueueEnabled() };
+}
+
+/**
+ * Tries the messages that finally failed, and only those.
+ *
+ * Anything already delivered is left exactly as it is -- the queue skips a row that is already
+ * 'sent', so even a message that somehow found its way back on could not arrive twice.
+ */
+export async function resendFailedBatchMail(input: { publicationId: string }) {
+  await requirePermission("batches.manage");
+  const queued = await resendFailedPublication(input.publicationId);
   return { queued, durable: isQueueEnabled() };
 }

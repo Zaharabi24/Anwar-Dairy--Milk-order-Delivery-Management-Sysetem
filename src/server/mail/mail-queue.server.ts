@@ -113,11 +113,18 @@ export function startMailWorker(): void {
     },
     {
       connection: connect(),
-      // One at a time, and no faster than the provider accepts. The limiter is what the whole
-      // queue exists for: it is shared through Redis, so two app instances still send 25 a minute
-      // between them rather than 25 each.
+      // One message every MAIL_INTERVAL_MS, not a burst inside a minute.
+      //
+      // "25 per 60 seconds" is the same average as "one per 2.4 seconds" and behaves nothing
+      // like it: the first form lets BullMQ fire all twenty-five back to back in a couple of
+      // seconds and then idle, and twenty-five SMTP transactions in two seconds is the shape
+      // that trips Exchange's throttle however modest the per-minute figure looks. Spacing them
+      // is what the mail server is actually asking for.
+      //
+      // Expressed through the limiter rather than a sleep in the handler so it is enforced in
+      // Redis: two app instances still share one steady trickle instead of two.
       concurrency: 1,
-      limiter: { max: MAIL_RATE_PER_MINUTE, duration: 60_000 },
+      limiter: { max: 1, duration: MAIL_INTERVAL_MS },
     },
   );
 
@@ -129,7 +136,8 @@ export function startMailWorker(): void {
   worker.on("error", (error) => console.error("[mail] queue worker error", error));
 
   console.info(
-    `[mail] queue ready on Redis — ${MAIL_RATE_PER_MINUTE} messages/minute, ${MAX_ATTEMPTS} attempts each`,
+    `[mail] queue ready on Redis — one message every ${(MAIL_INTERVAL_MS / 1000).toFixed(1)}s ` +
+      `(${MAIL_RATE_PER_MINUTE}/minute), ${MAX_ATTEMPTS} attempts each`,
   );
 }
 
@@ -342,4 +350,80 @@ async function runCampaignInProcess(campaignId: string): Promise<void> {
   } finally {
     running.delete(key);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Retrying what finally failed.
+//
+// A message that used up its attempts stops being picked up: every resume path looks for 'queued'
+// rows, so a row sitting at 'failed' is done with as far as the queue is concerned. That is the
+// right default -- a queue that retries forever is a queue that never tells you anything is wrong
+// -- but it leaves no way back once the cause has been dealt with. A mailbox that was over its
+// limit for an hour, a relay that was down, a password that had expired: the address was never
+// bad, and the only thing standing between it and delivery is somebody saying "go on then".
+//
+// Resending clears the attempt count as well as the status, so the message gets a full set of
+// tries again rather than one.
+
+/**
+ * Clears finished jobs out of the way so the same messages can be queued again.
+ *
+ * The job id is the row id, which is what makes resuming safe to call as often as you like: a
+ * message already on the queue is not added twice. It also means a *finished* job blocks a new
+ * one, because BullMQ keeps completed and failed jobs around for a day and ignores an add that
+ * reuses their id. For a resume that is exactly right. For a deliberate resend it is the whole
+ * problem -- the rows go back to 'queued' and then sit there, because nothing new was ever
+ * queued. So the old job is removed first.
+ */
+async function forgetJobs(ids: string[], prefix: "email" | "campaign"): Promise<void> {
+  const q = getQueue();
+  if (!q) return;
+  await Promise.all(
+    ids.map(async (id) => {
+      try {
+        await q.remove(`${prefix}-${id}`);
+      } catch {
+        // Already gone, or still running. Either way there is nothing to clear.
+      }
+    }),
+  );
+}
+
+/** Puts a publication's failed messages back on the queue. Returns how many were revived. */
+export async function resendFailedPublication(publicationId: string): Promise<number> {
+  const sql = await getDb();
+  const revived = await sql<Row[]>`
+    update batch_emails
+    set status = 'queued', attempts = 0, claimed_at = null
+    where publication_id = ${publicationId} and status = 'failed'
+    returning id`;
+  if (!revived.length) return 0;
+  await sql`
+    update batch_publications set status = 'sending', completed_at = null
+    where id = ${publicationId}`;
+  await forgetJobs(
+    revived.map((r) => String(r["id"])),
+    "email",
+  );
+  await enqueuePublication(publicationId);
+  return revived.length;
+}
+
+/** The same for one of the System Admin's mailbox messages. */
+export async function resendFailedCampaign(campaignId: string): Promise<number> {
+  const sql = await getDb();
+  const revived = await sql<Row[]>`
+    update mail_campaign_recipients
+    set status = 'queued', attempts = 0, claimed_at = null
+    where campaign_id = ${campaignId} and status = 'failed'
+    returning id`;
+  if (!revived.length) return 0;
+  await sql`
+    update mail_campaigns set status = 'sending', completed_at = null where id = ${campaignId}`;
+  await forgetJobs(
+    revived.map((r) => String(r["id"])),
+    "campaign",
+  );
+  await enqueueCampaign(campaignId);
+  return revived.length;
 }

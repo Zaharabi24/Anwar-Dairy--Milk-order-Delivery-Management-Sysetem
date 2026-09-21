@@ -28,3 +28,7 @@ export const listCampaignRecipientsFn = createServerFn({ method: "POST" })
 export const resumeCampaignFn = createServerFn({ method: "POST" })
   .validator(campaignIdInput)
   .handler(async ({ data }) => (await server()).resumeCampaign(data));
+
+export const resendFailedMailFn = createServerFn({ method: "POST" })
+  .validator(campaignIdInput)
+  .handler(async ({ data }) => (await server()).resendFailedMail(data));
