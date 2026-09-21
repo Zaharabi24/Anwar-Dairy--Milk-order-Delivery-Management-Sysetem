@@ -132,7 +132,18 @@ export async function listEmailRecords(query: EmailRecordQuery): Promise<EmailRe
       ${where}
       order by e.created_at desc, e.employee_name
       limit ${limit} offset ${query.offset}`,
-    sql<Row[]>`select count(*) as total from batch_emails e ${where}`,
+    // Counted over everything the filters match, not over the page on screen. A card headed
+    // "Total Sent" that only totals the hundred rows you happen to be looking at answers a
+    // question nobody asked.
+    sql<Row[]>`
+      select count(*) as total,
+             count(*) filter (where e.status in ('sent', 'captured', 'logged')) as sent,
+             count(*) filter (where e.status = 'failed') as failed,
+             count(*) filter (where exists (
+               select 1 from orders o
+               where o.batch_no = e.batch_no and o.employee_id = e.employee_id
+                 and o.status <> 'Cancelled')) as booked
+      from batch_emails e ${where}`,
   ]);
 
   const records: EmailRecordRow[] = rows.map((r) => ({
@@ -155,7 +166,13 @@ export async function listEmailRecords(query: EmailRecordQuery): Promise<EmailRe
     ordered: Boolean(r["ordered"]),
   }));
 
-  return { records, total: Number(totals?.["total"] ?? 0) };
+  return {
+    records,
+    total: Number(totals?.["total"] ?? 0),
+    sent: Number(totals?.["sent"] ?? 0),
+    failed: Number(totals?.["failed"] ?? 0),
+    booked: Number(totals?.["booked"] ?? 0),
+  };
 }
 
 /** The batches that have ever been published, for the Email Records batch filter. */

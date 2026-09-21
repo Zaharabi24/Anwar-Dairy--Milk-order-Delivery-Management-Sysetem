@@ -65,5 +65,12 @@ export interface EmailRecordRow {
 
 export interface EmailRecordPage {
   records: EmailRecordRow[];
+  /** Every email the filters match, not just the page of them being shown. */
   total: number;
+  /** Of those, how many the mail server took. */
+  sent: number;
+  /** Of those, how many it refused for good. */
+  failed: number;
+  /** Of those, how many led to an order that still stands. */
+  booked: number;
 }

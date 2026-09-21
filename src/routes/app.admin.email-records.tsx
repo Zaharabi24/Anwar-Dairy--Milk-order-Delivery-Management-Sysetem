@@ -123,10 +123,6 @@ function EmailRecords() {
 
   const shownFrom = page.total === 0 ? 0 : offset + 1;
   const shownTo = Math.min(offset + page.records.length, page.total);
-  const delivered = page.records.filter((r) => r.status === "sent" || r.status === "captured");
-  const failed = page.records.filter((r) => r.status === "failed");
-  const ordered = page.records.filter((r) => r.ordered);
-
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
@@ -135,13 +131,13 @@ function EmailRecords() {
       />
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="Emails in view" value={page.total} />
-        <StatCard label="Delivered on this page" value={delivered.length} emphasis />
-        <StatCard label="Failed on this page" value={failed.length} />
-        <StatCard label="Went on to order" value={ordered.length} />
+        <StatCard label="Emails Sent Out" value={page.total} />
+        <StatCard label="Total Sent" value={page.sent} emphasis />
+        <StatCard label="Total Failed" value={page.failed} />
+        <StatCard label="Booked from Email" value={page.booked} />
       </div>
 
-      <FilterBar className="mt-6">
+      <FilterBar columns={5} className="mt-6">
         <Field label="From date">
           <Input type="date" value={from} onChange={(e) => filter(() => setFrom(e.target.value))} />
         </Field>
@@ -185,7 +181,7 @@ function EmailRecords() {
             onChange={(e) => filter(() => setSearch(e.target.value))}
           />
         </Field>
-        <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-5">
           <Button
             variant="outline"
             size="sm"

@@ -144,17 +144,23 @@ export function SwitchField({
  * width, the same gaps, wrapping the same way.
  */
 export function FilterBar({
+  columns = 4,
   className,
   children,
 }: {
+  /** Fields across the row on a wide screen. Below that they fall into two, then one. */
+  columns?: 4 | 5;
   className?: string;
   children: React.ReactNode;
 }) {
+  // Written out rather than built from `columns`, so Tailwind can find the class names.
+  const cols = columns === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4";
   return (
     <div
       className={cn(
         "grid items-end gap-3 rounded-xl border border-border bg-card p-4",
-        "sm:grid-cols-2 lg:grid-cols-4",
+        "sm:grid-cols-2",
+        cols,
         className,
       )}
     >
