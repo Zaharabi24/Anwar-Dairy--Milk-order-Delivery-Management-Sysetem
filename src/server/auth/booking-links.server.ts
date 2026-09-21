@@ -62,13 +62,27 @@ export async function recordPublication(
   // keeps the mail and the link in step: nobody is sent a link that would fail to open, which is
   // what a staff-only account -- an operator or a coordinator, in the directory but not bookable
   // -- would otherwise receive.
+  // One address, one email.
+  //
+  // The same person can hold two rows -- somebody who signed up as "19163" before the directory
+  // was imported is listed in it as "019163", and nothing could match those two together. Left
+  // alone that sends them the batch twice, with two different booking links, and lets them book
+  // once as each. Deduplicating by address also covers the case the directory has on purpose, two
+  // colleagues sharing one mailbox: one inbox can only usefully receive one link.
+  //
+  // Where there are two, the account holder wins. That is the identity they already sign in as
+  // and the one their order history hangs off.
   const employees = await tx<Row[]>`
-    select e.id, e.name, e.company_email, e.department, e.designation, e.phone, e.site
-    from employees e
-    where e.active and e.deleted_at is null
-      and exists (select 1 from user_roles r
-                  where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
-    order by e.name, e.id`;
+    select * from (
+      select distinct on (lower(e.company_email))
+             e.id, e.name, e.company_email, e.department, e.designation, e.phone, e.site
+      from employees e
+      where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
+        and exists (select 1 from user_roles r
+                    where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
+      order by lower(e.company_email), (e.account_status is not null) desc, e.id
+    ) one_each
+    order by name, id`;
 
   // Booking close time is the link's expiry. They are the same instant by definition: the link
   // exists to place an order, and after the cutoff there is no order to place.

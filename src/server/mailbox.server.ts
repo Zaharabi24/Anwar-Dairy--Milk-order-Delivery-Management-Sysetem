@@ -32,8 +32,12 @@ const iso = (value: unknown): string | null =>
  * deleted, which is the whole point of those switches.
  */
 const DIRECTORY = (sql: Awaited<ReturnType<typeof getDb>>) => sql`
-  from employees e
-  where e.active and e.deleted_at is null and btrim(e.company_email) <> ''`;
+  from (
+    select distinct on (lower(e.company_email)) e.id
+    from employees e
+    where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
+    order by lower(e.company_email), (e.account_status is not null) desc, e.id
+  ) e`;
 
 /** Renders the message exactly as a recipient will see it, for the preview pane. */
 export async function previewCampaign(input: PreviewInput): Promise<{ html: string }> {
@@ -83,23 +87,33 @@ export async function sendCampaign(input: ComposeInput): Promise<SendResult> {
     // Resolved from the directory, never from what the client sent. For a specific list the ids
     // are a filter over the same query, so an id that is inactive, deleted, made up, or has no
     // address simply isn't there -- it cannot be used to reach somebody the directory wouldn't.
+    // One address, one email, for the same reasons the batch mail does it: a person who holds two
+    // rows would otherwise be written to twice.
     const people =
       audience === "all"
         ? await tx<Row[]>`
-            select e.id, e.name, e.company_email, e.department, e.designation, e.site,
-                   coalesce(b.name, '') as business_unit
-            from employees e
-            left join business_units b on b.code = e.business_unit_code
-            where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
-            order by e.name, e.id`
+            select * from (
+              select distinct on (lower(e.company_email))
+                     e.id, e.name, e.company_email, e.department, e.designation, e.site,
+                     coalesce(b.name, '') as business_unit
+              from employees e
+              left join business_units b on b.code = e.business_unit_code
+              where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
+              order by lower(e.company_email), (e.account_status is not null) desc, e.id
+            ) one_each
+            order by name, id`
         : await tx<Row[]>`
-            select e.id, e.name, e.company_email, e.department, e.designation, e.site,
-                   coalesce(b.name, '') as business_unit
-            from employees e
-            left join business_units b on b.code = e.business_unit_code
-            where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
-              and e.id = any(${input.employeeIds}::text[])
-            order by e.name, e.id`;
+            select * from (
+              select distinct on (lower(e.company_email))
+                     e.id, e.name, e.company_email, e.department, e.designation, e.site,
+                     coalesce(b.name, '') as business_unit
+              from employees e
+              left join business_units b on b.code = e.business_unit_code
+              where e.active and e.deleted_at is null and btrim(e.company_email) <> ''
+                and e.id = any(${input.employeeIds}::text[])
+              order by lower(e.company_email), (e.account_status is not null) desc, e.id
+            ) one_each
+            order by name, id`;
 
     if (!people.length) {
       throw new AppError(

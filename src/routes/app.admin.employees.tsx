@@ -121,6 +121,32 @@ function EmployeeDatabasePage() {
 
   const mailable = employees.filter((e) => e.active && e.companyEmail.trim()).length;
 
+  // Everyone from the imported directory is already here, so an admin adding a real colleague
+  // will often be adding somebody who exists. Saying so while the ID is being typed — with the
+  // way to their record — is the difference between "already in the database" and a red banner
+  // after the whole form has been filled in, which reads like adding simply doesn't work.
+  const clash = useMemo(() => {
+    if (!draft || !isNew) return null;
+    const typed = draft.id.trim().toLowerCase();
+    if (!typed) return null;
+    return employees.find((e) => e.id.toLowerCase() === typed) ?? null;
+  }, [draft, isNew, employees]);
+
+  // An address on two records is allowed — two people in the directory really do share one — so
+  // this is said out loud rather than blocked.
+  const sharesAddressWith = useMemo(() => {
+    if (!draft || !isNew) return null;
+    const typed = draft.companyEmail.trim().toLowerCase();
+    if (!typed) return null;
+    return employees.find((e) => e.companyEmail.trim().toLowerCase() === typed) ?? null;
+  }, [draft, isNew, employees]);
+
+  /** Swaps the Add dialog for the record they were really looking for. */
+  function openExisting(employee: Employee) {
+    setDraft(employee);
+    setIsNew(false);
+  }
+
   async function remove() {
     const emp = pendingDelete;
     if (!emp) return;
@@ -352,6 +378,23 @@ function EmployeeDatabasePage() {
           </DialogHeader>
           {draft ? (
             <div className="space-y-4">
+              {clash ? (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 p-3">
+                  <p className="text-sm">
+                    <span className="font-medium">{clash.name}</span> is already in the Employee
+                    Database under {clash.id}.
+                  </p>
+                  <Button size="sm" variant="outline" onClick={() => openExisting(clash)}>
+                    Open their record
+                  </Button>
+                </div>
+              ) : sharesAddressWith ? (
+                <p className="rounded-lg border border-border bg-secondary/50 p-3 text-sm text-muted-foreground">
+                  {sharesAddressWith.name} ({sharesAddressWith.id}) already uses that address. Two
+                  people can share one, but only the first will be emailed when a batch is
+                  published.
+                </p>
+              ) : null}
               <FieldRow columns={2}>
                 <Field label="Full name" required>
                   <Input
@@ -361,6 +404,7 @@ function EmployeeDatabasePage() {
                 </Field>
                 <Field
                   label="Employee ID"
+                  {...(clash ? { error: `Already in the database — ${clash.name}.` } : {})}
                   hint={
                     isNew
                       ? "The company's own ID, if they have one. Leave it blank and the system assigns one."
@@ -465,7 +509,9 @@ function EmployeeDatabasePage() {
             ) : (
               <span />
             )}
-            <Button onClick={save}>Save</Button>
+            <Button onClick={save} disabled={!!clash}>
+              Save
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
