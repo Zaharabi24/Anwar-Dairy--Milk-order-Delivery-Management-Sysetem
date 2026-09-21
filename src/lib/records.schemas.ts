@@ -11,7 +11,9 @@ export const emailRecordQuery = z.object({
   from: day,
   to: day,
   batchNo: z.string().trim().max(60).nullable(),
-  status: z.enum(["queued", "sent", "captured", "failed", "logged", "skipped"]).nullable(),
+  status: z
+    .enum(["queued", "sending", "sent", "captured", "failed", "logged", "skipped"])
+    .nullable(),
   search: z.string().trim().max(200),
   limit: z.number().int().min(1).max(500),
   offset: z.number().int().min(0).max(1_000_000),

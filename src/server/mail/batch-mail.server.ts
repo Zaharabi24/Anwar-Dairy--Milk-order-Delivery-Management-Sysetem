@@ -138,13 +138,26 @@ export type SendOutcome =
 export async function sendQueuedEmail(emailId: string): Promise<SendOutcome> {
   const sql: Sql = await getDb();
 
+  // The batch as it stands now, not as it stood when the publish began.
+  //
+  // For a first attempt those are the same thing. For a retry they need not be: an operator who
+  // moved the cutoff or corrected the rate after publishing would otherwise have the retry go out
+  // quoting figures they have already changed, and the link inside it would expire at the old
+  // time. Nobody who is being retried has received anything yet, so there is no earlier version
+  // to stay consistent with -- the message they finally get should be the true one. The
+  // publication's own copy stays untouched as the record of what the send was told to say.
   const [row] = (await sql<Row[]>`
     select e.id, e.status, e.attempts, e.employee_id, e.employee_name, e.to_address,
-           p.batch_no, p.collection_points, p.booking_cutoff, p.delivery_date, p.delivery_window,
-           p.rate_per_litre, p.saleable_litres, b.note
+           p.batch_no, p.collection_points,
+           coalesce(b.booking_cutoff, p.booking_cutoff) as booking_cutoff,
+           coalesce(b.delivery_date, p.delivery_date) as delivery_date,
+           coalesce(b.delivery_window, p.delivery_window) as delivery_window,
+           coalesce(b.rate_per_litre, p.rate_per_litre) as rate_per_litre,
+           coalesce(b.saleable_litres, p.saleable_litres) as saleable_litres,
+           b.note
     from batch_emails e
     join batch_publications p on p.id = e.publication_id
-    join batches b on b.batch_no = p.batch_no
+    left join batches b on b.batch_no = p.batch_no
     where e.id = ${emailId}`) as unknown as [Row | undefined];
 
   // Gone, already delivered, or has no address: nothing for this job to do. Checked here as well

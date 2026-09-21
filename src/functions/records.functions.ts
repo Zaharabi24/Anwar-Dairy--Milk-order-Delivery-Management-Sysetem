@@ -13,6 +13,11 @@ export const listEmailRecordsFn = createServerFn({ method: "POST" })
   .validator(emailRecordQuery)
   .handler(async ({ data }) => (await server()).listEmailRecords(data));
 
+/** The same list, for the Factory Operator reading the delivery of a batch they published. */
+export const listBatchEmailsFn = createServerFn({ method: "POST" })
+  .validator(emailRecordQuery)
+  .handler(async ({ data }) => (await server()).listBatchEmails(data));
+
 export const listPublishedBatchNumbersFn = createServerFn({ method: "GET" }).handler(async () =>
   (await server()).listPublishedBatchNumbers(),
 );

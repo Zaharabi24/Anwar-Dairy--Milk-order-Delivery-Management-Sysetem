@@ -92,9 +92,23 @@ export async function listPublishRecords(): Promise<PublishRecord[]> {
  */
 export async function listEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPage> {
   await requirePermission("email_records.view");
+  return queryEmailRecords(query);
+}
 
-  // Same as Publish Records: looking at the records is a good moment to make sure the rest is
-  // on its way.
+/**
+ * The same delivery detail, for the Factory Operator looking at what their own publish did.
+ *
+ * Two doors onto one query rather than two queries: an operator needs to see which of their
+ * recipients a message failed for, and a System Admin needs the same list across every batch.
+ * Splitting the permission from the query is what stops that becoming two things that drift.
+ */
+export async function listBatchEmails(query: EmailRecordQuery): Promise<EmailRecordPage> {
+  await requirePermission("batches.manage");
+  return queryEmailRecords(query);
+}
+
+async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPage> {
+  // Looking at the records is a good moment to make sure the rest is on its way.
   await resumePendingPublications().catch((error: unknown) =>
     console.error("[mail] resuming pending publications failed", error),
   );

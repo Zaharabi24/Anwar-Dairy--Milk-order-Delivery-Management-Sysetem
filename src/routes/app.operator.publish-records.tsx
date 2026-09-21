@@ -1,8 +1,6 @@
-import { FilterRow } from "@/components/ui/field";
-import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,15 +11,25 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
+import { Field, FilterBar, FilterRow } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import {
+  listBatchEmailsFn,
   listPublishRecordsFn,
   resendFailedBatchMailFn,
   resumePublicationMailFn,
 } from "@/functions/records.functions";
 import { dateShort, taka, timeShort } from "@/lib/format";
-import type { PublishRecord, PublishStatus } from "@/lib/records-types";
+import { EMPTY_EMAIL_QUERY, type EmailRecordQuery } from "@/lib/records.schemas";
+import type {
+  EmailRecordRow,
+  EmailStatus,
+  PublishRecord,
+  PublishStatus,
+} from "@/lib/records-types";
 
 export const Route = createFileRoute("/app/operator/publish-records")({
   head: () => ({
@@ -50,7 +58,6 @@ const STATUS_LABEL: Record<PublishStatus, string> = {
   no_recipients: "No recipients",
 };
 
-/** Colours come from theme tokens, so the badge follows the palette rather than fixing its own. */
 const STATUS_TONE: Record<PublishStatus, string> = {
   sending: "bg-secondary text-muted-foreground",
   sent: "bg-primary/10 text-primary-deep",
@@ -59,62 +66,74 @@ const STATUS_TONE: Record<PublishStatus, string> = {
   no_recipients: "bg-secondary text-muted-foreground",
 };
 
-function StatusBadge({ status }: { status: PublishStatus }) {
-  return (
-    <span
-      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_TONE[status]}`}
-    >
-      {STATUS_LABEL[status]}
-    </span>
-  );
-}
+const EMAIL_LABEL: Record<EmailStatus, string> = {
+  queued: "Queued",
+  sending: "Sending",
+  sent: "Sent",
+  captured: "Captured locally",
+  failed: "Failed",
+  logged: "Logged only",
+  skipped: "No address",
+};
+
+const EMAIL_TONE: Record<EmailStatus, string> = {
+  queued: "bg-secondary text-muted-foreground",
+  sending: "bg-secondary text-muted-foreground",
+  sent: "bg-primary/10 text-primary-deep",
+  captured: "bg-accent/15 text-accent-foreground",
+  failed: "bg-destructive/10 text-destructive",
+  logged: "bg-secondary text-muted-foreground",
+  skipped: "bg-secondary text-muted-foreground",
+};
 
 function PublishRecords() {
   const records = Route.useLoaderData();
+  const totalRecipients = records.reduce((n, r) => n + r.recipients, 0);
+  const totalSent = records.reduce((n, r) => n + r.sentCount, 0);
+  const totalFailed = records.reduce((n, r) => n + r.failedCount, 0);
+
+  return (
+    <div className="mx-auto w-full max-w-6xl">
+      <PageHeader
+        title="Publish records"
+        description="Every batch published from here, who was emailed, and what was booked afterwards."
+      />
+
+      <div className="grid gap-4 sm:grid-cols-4">
+        <StatCard label="Batches published" value={records.length} />
+        <StatCard label="Emails Sent Out" value={totalRecipients} />
+        <StatCard label="Delivered" value={totalSent} emphasis />
+        <StatCard label="Failed" value={totalFailed} />
+      </div>
+
+      {/* Two questions, two tabs. "Which batches have I published?" is a list of sends; "who
+          didn't get it?" is a list of people, and answering the second from a table of the first
+          meant opening every row in turn. */}
+      <Tabs defaultValue="batches" className="mt-6">
+        <TabsList>
+          <TabsTrigger value="batches">Batches</TabsTrigger>
+          <TabsTrigger value="delivery">Email delivery</TabsTrigger>
+        </TabsList>
+        <TabsContent value="batches" className="mt-6">
+          <Batches records={records} />
+        </TabsContent>
+        <TabsContent value="delivery" className="mt-6">
+          <Delivery records={records} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Batches
+
+function Batches({ records }: { records: PublishRecord[] }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
-  const [resuming, setResuming] = useState<string | null>(null);
-  const [retrying, setRetrying] = useState<string | null>(null);
-
-  // Only the ones that finally failed. Anything delivered is untouched -- the queue skips a row
-  // that is already sent, so nobody can receive a second copy of a message that arrived.
-  async function retryFailed(id: string) {
-    setRetrying(id);
-    try {
-      const result = await resendFailedBatchMailFn({ data: { publicationId: id } });
-      toast.success(
-        result.queued > 0
-          ? `${result.queued} failed message${result.queued === 1 ? "" : "s"} back on the queue.`
-          : "Nothing failed on this send.",
-      );
-      await router.invalidate();
-    } catch {
-      toast.error("Couldn't retry those just now. Try again.");
-    } finally {
-      setRetrying(null);
-    }
-  }
-
-  // Opening this page already resumed anything unfinished. This is for the operator who wants to
-  // push the rest out now rather than wait, and it can be pressed again until nothing is left.
-  async function resume(id: string) {
-    setResuming(id);
-    try {
-      const result = await resumePublicationMailFn({ data: { publicationId: id } });
-      toast.success(
-        result.queued > 0
-          ? `${result.queued} message${result.queued === 1 ? "" : "s"} back on the queue. They go out at the rate the mail server accepts.`
-          : "Nothing left to send.",
-      );
-      await router.invalidate();
-    } catch {
-      toast.error("Couldn't send the rest just now. Try again.");
-    } finally {
-      setResuming(null);
-    }
-  }
+  const [busy, setBusy] = useState<string | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -129,30 +148,29 @@ function PublishRecords() {
       );
   }, [records, query, status]);
 
-  const totalRecipients = records.reduce((n, r) => n + r.recipients, 0);
-  const totalSent = records.reduce((n, r) => n + r.sentCount, 0);
-  const totalFailed = records.reduce((n, r) => n + r.failedCount, 0);
-  const totalPending = records.reduce((n, r) => n + r.pendingCount, 0);
+  async function act(id: string, what: "resume" | "retry") {
+    setBusy(id);
+    try {
+      const result =
+        what === "resume"
+          ? await resumePublicationMailFn({ data: { publicationId: id } })
+          : await resendFailedBatchMailFn({ data: { publicationId: id } });
+      toast.success(
+        result.queued > 0
+          ? `${result.queued} message${result.queued === 1 ? "" : "s"} back on the queue. They go out at the rate the mail server accepts.`
+          : "Nothing left to send.",
+      );
+      await router.invalidate();
+    } catch {
+      toast.error("Couldn't queue those just now. Try again.");
+    } finally {
+      setBusy(null);
+    }
+  }
 
   return (
-    <div className="mx-auto w-full max-w-6xl">
-      <PageHeader
-        title="Publish records"
-        description="Every batch published from here, who was emailed, and what was booked afterwards."
-      />
-
-      <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="Batches published" value={records.length} />
-        <StatCard label="Emails addressed" value={totalRecipients} />
-        <StatCard label="Delivered" value={totalSent} emphasis />
-        <StatCard
-          label={totalPending ? "Still to send" : "Failed"}
-          value={totalPending || totalFailed}
-          {...(totalPending ? { hint: "Going out at the rate the mail server accepts" } : {})}
-        />
-      </div>
-
-      <FilterRow className="mt-6">
+    <div>
+      <FilterRow>
         <Input
           className={FILTER_SEARCH}
           placeholder="Search batch, publisher or collection point"
@@ -182,23 +200,23 @@ function PublishRecords() {
               hint={
                 records.length
                   ? "Try clearing the filters."
-                  : "Publishing a batch emails everyone active in the Employee Database, and records it here."
+                  : "Publishing a batch emails everyone it is addressed to, and records it here."
               }
             />
           </div>
         ) : (
-          <table className="w-full min-w-[1040px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
                 <Th>Batch</Th>
                 <Th>Published</Th>
                 <Th>Bookings close</Th>
                 <Th>Collection point</Th>
-                <Th>Recipients</Th>
-                <Th>Email status</Th>
+                <Th>Emails Sent Out</Th>
+                <Th>Delivery</Th>
                 <Th>Booked</Th>
-                <Th> </Th>
-                <Th> </Th>
+                {/* This column had no heading at all. It holds the things you can do to a send. */}
+                <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -209,10 +227,9 @@ function PublishRecords() {
                   index={i}
                   open={open === r.id}
                   onToggle={() => setOpen(open === r.id ? null : r.id)}
-                  resuming={resuming === r.id}
-                  onResume={() => void resume(r.id)}
-                  retrying={retrying === r.id}
-                  onRetryFailed={() => void retryFailed(r.id)}
+                  busy={busy === r.id}
+                  onResume={() => void act(r.id, "resume")}
+                  onRetryFailed={() => void act(r.id, "retry")}
                 />
               ))}
             </tbody>
@@ -228,18 +245,16 @@ function PublishRow({
   index,
   open,
   onToggle,
-  resuming,
+  busy,
   onResume,
-  retrying,
   onRetryFailed,
 }: {
   record: PublishRecord;
   index: number;
   open: boolean;
   onToggle: () => void;
-  resuming: boolean;
+  busy: boolean;
   onResume: () => void;
-  retrying: boolean;
   onRetryFailed: () => void;
 }) {
   return (
@@ -265,9 +280,13 @@ function PublishRow({
         <Td>{r.collectionPoints || "—"}</Td>
         <Td>{r.recipients}</Td>
         <Td>
-          <StatusBadge status={r.status} />
+          <span
+            className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_TONE[r.status]}`}
+          >
+            {STATUS_LABEL[r.status]}
+          </span>
           <span className="mt-1 block text-xs text-muted-foreground">
-            {r.sentCount} sent
+            {r.sentCount} delivered
             {r.failedCount ? `, ${r.failedCount} failed` : ""}
             {r.skippedCount ? `, ${r.skippedCount} no address` : ""}
             {r.pendingCount ? `, ${r.pendingCount} to go` : ""}
@@ -280,24 +299,22 @@ function PublishRow({
           </span>
         </Td>
         <Td>
-          <button
-            type="button"
-            onClick={onToggle}
-            className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-secondary"
-          >
-            {open ? "Hide" : "Details"}
-          </button>
-        </Td>
-        <Td>
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col items-start gap-2">
+            <button
+              type="button"
+              onClick={onToggle}
+              className="rounded-md px-2 py-1 text-xs font-medium text-primary hover:bg-secondary"
+            >
+              {open ? "Hide details" : "Details"}
+            </button>
             {r.pendingCount ? (
-              <Button variant="outline" size="sm" disabled={resuming} onClick={onResume}>
-                {resuming ? "Queueing…" : "Send the rest"}
+              <Button variant="outline" size="sm" disabled={busy} onClick={onResume}>
+                {busy ? "Queueing…" : "Send the rest"}
               </Button>
             ) : null}
             {r.failedCount ? (
-              <Button variant="outline" size="sm" disabled={retrying} onClick={onRetryFailed}>
-                {retrying ? "Queueing…" : `Resend ${r.failedCount} failed`}
+              <Button variant="outline" size="sm" disabled={busy} onClick={onRetryFailed}>
+                {busy ? "Queueing…" : `Resend ${r.failedCount} failed`}
               </Button>
             ) : null}
           </div>
@@ -305,7 +322,7 @@ function PublishRow({
       </motion.tr>
       {open ? (
         <tr className="border-b border-border/60 bg-secondary/40 last:border-0">
-          <td colSpan={9} className="px-4 py-4">
+          <td colSpan={8} className="px-4 py-4">
             <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-3">
               <Detail label="Rate" value={`${taka(r.ratePerLitre)} per litre`} />
               <Detail label="Offered" value={`${r.saleableLitres} litres`} />
@@ -323,20 +340,271 @@ function PublishRow({
                 }
               />
               <Detail
-                label="Addressed"
-                value={`${r.recipients} in the directory, ${r.sentCount} delivered`}
+                label="Emails Sent Out"
+                value={`${r.recipients} addressed, ${r.sentCount} delivered`}
               />
-              {r.pendingCount ? (
-                <Detail
-                  label="Still to send"
-                  value={`${r.pendingCount} — queued, and going out at the rate the mail server accepts`}
-                />
-              ) : null}
             </dl>
           </td>
         </tr>
       ) : null}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Email delivery
+
+const PAGE_SIZE = 100;
+
+function Delivery({ records }: { records: PublishRecord[] }) {
+  const router = useRouter();
+  const [page, setPage] = useState<{ records: EmailRecordRow[]; total: number } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [batchNo, setBatchNo] = useState("all");
+  const [status, setStatus] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [search, setSearch] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [busy, setBusy] = useState(false);
+
+  // Newest first, and one entry per batch however many times it was published.
+  const batches = useMemo(() => [...new Set(records.map((r) => r.batchNo))], [records]);
+
+  const query = useMemo<EmailRecordQuery>(
+    () => ({
+      ...EMPTY_EMAIL_QUERY,
+      from: from || null,
+      to: to || null,
+      batchNo: batchNo === "all" ? null : batchNo,
+      status: status === "all" ? null : (status as EmailStatus),
+      search,
+      limit: PAGE_SIZE,
+      offset,
+    }),
+    [from, to, batchNo, status, search, offset],
+  );
+
+  const load = useCallback(async (q: EmailRecordQuery) => {
+    setLoading(true);
+    try {
+      setPage(await listBatchEmailsFn({ data: q }));
+    } catch {
+      toast.error("Couldn't load the delivery list.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const id = setTimeout(() => void load(query), 250);
+    return () => clearTimeout(id);
+  }, [query, load]);
+
+  function filter(set: () => void) {
+    setOffset(0);
+    set();
+  }
+
+  // Resending is per publish, so it needs one batch chosen. Every publication of that batch is
+  // covered, which is what "resend the failures for this batch" means to the person asking.
+  const chosen = batchNo === "all" ? [] : records.filter((r) => r.batchNo === batchNo);
+  const failedInBatch = chosen.reduce((n, r) => n + r.failedCount, 0);
+
+  async function resendBatch() {
+    setBusy(true);
+    try {
+      let queued = 0;
+      for (const publication of chosen) {
+        const result = await resendFailedBatchMailFn({ data: { publicationId: publication.id } });
+        queued += result.queued;
+      }
+      toast.success(
+        queued > 0
+          ? `${queued} failed message${queued === 1 ? "" : "s"} back on the queue for ${batchNo}.`
+          : "Nothing failed on this batch.",
+      );
+      await router.invalidate();
+      await load(query);
+    } catch {
+      toast.error("Couldn't queue those just now. Try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const shownFrom = !page || page.total === 0 ? 0 : offset + 1;
+  const shownTo = page ? Math.min(offset + page.records.length, page.total) : 0;
+
+  return (
+    <div>
+      <FilterBar columns={5}>
+        <Field label="Batch">
+          <Select value={batchNo} onValueChange={(v) => filter(() => setBatchNo(v))}>
+            <SelectTrigger>
+              <SelectValue placeholder="Batch" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All batches</SelectItem>
+              {batches.map((b) => (
+                <SelectItem key={b} value={b}>
+                  {b}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Delivery status">
+          <Select value={status} onValueChange={(v) => filter(() => setStatus(v))}>
+            <SelectTrigger>
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any status</SelectItem>
+              {(Object.keys(EMAIL_LABEL) as EmailStatus[]).map((s) => (
+                <SelectItem key={s} value={s}>
+                  {EMAIL_LABEL[s]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="From date">
+          <Input type="date" value={from} onChange={(e) => filter(() => setFrom(e.target.value))} />
+        </Field>
+        <Field label="To date">
+          <Input type="date" value={to} onChange={(e) => filter(() => setTo(e.target.value))} />
+        </Field>
+        <Field label="Search">
+          <Input
+            placeholder="Name, ID, email, department"
+            value={search}
+            onChange={(e) => filter(() => setSearch(e.target.value))}
+          />
+        </Field>
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-5">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => filter(() => setStatus("failed"))}
+            disabled={status === "failed"}
+          >
+            Show failures only
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              filter(() => {
+                setBatchNo("all");
+                setStatus("all");
+                setFrom("");
+                setTo("");
+                setSearch("");
+              })
+            }
+          >
+            Clear filters
+          </Button>
+          {batchNo !== "all" && failedInBatch > 0 ? (
+            <Button size="sm" disabled={busy} onClick={() => void resendBatch()}>
+              {busy ? "Queueing…" : `Resend ${failedInBatch} failed in ${batchNo}`}
+            </Button>
+          ) : null}
+        </div>
+      </FilterBar>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        {loading
+          ? "Loading…"
+          : !page || page.total === 0
+            ? "Nothing matches these filters"
+            : `Showing ${shownFrom}–${shownTo} of ${page.total}`}
+      </p>
+
+      <div className="mt-2 overflow-x-auto rounded-xl border border-border bg-card">
+        {page && page.records.length === 0 && !loading ? (
+          <div className="p-6">
+            <EmptyState
+              title="Nothing matches these filters"
+              hint="Every message sent when a batch is published is listed here, with what happened to it."
+            />
+          </div>
+        ) : (
+          <table className="w-full min-w-[1040px] text-sm">
+            <thead className="border-b border-border text-left text-muted-foreground">
+              <tr>
+                <Th>Employee</Th>
+                <Th>Employee ID</Th>
+                <Th>Company email</Th>
+                <Th>Department</Th>
+                <Th>Batch</Th>
+                <Th>Sent</Th>
+                <Th>Delivery status</Th>
+                <Th>Ordered</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {(page?.records ?? []).map((r, i) => (
+                <motion.tr
+                  key={r.id}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.18, delay: Math.min(i * 0.008, 0.2) }}
+                  className="border-b border-border/60 last:border-0"
+                >
+                  <Td className="font-medium">{r.employeeName || "—"}</Td>
+                  <Td>{r.employeeRef || "—"}</Td>
+                  <Td>
+                    {r.toAddress || <span className="text-muted-foreground">None on file</span>}
+                  </Td>
+                  <Td>{r.department || "—"}</Td>
+                  <Td>{r.batchNo}</Td>
+                  <Td>
+                    {dateShort(r.sentAt ?? r.createdAt)}
+                    <span className="block text-xs text-muted-foreground">
+                      {timeShort(r.sentAt ?? r.createdAt)}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span
+                      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${EMAIL_TONE[r.status]}`}
+                    >
+                      {EMAIL_LABEL[r.status]}
+                    </span>
+                    {r.error ? (
+                      <span className="mt-1 block max-w-[18rem] text-xs text-muted-foreground">
+                        {r.error}
+                      </span>
+                    ) : null}
+                  </Td>
+                  <Td>{r.ordered ? "Yes" : "—"}</Td>
+                </motion.tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="mt-4 flex items-center justify-between">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={offset === 0 || loading}
+          onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+        >
+          Previous
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={!page || offset + PAGE_SIZE >= page.total || loading}
+          onClick={() => setOffset(offset + PAGE_SIZE)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 

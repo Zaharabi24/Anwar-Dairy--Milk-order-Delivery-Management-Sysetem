@@ -32,8 +32,12 @@ export interface PublishRecord {
   orderCount: number;
 }
 
-/** Mirrors email_outbox, plus 'skipped' for someone who had no address on file. */
-export type EmailStatus = "queued" | "sent" | "captured" | "failed" | "logged" | "skipped";
+/**
+ * Mirrors email_outbox, plus two of ours: 'sending' is a claim on the row while it is in flight,
+ * and 'skipped' is somebody active who had no address to write to.
+ */
+export type EmailStatus =
+  "queued" | "sending" | "sent" | "captured" | "failed" | "logged" | "skipped";
 
 /**
  * One email, with the directory details it carried.

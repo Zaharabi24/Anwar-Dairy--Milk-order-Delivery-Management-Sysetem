@@ -44,6 +44,7 @@ export const Route = createFileRoute("/app/admin/email-records")({
 
 const STATUS_LABEL: Record<EmailStatus, string> = {
   queued: "Queued",
+  sending: "Sending",
   sent: "Sent",
   captured: "Captured locally",
   failed: "Failed",
@@ -53,6 +54,7 @@ const STATUS_LABEL: Record<EmailStatus, string> = {
 
 const STATUS_TONE: Record<EmailStatus, string> = {
   queued: "bg-secondary text-muted-foreground",
+  sending: "bg-secondary text-muted-foreground",
   sent: "bg-primary/10 text-primary-deep",
   captured: "bg-accent/15 text-accent-foreground",
   failed: "bg-destructive/10 text-destructive",
