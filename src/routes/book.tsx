@@ -20,6 +20,10 @@ export const Route = createFileRoute("/book")({
   }),
   loader: async ({ location }) => {
     const token = (location.search as { token?: string }).token ?? "";
+    // No token at all means somebody followed Book Milk from the landing page rather than from
+    // their email. That is not a broken link, it is a person who doesn't know where the link
+    // lives -- so they are told, instead of being shown an error about a link they never had.
+    if (!token) return { reason: "no-link" as const };
     const result = await openBookingLinkFn({ data: { token } });
     if (result.ok) throw redirect({ to: "/" });
     return { reason: result.reason };
@@ -33,6 +37,7 @@ export const Route = createFileRoute("/book")({
 function LinkProblem() {
   const { reason } = Route.useLoaderData();
   const expired = reason === "expired";
+  const noLink = reason === "no-link";
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-5 py-16">
       <div className="w-full max-w-md text-center">
@@ -45,13 +50,25 @@ function LinkProblem() {
         />
         <div className="mt-8 rounded-xl border border-border bg-card p-8">
           <h1 className="font-display text-xl font-bold">
-            {expired ? "Bookings for this batch have closed" : "This booking link can't be used"}
+            {noLink
+              ? "Booking opens from your email"
+              : expired
+                ? "Bookings for this batch have closed"
+                : "This booking link can't be used"}
           </h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {expired
-              ? "A booking link works until the batch's booking close time, and that time has passed. The next batch comes with a fresh link."
-              : "The link may have been withdrawn, or the address may be incomplete. Your next batch email will carry a new one."}
+            {noLink
+              ? "Every time a batch is published we email everyone in the Employee Database a Book Milk link. Open that link and you can order straight away — there is no account to create and nothing to sign in to."
+              : expired
+                ? "A booking link works until the batch's booking close time, and that time has passed. The next batch comes with a fresh link."
+                : "The link may have been withdrawn, or the address may be incomplete. Your next batch email will carry a new one."}
           </p>
+          {noLink ? (
+            <p className="mt-3 text-xs text-muted-foreground">
+              No email yet? A System Admin can check you are listed and active in the Employee
+              Database.
+            </p>
+          ) : null}
           <Button asChild className="mt-6 w-full">
             <Link to="/">Back to Anwar Organic</Link>
           </Button>

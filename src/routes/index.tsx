@@ -101,14 +101,15 @@ function Nav({ auth }: { auth: AuthUser | null }) {
               <AccountMenu />
             </>
           ) : (
-            <>
-              <Button asChild size="sm" variant="outline">
-                <Link to="/login">Sign In</Link>
-              </Button>
-              <Button asChild size="sm">
-                <Link to="/signup">Sign Up</Link>
-              </Button>
-            </>
+            // Nobody signed in. Employees don't have accounts any more -- the link mailed when a
+            // batch is published is how they book -- so Sign In and Sign Up are offering a door
+            // that leads nowhere they need to go. Book Milk is the one thing a visitor came for,
+            // and for somebody without a link it explains how to get one.
+            <Button asChild size="sm">
+              <Link to="/book" search={{ token: "" }}>
+                Book Milk
+              </Link>
+            </Button>
           )}
         </div>
       </div>
@@ -331,10 +332,12 @@ function Landing() {
             ) : (
               <>
                 <Button asChild size="lg">
-                  <a href="#how-it-works">See today's batch</a>
+                  <Link to="/book" search={{ token: "" }}>
+                    Book Milk
+                  </Link>
                 </Button>
                 <Button asChild size="lg" variant="outline">
-                  <Link to="/login">Sign in</Link>
+                  <a href="#how-it-works">See today's batch</a>
                 </Button>
               </>
             )}
@@ -434,18 +437,17 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
             ) : (
               <>
                 <li>
+                  <Link to="/book" search={{ token: "" }} className={FOOTER_LINK}>
+                    Book Milk
+                  </Link>
+                </li>
+                {/* The one door left, and it is deliberately quiet. Employees have no account to
+                    sign in to, but the operators, coordinators and admins who run the platform
+                    do, and taking away the only link they can see would leave them typing the
+                    address from memory. */}
+                <li>
                   <Link to="/login" className={FOOTER_LINK}>
-                    Sign in
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/signup" className={FOOTER_LINK}>
-                    Sign up
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/forgot-password" className={FOOTER_LINK}>
-                    Forgot password
+                    Staff sign in
                   </Link>
                 </li>
               </>
