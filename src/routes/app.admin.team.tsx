@@ -3,7 +3,6 @@ import { Loader2, MoreHorizontal } from "lucide-react";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { TableShell, Td, Th, ToneBadge, useAdminList } from "@/components/admin/account-ui";
-import { TestEmailButton } from "@/components/admin/TestEmailButton";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import {
@@ -133,12 +132,7 @@ function TeamPage() {
       <PageHeader
         title="Team & invitations"
         description="Invite factory operators, head office coordinators and System Admins by email."
-        action={
-          <div className="flex flex-wrap gap-2">
-            <TestEmailButton />
-            <Button onClick={() => setInviteOpen(true)}>Invite member</Button>
-          </div>
-        }
+        action={<Button onClick={() => setInviteOpen(true)}>Invite member</Button>}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -376,11 +376,11 @@ network as the mail servers — the Dokploy host is ideal, since that is where t
 
 ### Checking that it works
 
-- **Send test email:** the button on **Team & invitations** or **Account requests** sends a test to
-  your own address and shows the result and transport:
-  - "was sent to …" means the provider accepted it;
-  - "caught by the local test inbox" means Mailpit;
-  - "couldn't be emailed: …" gives the reason.
+- **Send a real invitation** to your own address from **Team & invitations**. The page says when
+  one couldn't be emailed and offers "Copy invite link", so a failure is visible rather than
+  silent.
+- **Email Records** (System Admin) is the fullest picture: every batch email with its delivery
+  status and, where it failed, the reason the mail server gave.
 - **Startup log:**
   - `[mail] ready: …` names the route email will leave by, and lists any route that isn't usable
     with the reason — this is the quickest way to see which Exchange server is answering. It is a
