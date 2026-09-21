@@ -647,7 +647,7 @@ export async function acceptInvitation(
                 template: "invitation_accepted",
                 html: layout(
                   "Your invitation was accepted",
-                  `<p>Hello ${escapeHtml(inviter.name)},</p>
+                  `<p>Dear ${escapeHtml(inviter.name)},</p>
                    <p><strong>${escapeHtml(fullName)}</strong> (${escapeHtml(inv.email)}) accepted your
                    invitation and can now sign in as <strong>${escapeHtml(roleLabel(inv.role))}</strong>.</p>`,
                 ),

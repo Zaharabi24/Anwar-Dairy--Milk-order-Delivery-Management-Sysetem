@@ -586,7 +586,7 @@ function resetEmail(to: string, name: string, link: string): MailMessage {
     template: "password_reset",
     html: layout(
       "Reset your password",
-      `<p>Hello ${escapeHtml(name)},</p>
+      `<p>Dear ${escapeHtml(name)},</p>
        <p>Open the link below to choose a new password. It expires in ${RESET_TOKEN_MINUTES} minutes
        and can be used once. You will be signed in straight away once it is saved.</p>
        ${button(link, "Choose a new password")}
@@ -603,7 +603,7 @@ function setupEmail(to: string, name: string, link: string, intro: string): Mail
     template: "setup_link",
     html: layout(
       "Set your password",
-      `<p>Hello ${escapeHtml(name)},</p>${intro}
+      `<p>Dear ${escapeHtml(name)},</p>${intro}
        <p>Set your password using the link below. You will be signed in straight
        away once it is saved.</p>
        ${button(link, "Set my password")}
@@ -704,7 +704,7 @@ export async function setPassword(
       template: "reset_confirm",
       html: layout(
         "Your password was changed",
-        `<p>Hello ${escapeHtml(tk.name)},</p>
+        `<p>Dear ${escapeHtml(tk.name)},</p>
          <p>Your password was changed on
          ${escapeHtml(new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" }))}.</p>
          <p>All other sessions have been signed out.
@@ -1115,7 +1115,7 @@ export async function sendTestEmail(): Promise<AuthResult<MailTestResult>> {
     template: "test_email",
     html: layout(
       "Email delivery works",
-      `<p>Hello ${escapeHtml(actor.fullName)},</p>
+      `<p>Dear ${escapeHtml(actor.fullName)},</p>
        <p>This test was sent from Anwar Organic using ${escapeHtml(description)}.</p>
        <p>If you received it, invitations and account emails will reach people too.</p>`,
     ),

@@ -178,7 +178,7 @@ export async function changeMyPassword(
     template: "password_changed",
     html: layout(
       "Your password was changed",
-      `<p>Hello ${escapeHtml(emp["name"]!)},</p>
+      `<p>Dear ${escapeHtml(emp["name"]!)},</p>
        <p>Your password was changed on
        ${escapeHtml(new Date().toLocaleString("en-GB", { timeZone: "Asia/Dhaka" }))}.</p>
        <p>Any other device that was signed in has been signed out.

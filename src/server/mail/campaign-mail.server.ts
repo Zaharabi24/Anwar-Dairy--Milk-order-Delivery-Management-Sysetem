@@ -46,7 +46,7 @@ export function campaignEmail(input: {
     template: "admin_broadcast",
     html: layout(
       input.subject,
-      `<p>Hello ${escapeHtml(input.name || "there")},</p>
+      `<p>Dear ${escapeHtml(input.name || "Colleague")},</p>
        ${renderCampaignBody(input.body)}`,
     ),
   };
@@ -92,7 +92,7 @@ export async function sendCampaignEmail(recipientId: string): Promise<CampaignSe
     const { delivery, error } = await sendMailDetailed(
       campaignEmail({
         to: address,
-        name: (row["employee_name"] as string) || "there",
+        name: (row["employee_name"] as string) || "Colleague",
         subject: row["subject"] as string,
         body: row["body"] as string,
       }),

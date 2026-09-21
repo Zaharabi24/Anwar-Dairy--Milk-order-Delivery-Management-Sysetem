@@ -101,7 +101,7 @@ export async function recordPublication(
         publication_id: publication.id,
         batch_no: batchNo,
         employee_id: employee["id"] as string,
-        employee_name: (employee["name"] as string) || "there",
+        employee_name: (employee["name"] as string) || "Colleague",
         employee_ref: employee["id"] as string,
         to_address: address,
         department: (employee["department"] as string) ?? "",

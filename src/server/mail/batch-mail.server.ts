@@ -78,7 +78,7 @@ export function bookingEmail(input: {
     template: "batch_published",
     html: layout(
       "Today's batch is open",
-      `<p>Hello ${escapeHtml(input.name)},</p>
+      `<p>Dear ${escapeHtml(input.name)},</p>
        <p>A new batch of fresh whole milk has been published. Book the litres you want before
        bookings close.</p>
        <table role="presentation" cellpadding="0" cellspacing="0" border="0"
@@ -187,7 +187,7 @@ export async function sendQueuedEmail(emailId: string): Promise<SendOutcome> {
     const { delivery, error } = await sendMailDetailed(
       bookingEmail({
         to: address,
-        name: (row["employee_name"] as string) || "there",
+        name: (row["employee_name"] as string) || "Colleague",
         batch,
         collectionPoint: (row["collection_points"] as string) || "To be confirmed",
         link: `${appUrl()}/book?token=${token}`,
