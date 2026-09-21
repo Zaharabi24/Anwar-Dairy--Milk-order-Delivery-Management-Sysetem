@@ -392,12 +392,36 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
       newValue: status,
     });
     if (status === "Active") {
-      await notify(tx, {
-        kind: "BatchPublished",
-        audience: "All",
-        title: "Fresh milk available today",
-        body: `Batch ${batchNo} is live at ৳${Number(batch.rate_per_litre)}/L — book before the cut-off.`,
-      });
+      const title = "Fresh milk available today";
+      const body = `Batch ${batchNo} is live at ৳${Number(batch.rate_per_litre)}/L — book before the cut-off.`;
+
+      // The in-app notice follows the batch's audience, the same as the email does. A batch
+      // announced to three people that still tells three hundred and sixty "fresh milk available
+      // today" has only moved the announcement to a different channel; the people who see it
+      // have no link and nothing to act on.
+      const [chosen] = (await tx<Row[]>`
+        select audience from batches where batch_no = ${batchNo}`) as unknown as [
+        { audience: string },
+      ];
+      if (chosen?.audience === "selected") {
+        const recipients = await tx<Row[]>`
+          select br.employee_id
+          from batch_recipients br
+          join employees e on e.id = br.employee_id
+          where br.batch_no = ${batchNo} and e.active and e.deleted_at is null`;
+        for (const r of recipients) {
+          await notify(tx, {
+            kind: "BatchPublished",
+            audience: "Employee",
+            title,
+            body,
+            recipient: r["employee_id"] as string,
+          });
+        }
+      } else {
+        await notify(tx, { kind: "BatchPublished", audience: "All", title, body });
+      }
+
       publicationId = await recordPublication(tx, batchNo, {
         name: user.fullName,
         employeeId: user.employeeId,
