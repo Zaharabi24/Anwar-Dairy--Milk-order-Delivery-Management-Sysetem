@@ -1,3 +1,4 @@
+import { Field } from "@/components/ui/field";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useState } from "react";
@@ -78,7 +79,9 @@ function DeliveryPointsPage() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         {deliveryPoints.map((p, i) => {
-          const count = orders.filter((o) => o.deliveryPointId === p.id && o.status !== "Cancelled").length;
+          const count = orders.filter(
+            (o) => o.deliveryPointId === p.id && o.status !== "Cancelled",
+          ).length;
           return (
             <motion.div
               key={p.id}
@@ -127,21 +130,24 @@ function DeliveryPointsPage() {
           </DialogHeader>
           {draft ? (
             <div className="space-y-4">
-              <div>
-                <Label className="mb-2 block">Name</Label>
-                <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-              </div>
-              <div>
-                <Label className="mb-2 block">Address</Label>
-                <Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
-              </div>
-              <div>
-                <Label className="mb-2 block">Coordinator</Label>
+              <Field label="Name">
+                <Input
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
+              </Field>
+              <Field label="Address">
+                <Input
+                  value={draft.address}
+                  onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+                />
+              </Field>
+              <Field label="Coordinator">
                 <Input
                   value={draft.coordinatorName}
                   onChange={(e) => setDraft({ ...draft, coordinatorName: e.target.value })}
                 />
-              </div>
+              </Field>
             </div>
           ) : null}
           <DialogFooter>

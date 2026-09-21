@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Field, FilterBar } from "@/components/ui/field";
 import { PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
@@ -34,15 +35,26 @@ export const Route = createFileRoute("/app/reports")({
   head: () => ({
     meta: [
       { title: "Reports — Anwar Organic" },
-      { name: "description", content: "Daily reconciliation: produced, booked, delivered, collected and sell-through." },
+      {
+        name: "description",
+        content: "Daily reconciliation: produced, booked, delivered, collected and sell-through.",
+      },
       { property: "og:title", content: "Reports — Anwar Organic" },
-      { property: "og:description", content: "Daily reconciliation: produced, booked, delivered, collected and sell-through." },
+      {
+        property: "og:description",
+        content: "Daily reconciliation: produced, booked, delivered, collected and sell-through.",
+      },
     ],
   }),
   component: ReportsPage,
 });
 
-const PALETTE = ["var(--color-primary)", "var(--color-accent)", "var(--color-info)", "var(--color-muted-foreground)"];
+const PALETTE = [
+  "var(--color-primary)",
+  "var(--color-accent)",
+  "var(--color-info)",
+  "var(--color-muted-foreground)",
+];
 
 function ReportsPage() {
   const { batches, batchTotals, orders, collections, deliveryPoints } = useAppData();
@@ -85,7 +97,9 @@ function ReportsPage() {
         .reverse()
         .map((b) => {
           const totals = batchTotals[b.batchNo];
-          const live = filteredOrders.filter((o) => o.batchNo === b.batchNo && o.status !== "Cancelled");
+          const live = filteredOrders.filter(
+            (o) => o.batchNo === b.batchNo && o.status !== "Cancelled",
+          );
           const booked = totals?.booked ?? live.reduce((s, o) => s + o.litres, 0);
           const delivered =
             totals?.delivered ??
@@ -132,7 +146,9 @@ function ReportsPage() {
   function exportCsv() {
     const header = "Batch No.,Date,Produced,Booked,Delivered,Unsold,Revenue\n";
     const body = series
-      .map((r) => [r.batchNo, r.date, r.produced, r.booked, r.delivered, r.unsold, r.revenue].join(","))
+      .map((r) =>
+        [r.batchNo, r.date, r.produced, r.booked, r.delivered, r.unsold, r.revenue].join(","),
+      )
       .join("\n");
     const blob = new Blob([header + body], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -150,80 +166,75 @@ function ReportsPage() {
         title="Reports"
         description="Reconcile what was produced, booked, delivered and collected."
         action={
-          <div className="flex flex-wrap items-end gap-3">
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              Range
-              <Select value={range} onValueChange={setRange}>
-                <SelectTrigger className="h-9 w-44 text-foreground">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="5">Last 5 batches</SelectItem>
-                  <SelectItem value="7">Last 7 batches</SelectItem>
-                  <SelectItem value="10">Last 10 batches</SelectItem>
-                </SelectContent>
-              </Select>
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              Batch No.
-              <Input
-                list="report-batch-numbers"
-                className="h-9 w-44 text-foreground"
-                value={batchNo}
-                onChange={(e) => {
-                  setBatchNo(e.target.value);
-                  setRange("batch");
-                }}
-                placeholder="Select or enter batch"
-                aria-label="Batch number filter"
-              />
-              <datalist id="report-batch-numbers">
-                {batches.map((batch) => (
-                  <option key={batch.batchNo} value={batch.batchNo} />
-                ))}
-              </datalist>
-            </label>
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              Start Date
-              <Input
-                type="date"
-                className="h-9 w-40 text-foreground"
-                value={from}
-                max={to || undefined}
-                onChange={(e) => {
-                  setFrom(e.target.value);
-                  setRange("custom");
-                }}
-                aria-label="Start date"
-              />
-            </label>
-            <span className="pb-2 text-sm text-muted-foreground">to</span>
-            <label className="grid gap-1 text-xs font-medium text-muted-foreground">
-              End Date
-              <Input
-                type="date"
-                className="h-9 w-40 text-foreground"
-                value={to}
-                min={from || undefined}
-                onChange={(e) => {
-                  setTo(e.target.value);
-                  setRange("custom");
-                }}
-                aria-label="End date"
-              />
-            </label>
-            <Button variant="outline" className="h-9" onClick={exportCsv}>
-              Export CSV
-            </Button>
-          </div>
+          <Button variant="outline" onClick={exportCsv}>
+            Export CSV
+          </Button>
         }
       />
 
-      {invalidDateRange ? (
-        <p className="mb-4 text-sm font-medium text-destructive" role="alert">
-          End Date must be on or after Start Date.
-        </p>
-      ) : null}
+      {/* The filters were in the page header, five controls of four different heights wrapping
+          against the title, with a bare "to" nudged down by a padding value to sit level with the
+          boxes either side of it. They are a row of their own now: one grid, one width, one
+          baseline. */}
+      <FilterBar className="mb-4">
+        <Field label="Range" htmlFor="report-range">
+          <Select value={range} onValueChange={setRange}>
+            <SelectTrigger id="report-range">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5">Last 5 batches</SelectItem>
+              <SelectItem value="7">Last 7 batches</SelectItem>
+              <SelectItem value="10">Last 10 batches</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Batch No." htmlFor="report-batch">
+          <Input
+            id="report-batch"
+            list="report-batch-numbers"
+            value={batchNo}
+            onChange={(e) => {
+              setBatchNo(e.target.value);
+              setRange("batch");
+            }}
+            placeholder="Select or enter batch"
+          />
+        </Field>
+        <Field label="Start Date" htmlFor="report-from">
+          <Input
+            id="report-from"
+            type="date"
+            value={from}
+            max={to || undefined}
+            onChange={(e) => {
+              setFrom(e.target.value);
+              setRange("custom");
+            }}
+          />
+        </Field>
+        <Field
+          label="End Date"
+          htmlFor="report-to"
+          {...(invalidDateRange ? { error: "Must be on or after Start Date." } : {})}
+        >
+          <Input
+            id="report-to"
+            type="date"
+            value={to}
+            min={from || undefined}
+            onChange={(e) => {
+              setTo(e.target.value);
+              setRange("custom");
+            }}
+          />
+        </Field>
+        <datalist id="report-batch-numbers">
+          {batches.map((batch) => (
+            <option key={batch.batchNo} value={batch.batchNo} />
+          ))}
+        </datalist>
+      </FilterBar>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Produced" value={produced} format={litres} />
@@ -262,7 +273,14 @@ function ReportsPage() {
         <Card title="Litres by delivery point">
           <ResponsiveContainer width="100%" height={280}>
             <PieChart>
-              <Pie data={byPoint} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={3}>
+              <Pie
+                data={byPoint}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={55}
+                outerRadius={90}
+                paddingAngle={3}
+              >
                 {byPoint.map((entry, i) => (
                   <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />
                 ))}

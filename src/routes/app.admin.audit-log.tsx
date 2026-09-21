@@ -1,3 +1,4 @@
+import { FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
@@ -12,7 +13,10 @@ export const Route = createFileRoute("/app/admin/audit-log")({
       { title: "Audit log — Anwar Organic" },
       { name: "description", content: "Every change to batches, orders, payments and people." },
       { property: "og:title", content: "Audit log — Anwar Organic" },
-      { property: "og:description", content: "Every change to batches, orders, payments and people." },
+      {
+        property: "og:description",
+        content: "Every change to batches, orders, payments and people.",
+      },
     ],
   }),
   component: AuditLogPage,
@@ -35,10 +39,13 @@ function AuditLogPage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <PageHeader title="Audit log" description="A permanent trail of who changed what, and when." />
+      <PageHeader
+        title="Audit log"
+        description="A permanent trail of who changed what, and when."
+      />
 
       <Input
-        className="max-w-sm"
+        className={FILTER_SEARCH}
         placeholder="Search user, action or record"
         value={query}
         onChange={(e) => setQuery(e.target.value)}

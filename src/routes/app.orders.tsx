@@ -1,3 +1,5 @@
+import { Field, FilterRow } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -128,15 +130,15 @@ function OrdersPage() {
         <StatCard label="Value" value={totalValue} format={taka} />
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <FilterRow className="mt-6">
         <Input
-          className="max-w-xs"
+          className={FILTER_SEARCH}
           placeholder="Search order no. or employee"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -149,7 +151,7 @@ function OrdersPage() {
           </SelectContent>
         </Select>
         <Select value={point} onValueChange={setPoint}>
-          <SelectTrigger className="w-56">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Delivery point" />
           </SelectTrigger>
           <SelectContent>
@@ -161,7 +163,7 @@ function OrdersPage() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterRow>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (
@@ -281,8 +283,7 @@ function OrdersPage() {
             <DialogTitle>Adjust {editing?.orderNo}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div>
-              <Label className="mb-2 block">Litres</Label>
+            <Field label="Litres">
               <div className="flex items-center gap-2">
                 <Input
                   type="number"
@@ -306,15 +307,14 @@ function OrdersPage() {
                   Decline Order
                 </Button>
               </div>
-            </div>
-            <div>
-              <Label className="mb-2 block">Reason (required)</Label>
+            </Field>
+            <Field label="Reason (required)">
               <Input
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="e.g. employee requested less"
               />
-            </div>
+            </Field>
           </div>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setEditing(null)}>
@@ -377,14 +377,13 @@ function OrdersPage() {
           <DialogHeader>
             <DialogTitle>Reject cancellation of {rejectingCancel}?</DialogTitle>
           </DialogHeader>
-          <div>
-            <Label className="mb-2 block">Rejection reason (required)</Label>
+          <Field label="Rejection reason (required)">
             <Input
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
               placeholder="e.g. milk already packed for this order"
             />
-          </div>
+          </Field>
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setRejectingCancel(null)}>
               Cancel

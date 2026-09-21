@@ -180,7 +180,7 @@ export function DateOfBirthField({
             <button
               type="button"
               aria-label="Open date picker"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
             >
               <CalendarIcon className="h-4 w-4" />
             </button>
@@ -204,7 +204,7 @@ export function DateOfBirthField({
                   type="button"
                   onClick={() => shiftMonth(-1)}
                   aria-label="Previous month"
-                  className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 >
                   <ChevronUp className="h-4 w-4" />
                 </button>
@@ -212,7 +212,7 @@ export function DateOfBirthField({
                   type="button"
                   onClick={() => shiftMonth(1)}
                   aria-label="Next month"
-                  className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  className="rounded-md p-1 text-muted-foreground hover:bg-secondary hover:text-foreground"
                 >
                   <ChevronDown className="h-4 w-4" />
                 </button>
@@ -254,7 +254,7 @@ export function DateOfBirthField({
                                 "h-8 rounded-md text-sm transition-colors",
                                 sel
                                   ? "bg-primary font-semibold text-primary-foreground"
-                                  : "hover:bg-accent",
+                                  : "hover:bg-secondary",
                                 disabled && "cursor-not-allowed opacity-40 hover:bg-transparent",
                               )}
                             >
@@ -297,7 +297,7 @@ export function DateOfBirthField({
                       className={cn(
                         "mx-auto h-8 w-8 rounded-md text-sm transition-colors",
                         outside && "text-muted-foreground/50",
-                        !selected && !disabled && "hover:bg-accent",
+                        !selected && !disabled && "hover:bg-secondary",
                         isToday && !selected && "ring-1 ring-primary/40",
                         selected && "bg-primary font-semibold text-primary-foreground",
                         disabled && "cursor-not-allowed opacity-30 hover:bg-transparent",

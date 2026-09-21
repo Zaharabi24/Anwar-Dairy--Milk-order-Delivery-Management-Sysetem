@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Field, FieldRow } from "@/components/ui/field";
 import { Textarea } from "@/components/ui/textarea";
 import {
   DropdownMenu,
@@ -152,7 +153,7 @@ function NewBatch() {
       />
 
       <div className="space-y-6 rounded-xl border border-border bg-card p-6">
-        <div className="grid gap-4 sm:grid-cols-3">
+        <FieldRow columns={3}>
           <Field label="Produced litres">
             <StepperInput value={producedText} onChange={setProducedText} />
           </Field>
@@ -165,9 +166,9 @@ function NewBatch() {
           <Field label="Rate per litre (৳)">
             <Input type="number" value={rate} onChange={(e) => setRate(Number(e.target.value))} />
           </Field>
-        </div>
+        </FieldRow>
 
-        <div className="grid gap-4 sm:grid-cols-3">
+        <FieldRow columns={3}>
           <Field
             label="Minimum order (L)"
             error={minOrder > maxOrder ? "Above maximum" : undefined}
@@ -188,7 +189,7 @@ function NewBatch() {
           <Field label="Per-employee cap (L)">
             <Input type="number" value={cap} onChange={(e) => setCap(Number(e.target.value))} />
           </Field>
-        </div>
+        </FieldRow>
 
         <div className="space-y-3 rounded-lg border border-border p-4">
           <div>
@@ -197,7 +198,7 @@ function NewBatch() {
               Employees can book from the moment you publish until bookings close.
             </p>
           </div>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <FieldRow columns={3}>
             <DateField
               id="production-date"
               label="Production date"
@@ -238,7 +239,7 @@ function NewBatch() {
                 className={cutoffPassed ? "border-destructive" : ""}
               />
             </div>
-          </div>
+          </FieldRow>
         </div>
 
         <div>
@@ -328,24 +329,6 @@ function NewBatch() {
           </Button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string | undefined;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <Label className="mb-2 block">{label}</Label>
-      {children}
-      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

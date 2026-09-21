@@ -1,3 +1,5 @@
+import { FilterRow } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
@@ -126,15 +128,15 @@ function PublishRecords() {
         />
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <FilterRow className="mt-6">
         <Input
-          className="max-w-xs"
+          className={FILTER_SEARCH}
           placeholder="Search batch, publisher or collection point"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Send status" />
           </SelectTrigger>
           <SelectContent>
@@ -146,7 +148,7 @@ function PublishRecords() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterRow>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (

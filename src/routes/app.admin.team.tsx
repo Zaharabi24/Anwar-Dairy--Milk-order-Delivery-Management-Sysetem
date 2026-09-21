@@ -1,3 +1,5 @@
+import { FilterRow } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, MoreHorizontal } from "lucide-react";
 import { useCallback, useMemo, useState, type FormEvent } from "react";
@@ -447,9 +449,9 @@ function InvitationsTable({
 
   return (
     <>
-      <div className="mt-4 flex flex-wrap gap-3">
+      <FilterRow className="mt-4">
         <Select value={status} onValueChange={(v) => setStatus(v as InvitationStatus | "all")}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -461,12 +463,12 @@ function InvitationsTable({
           </SelectContent>
         </Select>
         <Input
-          className="max-w-xs"
+          className={FILTER_SEARCH}
           placeholder="Search email or name"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-      </div>
+      </FilterRow>
 
       {rows.length === 0 ? (
         <div className="mt-4">
@@ -661,7 +663,7 @@ function MembersTable({
   }
 
   const filters = (
-    <div className="mt-4 flex flex-wrap gap-3">
+    <FilterRow className="mt-4">
       <Select value={roleFilter} onValueChange={(v) => onRoleFilterChange(v as RoleValue | "all")}>
         <SelectTrigger className="w-60" aria-label="Filter by role">
           <SelectValue />
@@ -675,12 +677,12 @@ function MembersTable({
         </SelectContent>
       </Select>
       <Input
-        className="max-w-xs"
+        className={FILTER_SEARCH}
         placeholder="Search name, email or ID"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
-    </div>
+    </FilterRow>
   );
 
   if (members.length === 0) {

@@ -44,7 +44,11 @@ export function PasswordField({
     <div className="space-y-2">
       <Label htmlFor={id}>
         {label}
-        {required && <span className="ml-0.5 text-destructive">*</span>}
+        {required && (
+          <span className="ml-0.5 text-destructive" aria-hidden="true">
+            *
+          </span>
+        )}
       </Label>
       <div className="relative">
         <Input
@@ -55,7 +59,7 @@ export function PasswordField({
           placeholder={placeholder}
           autoComplete={autoComplete}
           aria-invalid={!!error}
-          className={cn("pr-10", error && "border-destructive")}
+          className={cn("pr-11", error && "border-destructive")}
         />
         <button
           type="button"
@@ -65,9 +69,12 @@ export function PasswordField({
           // label and aria-pressed carry the action and the state for a screen reader.
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
-          className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+          // A 32px square inside the 40px field: a real target, centred, and clear of the
+          // rounded corner. `secondary` rather than `accent`, which is the brand gold here and
+          // lit the corner of the field up like a warning.
+          className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
         >
-          {visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+          {visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
         </button>
       </div>
 

@@ -1,3 +1,5 @@
+import { FilterRow } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MoreHorizontal } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
@@ -180,9 +182,9 @@ function AccountsPage() {
         <StatCard label="Deactivated" value={count("deactivated")} />
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <FilterRow className="mt-6">
         <Select value={status} onValueChange={(v) => setStatus(v as AccountStatus | "all")}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -195,7 +197,7 @@ function AccountsPage() {
           </SelectContent>
         </Select>
         <Select value={unit} onValueChange={setUnit}>
-          <SelectTrigger className="w-60">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -208,7 +210,7 @@ function AccountsPage() {
           </SelectContent>
         </Select>
         <Select value={role} onValueChange={setRole}>
-          <SelectTrigger className="w-56">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -221,12 +223,12 @@ function AccountsPage() {
           </SelectContent>
         </Select>
         <Input
-          className="max-w-xs"
+          className={FILTER_SEARCH}
           placeholder="Search name, ID or email"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-      </div>
+      </FilterRow>
 
       {loading && !data ? (
         <Skeleton className="mt-4 h-64 w-full rounded-xl" />

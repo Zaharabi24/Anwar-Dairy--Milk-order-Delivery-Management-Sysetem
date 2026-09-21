@@ -5,6 +5,7 @@ import * as SelectPrimitive from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { CONTROL_SINGLE_LINE } from "@/components/ui/control-styles";
 
 const Select = SelectPrimitive.Root;
 
@@ -19,14 +20,21 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background cursor-pointer data-[placeholder]:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      // The same shape as Input, so a dropdown and a text box in the same row are the same
+      // height and line up. The chevron is spaced off the value rather than pinned to the edge.
+      CONTROL_SINGLE_LINE,
+      "justify-between gap-2 whitespace-nowrap text-left cursor-pointer",
+      "data-[placeholder]:text-muted-foreground [&>span]:line-clamp-1 [&>span]:truncate",
+      // Radix moves focus here on close, which is a focus ring appearing on a field nobody
+      // reached for. Keyboard focus is what the ring is for, so it follows focus-visible.
+      "focus:outline-none",
       className,
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="size-4 shrink-0 opacity-60 transition-transform duration-200" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));
@@ -79,7 +87,7 @@ const SelectContent = React.forwardRef<
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
         className={cn(
-          "p-1",
+          "p-1.5",
           position === "popper" &&
             "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]",
         )}
@@ -98,7 +106,10 @@ const SelectLabel = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SelectPrimitive.Label
     ref={ref}
-    className={cn("px-2 py-1.5 text-sm font-semibold", className)}
+    className={cn(
+      "px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground",
+      className,
+    )}
     {...props}
   />
 ));
@@ -111,14 +122,20 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      "relative flex w-full cursor-default select-none items-center rounded-sm py-1.5 pl-2 pr-8 text-sm outline-none focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
+      // Roomier than the 24px default: a list of departments is something people aim at.
+      // Highlighted with `secondary`, the quiet surface tint, rather than `accent` -- accent is
+      // the brand gold in this theme, which turned every hovered option into a highlighter mark.
+      "relative flex w-full cursor-pointer select-none items-center rounded-sm py-2 pl-3 pr-8 text-sm outline-none transition-colors",
+      "focus:bg-secondary focus:text-secondary-foreground data-[highlighted]:bg-secondary",
+      "data-[state=checked]:font-medium",
+      "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className,
     )}
     {...props}
   >
-    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute right-2.5 flex size-4 items-center justify-center text-primary">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4" />
+        <Check className="size-4" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

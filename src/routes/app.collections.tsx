@@ -1,3 +1,5 @@
+import { Field, FilterRow } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
@@ -29,9 +31,15 @@ export const Route = createFileRoute("/app/collections")({
   head: () => ({
     meta: [
       { title: "Collections — Anwar Organic" },
-      { name: "description", content: "Track amount due, collected and outstanding for each order." },
+      {
+        name: "description",
+        content: "Track amount due, collected and outstanding for each order.",
+      },
       { property: "og:title", content: "Collections — Anwar Organic" },
-      { property: "og:description", content: "Record cash, bKash and payroll settlements against delivered milk orders." },
+      {
+        property: "og:description",
+        content: "Record cash, bKash and payroll settlements against delivered milk orders.",
+      },
     ],
   }),
   component: CollectionsPage,
@@ -127,15 +135,15 @@ function CollectionsPage() {
         <StatCard label="Due" value={outstanding} format={taka} />
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <FilterRow className="mt-6">
         <Input
-          className="max-w-xs"
+          className={FILTER_SEARCH}
           placeholder="Search order or employee"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Payment status" />
           </SelectTrigger>
           <SelectContent>
@@ -145,7 +153,7 @@ function CollectionsPage() {
             <SelectItem value="Unpaid">Unpaid</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </FilterRow>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (
@@ -216,7 +224,8 @@ function CollectionsPage() {
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Billed <span className="font-medium text-foreground">{taka(active?.amount ?? 0)}</span> ·
+              Billed{" "}
+              <span className="font-medium text-foreground">{taka(active?.amount ?? 0)}</span> ·
               already collected{" "}
               <span className="font-medium text-foreground">
                 {taka(active ? collectedFor(active.orderNo) : 0)}
@@ -226,8 +235,7 @@ function CollectionsPage() {
                 {taka(active ? Math.max(0, active.amount - collectedFor(active.orderNo)) : 0)}
               </span>
             </p>
-            <div>
-              <Label className="mb-2 block">Amount collected now (৳)</Label>
+            <Field label="Amount collected now (৳)">
               <Input
                 type="number"
                 value={amount}
@@ -241,9 +249,8 @@ function CollectionsPage() {
                     : 0,
                 )}
               </p>
-            </div>
-            <div>
-              <Label className="mb-2 block">Method</Label>
+            </Field>
+            <Field label="Method">
               <Select value={method} onValueChange={(v) => setMethod(v as Method)}>
                 <SelectTrigger>
                   <SelectValue />
@@ -256,15 +263,14 @@ function CollectionsPage() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div>
-              <Label className="mb-2 block">Reference</Label>
+            </Field>
+            <Field label="Reference">
               <Input
                 value={reference}
                 onChange={(e) => setReference(e.target.value)}
                 placeholder="Receipt or transaction no."
               />
-            </div>
+            </Field>
           </div>
           <DialogFooter>
             <Button onClick={save}>Save payment</Button>

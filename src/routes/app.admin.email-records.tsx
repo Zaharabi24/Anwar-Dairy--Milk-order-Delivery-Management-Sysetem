@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { Field, FilterBar } from "@/components/ui/field";
 import {
   Select,
   SelectContent,
@@ -141,17 +141,14 @@ function EmailRecords() {
         <StatCard label="Went on to order" value={ordered.length} />
       </div>
 
-      <div className="mt-6 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2 lg:grid-cols-5">
-        <div>
-          <Label className="mb-2 block text-xs">From date</Label>
+      <FilterBar className="mt-6">
+        <Field label="From date">
           <Input type="date" value={from} onChange={(e) => filter(() => setFrom(e.target.value))} />
-        </div>
-        <div>
-          <Label className="mb-2 block text-xs">To date</Label>
+        </Field>
+        <Field label="To date">
           <Input type="date" value={to} onChange={(e) => filter(() => setTo(e.target.value))} />
-        </div>
-        <div>
-          <Label className="mb-2 block text-xs">Batch</Label>
+        </Field>
+        <Field label="Batch">
           <Select value={batchNo} onValueChange={(v) => filter(() => setBatchNo(v))}>
             <SelectTrigger>
               <SelectValue placeholder="Batch" />
@@ -165,9 +162,8 @@ function EmailRecords() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div>
-          <Label className="mb-2 block text-xs">Delivery status</Label>
+        </Field>
+        <Field label="Delivery status">
           <Select value={status} onValueChange={(v) => filter(() => setStatus(v))}>
             <SelectTrigger>
               <SelectValue placeholder="Status" />
@@ -181,16 +177,15 @@ function EmailRecords() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-        <div>
-          <Label className="mb-2 block text-xs">Search</Label>
+        </Field>
+        <Field label="Search">
           <Input
             placeholder="Name, ID, email, department"
             value={search}
             onChange={(e) => filter(() => setSearch(e.target.value))}
           />
-        </div>
-        <div className="flex flex-wrap items-end gap-2 sm:col-span-2 lg:col-span-5">
+        </Field>
+        <div className="flex flex-wrap items-center gap-2 sm:col-span-2 lg:col-span-4">
           <Button
             variant="outline"
             size="sm"
@@ -243,7 +238,7 @@ function EmailRecords() {
             Clear filters
           </Button>
         </div>
-      </div>
+      </FilterBar>
 
       <p className="mt-3 text-xs text-muted-foreground">
         {loading

@@ -1,3 +1,4 @@
+import { FILTER_CONTROL } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import {
@@ -93,12 +94,7 @@ function AccountAuditPage() {
         title="Account audit"
         description="Every account event, newest first."
         action={
-          <Button
-            variant="outline"
-            className="h-9"
-            onClick={exportCsv}
-            disabled={events.length === 0}
-          >
+          <Button variant="outline" onClick={exportCsv} disabled={events.length === 0}>
             Export CSV
           </Button>
         }
@@ -112,7 +108,7 @@ function AccountAuditPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-60">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

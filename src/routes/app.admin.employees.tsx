@@ -1,10 +1,11 @@
+import { Field, FieldRow, FilterRow, SwitchField } from "@/components/ui/field";
+import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
@@ -167,15 +168,15 @@ function EmployeeDatabasePage() {
         <StatCard label="Reachable by email" value={mailable} />
       </div>
 
-      <div className="mt-6 flex flex-wrap gap-3">
+      <FilterRow className="mt-6">
         <Input
-          className="max-w-xs"
+          className={FILTER_SEARCH}
           placeholder="Search name, ID, email, department"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
         <Select value={department} onValueChange={setDepartment}>
-          <SelectTrigger className="w-52">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Department" />
           </SelectTrigger>
           <SelectContent>
@@ -188,7 +189,7 @@ function EmployeeDatabasePage() {
           </SelectContent>
         </Select>
         <Select value={location} onValueChange={setLocation}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Location" />
           </SelectTrigger>
           <SelectContent>
@@ -201,7 +202,7 @@ function EmployeeDatabasePage() {
           </SelectContent>
         </Select>
         <Select value={status} onValueChange={setStatus}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
@@ -211,7 +212,7 @@ function EmployeeDatabasePage() {
           </SelectContent>
         </Select>
         <Select value={unit} onValueChange={setUnit}>
-          <SelectTrigger className="w-48">
+          <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Business unit" />
           </SelectTrigger>
           <SelectContent>
@@ -223,7 +224,7 @@ function EmployeeDatabasePage() {
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterRow>
 
       <p className="mt-3 text-xs text-muted-foreground">
         Showing {rows.length} of {employees.length}
@@ -341,75 +342,69 @@ function EmployeeDatabasePage() {
           </DialogHeader>
           {draft ? (
             <div className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label className="mb-2 block">Full name</Label>
+              <FieldRow columns={2}>
+                <Field label="Full name">
                   <Input
                     value={draft.name}
                     onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                   />
-                </div>
-                <div>
-                  <Label className="mb-2 block">Employee ID</Label>
+                </Field>
+                <Field
+                  label="Employee ID"
+                  {...(isNew
+                    ? {}
+                    : {
+                        hint: "The ID identifies this person everywhere and can't be changed here.",
+                      })}
+                >
                   <Input
                     value={draft.id}
                     disabled={!isNew}
                     placeholder="e.g. 019258"
                     onChange={(e) => setDraft({ ...draft, id: e.target.value })}
                   />
-                  {!isNew ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      The ID identifies this person everywhere and can't be changed here.
-                    </p>
-                  ) : null}
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label className="mb-2 block">Company email</Label>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={2}>
+                <Field
+                  label="Company email"
+                  hint="Where the batch email goes. Without one this person can't be mailed."
+                >
                   <Input
                     value={draft.companyEmail}
                     onChange={(e) => setDraft({ ...draft, companyEmail: e.target.value })}
                   />
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Where the batch email goes. Without one this person can't be mailed.
-                  </p>
-                </div>
-                <div>
-                  <Label className="mb-2 block">Official phone number</Label>
+                </Field>
+                <Field label="Official phone number">
                   <Input
                     value={draft.phone}
                     onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
                   />
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <Label className="mb-2 block">Department</Label>
+                </Field>
+              </FieldRow>
+              <FieldRow columns={2}>
+                <Field label="Department">
                   <Input
                     list="department-options"
                     value={draft.department}
                     onChange={(e) => setDraft({ ...draft, department: e.target.value })}
                   />
-                </div>
-                <div>
-                  <Label className="mb-2 block">Designation</Label>
+                </Field>
+                <Field label="Designation">
                   <Input
                     list="designation-options"
                     value={draft.designation}
                     onChange={(e) => setDraft({ ...draft, designation: e.target.value })}
                   />
-                </div>
-                <div>
-                  <Label className="mb-2 block">Location</Label>
+                </Field>
+                <Field label="Location">
                   <Input
                     list="location-options"
                     value={draft.site}
                     onChange={(e) => setDraft({ ...draft, site: e.target.value })}
                   />
-                </div>
-                <div>
-                  <Label className="mb-2 block">Business Unit</Label>
+                </Field>
+                <Field label="Business Unit">
                   <Select
                     value={draft.businessUnitCode ?? "none"}
                     onValueChange={(v) =>
@@ -429,20 +424,19 @@ function EmployeeDatabasePage() {
                       ))}
                     </SelectContent>
                   </Select>
-                </div>
-              </div>
-              <div className="flex items-center justify-between rounded-lg border border-border px-4 py-3">
-                <div>
-                  <Label className="block">Active</Label>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Inactive employees are never emailed when a batch is published.
-                  </p>
-                </div>
+                </Field>
+              </FieldRow>
+              <SwitchField
+                label="Active"
+                htmlFor="employee-active"
+                hint="Inactive employees are never emailed when a batch is published."
+              >
                 <Switch
+                  id="employee-active"
                   checked={draft.active}
                   onCheckedChange={(v) => setDraft({ ...draft, active: v })}
                 />
-              </div>
+              </SwitchField>
             </div>
           ) : null}
           <DialogFooter className="sm:justify-between">
