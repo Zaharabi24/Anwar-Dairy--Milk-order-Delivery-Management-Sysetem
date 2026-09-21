@@ -115,7 +115,10 @@ interface AppData {
   addDeliveryRecord: (record: Omit<DeliveryRecord, "couponNo">) => void;
   /** Records a payment; the amount due and status are worked out on the server. */
   upsertCollection: (record: CollectionEntry) => Promise<boolean>;
-  saveEmployee: (employee: Employee, isNew: boolean) => Promise<Employee | null>;
+  saveEmployee: (
+    employee: Employee & { newId?: string },
+    isNew: boolean,
+  ) => Promise<Employee | null>;
   /** Resolves to how the row went, or null if the delete was refused. */
   deleteEmployee: (id: string) => Promise<{ retainedForHistory: boolean } | null>;
   setEmployeeActive: (id: string, active: boolean) => Promise<boolean>;

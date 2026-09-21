@@ -90,6 +90,11 @@ export const collectionInput = z.object({
 export const saveEmployeeInput = z.object({
   employee: z.object({
     id: z.string().max(60),
+    /**
+     * A new Employee ID for an existing record, when a Super Admin is correcting one. Left out
+     * for every other save, so an ordinary edit cannot rename somebody by accident.
+     */
+    newId: z.string().trim().max(60).optional(),
     name: z.string().trim().min(1, "Name is required.").max(120),
     // Three people in the directory have no address on file. They are still employees and still
     // belong in it -- they are simply carried inactive, because an address is what the batch mail
@@ -118,6 +123,11 @@ export const employeeActiveInput = z.object({ id, active: z.boolean() });
 export const saveDeliveryPointInput = z.object({
   point: z.object({
     id: z.string().max(60),
+    /**
+     * A new Employee ID for an existing record, when a Super Admin is correcting one. Left out
+     * for every other save, so an ordinary edit cannot rename somebody by accident.
+     */
+    newId: z.string().trim().max(60).optional(),
     name: z.string().trim().min(1, "Name is required.").max(120),
     address: z.string().trim().min(1, "Address is required.").max(300),
     coordinatorName: text(120),

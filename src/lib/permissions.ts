@@ -18,7 +18,8 @@ export type Permission =
   | "email_records.view"
   | "mailbox.send"
   | "staff.invite"
-  | "staff.manage";
+  | "staff.manage"
+  | "employee_id.change";
 
 const SYSTEM_ADMIN: Permission[] = [
   "batches.manage",
@@ -44,7 +45,16 @@ const GRANTS: Record<RoleValue, readonly Permission[]> = {
   system_admin: SYSTEM_ADMIN,
   // Super Admin can do everything a System Admin can, and owns the staff lifecycle and the
   // Accounts console.
-  super_admin: [...SYSTEM_ADMIN, "accounts.manage", "staff.invite", "staff.manage"],
+  // Changing an Employee ID is the Super Admin's alone. It is the key the whole record hangs
+  // off -- orders, sessions, booking links and the sign-in itself all name it -- so correcting
+  // one is a different kind of act from editing a phone number, which any System Admin may do.
+  super_admin: [
+    ...SYSTEM_ADMIN,
+    "accounts.manage",
+    "staff.invite",
+    "staff.manage",
+    "employee_id.change",
+  ],
 };
 
 export function hasPermission(roles: readonly RoleValue[], permission: Permission): boolean {

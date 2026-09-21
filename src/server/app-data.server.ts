@@ -8,7 +8,7 @@ import { enqueuePublication } from "./mail/mail-queue.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
 import { isRoleValue, ROLE_LABEL } from "@/lib/auth-constants";
-import { canManageAccount } from "@/lib/permissions";
+import { canManageAccount, hasPermission } from "@/lib/permissions";
 import type {
   AppNotification,
   AppSettings,
@@ -951,6 +951,38 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
       return toEmployee(row);
     }
 
+    // Correcting the Employee ID. Held apart from the rest of the update because it is the key
+    // every other table names: ten foreign keys follow it by cascade and, since migration 0017,
+    // so do orders, cancellation requests and booking links. The rename and the edit happen in
+    // one transaction, so the record and its history move together or not at all.
+    const renameTo = (employee.newId ?? "").trim();
+    if (renameTo && renameTo.toLowerCase() !== employee.id.toLowerCase()) {
+      if (!hasPermission(user.roles, "employee_id.change")) {
+        throw new AppError("Only a Super Admin can change an Employee ID.");
+      }
+      if (!/^[A-Za-z0-9._/-]{1,32}$/.test(renameTo)) {
+        throw new AppError(
+          `"${renameTo}" can't be used as an Employee ID. Use letters, digits, and . _ - / only, with no spaces.`,
+        );
+      }
+      const [clash] = await tx<Row[]>`
+        select id, name from employees where lower(id) = lower(${renameTo})`;
+      if (clash) {
+        throw new AppError(
+          `Employee ID ${renameTo} already belongs to ${clash["name"] as string}.`,
+        );
+      }
+      await tx`update employees set id = ${renameTo}, updated_at = now() where id = ${employee.id}`;
+      await audit(tx, {
+        actor: user.fullName,
+        action: "Changed Employee ID",
+        record: renameTo,
+        oldValue: employee.id,
+        newValue: renameTo,
+      });
+    }
+    const rowId = renameTo || employee.id;
+
     const [row] = await tx<Row[]>`
       update employees set
         name = ${employee.name}, company_email = ${employee.companyEmail}, phone = ${employee.phone},
@@ -958,13 +990,13 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
         site = ${employee.site},
         business_unit_code = ${employee.businessUnitCode || null}, active = ${employee.active},
         updated_at = now()
-      where id = ${employee.id}
+      where id = ${rowId}
       returning *`;
     if (!row) throw new AppError(`Employee ${employee.id} doesn't exist.`);
     await audit(tx, {
       actor: user.fullName,
       action: "Edited employee",
-      record: employee.id,
+      record: rowId,
       oldValue: "Previous details",
       newValue: employee.name,
     });

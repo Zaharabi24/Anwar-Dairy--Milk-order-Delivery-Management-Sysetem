@@ -73,6 +73,11 @@ function EmployeeDatabasePage() {
   // enforces it on every call; this is so the button isn't offered to somebody it would refuse.
   const { user } = useAuth();
   const canDelete = hasPermission(user?.roles ?? [], "roster.manage");
+  // Correcting an Employee ID is the Super Admin's: it is the key orders, sessions and booking
+  // links all name, so the field stays read-only for everybody else.
+  const canChangeId = hasPermission(user?.roles ?? [], "employee_id.change");
+  // What the record was called when the dialog opened, so an edited ID still finds its row.
+  const [originalId, setOriginalId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [unit, setUnit] = useState("all");
   const [department, setDepartment] = useState("all");
@@ -144,6 +149,7 @@ function EmployeeDatabasePage() {
   /** Swaps the Add dialog for the record they were really looking for. */
   function openExisting(employee: Employee) {
     setDraft(employee);
+    setOriginalId(employee.id);
     setIsNew(false);
   }
 
@@ -172,7 +178,13 @@ function EmployeeDatabasePage() {
       toast.error("Name is required.");
       return;
     }
-    const saved = await saveEmployee(draft, isNew);
+    const renaming = !isNew && originalId !== null && draft.id.trim() !== originalId;
+    const saved = await saveEmployee(
+      isNew || originalId === null
+        ? draft
+        : { ...draft, id: originalId, ...(renaming ? { newId: draft.id.trim() } : {}) },
+      isNew,
+    );
     if (!saved) return;
     toast.success(`${saved.name} ${isNew ? "added" : "updated"}`);
     setDraft(null);
@@ -187,6 +199,7 @@ function EmployeeDatabasePage() {
           <Button
             onClick={() => {
               setDraft(blank);
+              setOriginalId(null);
               setIsNew(true);
             }}
           >
@@ -330,6 +343,7 @@ function EmployeeDatabasePage() {
                         size="sm"
                         onClick={() => {
                           setDraft(e);
+                          setOriginalId(e.id);
                           setIsNew(false);
                         }}
                       >
@@ -408,12 +422,14 @@ function EmployeeDatabasePage() {
                   hint={
                     isNew
                       ? "The company's own ID, if they have one. Leave it blank and the system assigns one."
-                      : "The ID identifies this person everywhere and can't be changed here."
+                      : canChangeId
+                        ? "Changing this moves their orders, sessions and booking links with it."
+                        : "The ID identifies this person everywhere. Only a Super Admin can change it."
                   }
                 >
                   <Input
                     value={draft.id}
-                    disabled={!isNew}
+                    disabled={!isNew && !canChangeId}
                     placeholder="e.g. 019258 — optional"
                     onChange={(e) => setDraft({ ...draft, id: e.target.value })}
                   />
