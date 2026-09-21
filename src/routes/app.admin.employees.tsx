@@ -146,10 +146,6 @@ function EmployeeDatabasePage() {
       toast.error("Name is required.");
       return;
     }
-    if (isNew && !draft.id.trim()) {
-      toast.error("Employee ID is required.");
-      return;
-    }
     const saved = await saveEmployee(draft, isNew);
     if (!saved) return;
     toast.success(`${saved.name} ${isNew ? "added" : "updated"}`);
@@ -357,7 +353,7 @@ function EmployeeDatabasePage() {
           {draft ? (
             <div className="space-y-4">
               <FieldRow columns={2}>
-                <Field label="Full name">
+                <Field label="Full name" required>
                   <Input
                     value={draft.name}
                     onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -365,16 +361,16 @@ function EmployeeDatabasePage() {
                 </Field>
                 <Field
                   label="Employee ID"
-                  {...(isNew
-                    ? {}
-                    : {
-                        hint: "The ID identifies this person everywhere and can't be changed here.",
-                      })}
+                  hint={
+                    isNew
+                      ? "The company's own ID, if they have one. Leave it blank and the system assigns one."
+                      : "The ID identifies this person everywhere and can't be changed here."
+                  }
                 >
                   <Input
                     value={draft.id}
                     disabled={!isNew}
-                    placeholder="e.g. 019258"
+                    placeholder="e.g. 019258 — optional"
                     onChange={(e) => setDraft({ ...draft, id: e.target.value })}
                   />
                 </Field>

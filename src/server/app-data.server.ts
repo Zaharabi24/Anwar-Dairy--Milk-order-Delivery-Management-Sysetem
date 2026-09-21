@@ -824,6 +824,8 @@ export async function markNotificationsRead() {
 export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
   const user = await requirePermission("roster.manage");
   return mutate(user, async (tx): Promise<Employee> => {
+    if (!employee.name.trim()) throw new AppError("The employee needs a name.");
+
     // Two people in the directory genuinely share one address, so a repeat is not by itself an
     // error. What can't be shared is an address someone signs in with: it is their identity at
     // the door and where a password reset is sent.
@@ -844,13 +846,33 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
       // as given; only when one isn't offered does the system fall back to minting an EMP- one.
       const typed = employee.id.trim();
       if (typed) {
-        const [clash] = await tx<Row[]>`select id from employees where lower(id) = lower(${typed})`;
-        if (clash) throw new AppError(`Employee ID ${typed} is already in the directory.`);
+        // Checked here rather than left to the column constraint, which can only answer "some
+        // values are outside the allowed range" -- a message that names neither the field nor the
+        // rule, and reads like the system is broken rather than like the ID needs fixing.
+        if (!/^[A-Za-z0-9._/-]{1,32}$/.test(typed)) {
+          throw new AppError(
+            `"${typed}" can't be used as an Employee ID. Use letters, digits, and . _ - / only, with no spaces.`,
+          );
+        }
+        const [clash] = await tx<Row[]>`
+          select id, name from employees where lower(id) = lower(${typed})`;
+        if (clash) {
+          throw new AppError(
+            `Employee ID ${typed} already belongs to ${clash["name"] as string}. Use a different ID, or edit that record instead.`,
+          );
+        }
       }
       const [{ next }] = (await tx<Row[]>`
         select coalesce(max(substring(id from '^EMP-([0-9]+)$')::int), 1000) + 1 as next
         from employees`) as unknown as [{ next: number }];
       const newId = typed || `EMP-${next}`;
+      if (employee.businessUnitCode) {
+        const [unit] = await tx<Row[]>`
+          select code from business_units where code = ${employee.businessUnitCode}`;
+        if (!unit) {
+          throw new AppError(`${employee.businessUnitCode} isn't one of the business units.`);
+        }
+      }
       const [row] = await tx<Row[]>`
         insert into employees (id, name, company_email, phone, department, designation, site,
                                business_unit_code, active)
