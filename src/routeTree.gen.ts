@@ -37,6 +37,7 @@ import { Route as AppAdminAuditLogRouteImport } from './routes/app.admin.audit-l
 import { Route as AppAdminDeliveryPointsRouteImport } from './routes/app.admin.delivery-points'
 import { Route as AppAdminEmailRecordsRouteImport } from './routes/app.admin.email-records'
 import { Route as AppAdminEmployeesRouteImport } from './routes/app.admin.employees'
+import { Route as AppAdminMailboxRouteImport } from './routes/app.admin.mailbox'
 import { Route as AppAdminPasswordResetsRouteImport } from './routes/app.admin.password-resets'
 import { Route as AppAdminSettingsRouteImport } from './routes/app.admin.settings'
 import { Route as AppAdminTeamRouteImport } from './routes/app.admin.team'
@@ -187,6 +188,11 @@ const AppAdminEmployeesRoute = AppAdminEmployeesRouteImport.update({
   path: '/admin/employees',
   getParentRoute: () => AppRoute,
 } as any)
+const AppAdminMailboxRoute = AppAdminMailboxRouteImport.update({
+  id: '/admin/mailbox',
+  path: '/admin/mailbox',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppAdminPasswordResetsRoute = AppAdminPasswordResetsRouteImport.update({
   id: '/admin/password-resets',
   path: '/admin/password-resets',
@@ -264,6 +270,7 @@ export interface FileRoutesByFullPath {
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
   '/app/admin/email-records': typeof AppAdminEmailRecordsRoute
   '/app/admin/employees': typeof AppAdminEmployeesRoute
+  '/app/admin/mailbox': typeof AppAdminMailboxRoute
   '/app/admin/password-resets': typeof AppAdminPasswordResetsRoute
   '/app/admin/settings': typeof AppAdminSettingsRoute
   '/app/admin/team': typeof AppAdminTeamRoute
@@ -302,6 +309,7 @@ export interface FileRoutesByTo {
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
   '/app/admin/email-records': typeof AppAdminEmailRecordsRoute
   '/app/admin/employees': typeof AppAdminEmployeesRoute
+  '/app/admin/mailbox': typeof AppAdminMailboxRoute
   '/app/admin/password-resets': typeof AppAdminPasswordResetsRoute
   '/app/admin/settings': typeof AppAdminSettingsRoute
   '/app/admin/team': typeof AppAdminTeamRoute
@@ -342,6 +350,7 @@ export interface FileRoutesById {
   '/app/admin/delivery-points': typeof AppAdminDeliveryPointsRoute
   '/app/admin/email-records': typeof AppAdminEmailRecordsRoute
   '/app/admin/employees': typeof AppAdminEmployeesRoute
+  '/app/admin/mailbox': typeof AppAdminMailboxRoute
   '/app/admin/password-resets': typeof AppAdminPasswordResetsRoute
   '/app/admin/settings': typeof AppAdminSettingsRoute
   '/app/admin/team': typeof AppAdminTeamRoute
@@ -383,6 +392,7 @@ export interface FileRouteTypes {
     | '/app/admin/delivery-points'
     | '/app/admin/email-records'
     | '/app/admin/employees'
+    | '/app/admin/mailbox'
     | '/app/admin/password-resets'
     | '/app/admin/settings'
     | '/app/admin/team'
@@ -421,6 +431,7 @@ export interface FileRouteTypes {
     | '/app/admin/delivery-points'
     | '/app/admin/email-records'
     | '/app/admin/employees'
+    | '/app/admin/mailbox'
     | '/app/admin/password-resets'
     | '/app/admin/settings'
     | '/app/admin/team'
@@ -460,6 +471,7 @@ export interface FileRouteTypes {
     | '/app/admin/delivery-points'
     | '/app/admin/email-records'
     | '/app/admin/employees'
+    | '/app/admin/mailbox'
     | '/app/admin/password-resets'
     | '/app/admin/settings'
     | '/app/admin/team'
@@ -683,6 +695,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAdminEmployeesRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/admin/mailbox': {
+      id: '/app/admin/mailbox'
+      path: '/admin/mailbox'
+      fullPath: '/app/admin/mailbox'
+      preLoaderRoute: typeof AppAdminMailboxRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/admin/password-resets': {
       id: '/app/admin/password-resets'
       path: '/admin/password-resets'
@@ -767,6 +786,7 @@ interface AppRouteChildren {
   AppAdminDeliveryPointsRoute: typeof AppAdminDeliveryPointsRoute
   AppAdminEmailRecordsRoute: typeof AppAdminEmailRecordsRoute
   AppAdminEmployeesRoute: typeof AppAdminEmployeesRoute
+  AppAdminMailboxRoute: typeof AppAdminMailboxRoute
   AppAdminPasswordResetsRoute: typeof AppAdminPasswordResetsRoute
   AppAdminSettingsRoute: typeof AppAdminSettingsRoute
   AppAdminTeamRoute: typeof AppAdminTeamRoute
@@ -796,6 +816,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAdminDeliveryPointsRoute: AppAdminDeliveryPointsRoute,
   AppAdminEmailRecordsRoute: AppAdminEmailRecordsRoute,
   AppAdminEmployeesRoute: AppAdminEmployeesRoute,
+  AppAdminMailboxRoute: AppAdminMailboxRoute,
   AppAdminPasswordResetsRoute: AppAdminPasswordResetsRoute,
   AppAdminSettingsRoute: AppAdminSettingsRoute,
   AppAdminTeamRoute: AppAdminTeamRoute,

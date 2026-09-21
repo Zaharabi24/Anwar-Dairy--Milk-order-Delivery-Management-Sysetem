@@ -279,6 +279,31 @@ the same rate, sent in-process. What you lose is durability — a restart partwa
 run, and it resumes on the next publish or the next look at the records rather than immediately.
 Redis is strongly preferred in production and is already in `docker-compose.yml`.
 
+## The System Admin mailbox
+
+**System Admin → Mailbox** writes to the Employee Database on the official template: everyone, or
+a list the admin picks. It shares the batch queue, so both come out of the same 25-a-minute
+allowance — a notice sent while a batch is going out does not push the mailbox over its limit.
+
+Held by `mailbox.send`, which only the System Admin and the Super Admin have. The permission is
+checked on every call, not just on the menu: a direct call to the server function from any other
+role answers 403.
+
+Safeguards against the mass email nobody meant to send:
+
+- **All employees** and **Selected employees** are separate choices, not a checkbox that happens
+  to be ticked, and the recipient count is on screen the whole time.
+- Confirming says "You are about to send this email to X employees." A specific list is shown in
+  full before sending; sending to everyone additionally requires typing `SEND`.
+- The recipient list is resolved **server-side from the directory**, never taken from the browser.
+  Someone inactive, deleted, or without an address cannot be reached even if their id is posted.
+- The message is plain text and is escaped before rendering, so the company's branded template
+  cannot be used to carry arbitrary markup.
+- Nothing is sent without that confirmation, and every send writes an `audit_logs` entry.
+
+**Email history** records each send with the date, subject, audience, recipient count and status,
+and lists every recipient with their delivery status and the reason for any failure.
+
 ## Email delivery
 
 Invitations, account-approval (password setup), password reset and admin notification emails all

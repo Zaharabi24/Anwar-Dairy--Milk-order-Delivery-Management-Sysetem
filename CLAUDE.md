@@ -40,7 +40,7 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
   `sessions.portal` value still say `staff`, because `employee` already names the other portal.
 - **Super Admin:** the only role with its own door, `/staff/admin`.
 - **Sessions:** a session only uses roles allowed by its portal (`rolesForPortal`).
-- **System Admin:** manages employee accounts only.
+- **System Admin:** manages employee accounts only, plus the Employee Database and the Mailbox.
 
 ## Rules
 - Access control is enforced in `src/server/**` with `requirePermission` (map in

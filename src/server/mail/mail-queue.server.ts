@@ -12,14 +12,30 @@ import { Queue, Worker, type Job } from "bullmq";
 import IORedis, { type Redis } from "ioredis";
 import { getDb } from "../db/client.server";
 import { recordAttempt, sendQueuedEmail, updatePublicationTotals } from "./batch-mail.server";
+import {
+  recordCampaignAttempt,
+  sendCampaignEmail,
+  updateCampaignTotals,
+} from "./campaign-mail.server";
 import { MAIL_INTERVAL_MS, MAIL_RATE_PER_MINUTE, MAX_ATTEMPTS } from "./rate.server";
 
 type Row = Record<string, string | number | boolean | Date | null>;
 
 const QUEUE_NAME = "batch-mail";
 
+/**
+ * A batch email, or a message from the System Admin's mailbox.
+ *
+ * Both kinds go on the same queue on purpose. The 30 a minute Microsoft 365 allows belongs to the
+ * mailbox, not to either queue, so a notice sent while a batch is still going out has to come out
+ * of the same allowance -- two queues with a limiter each would add up to twice the limit and get
+ * both of them throttled.
+ */
 interface JobData {
+  kind?: "batch" | "campaign";
+  /** batch_emails.id, or mail_campaign_recipients.id for a campaign. */
   emailId: string;
+  /** batch_publications.id, or mail_campaigns.id for a campaign. */
   publicationId: string;
 }
 
@@ -68,22 +84,27 @@ export function startMailWorker(): void {
   worker = new Worker<JobData>(
     QUEUE_NAME,
     async (job: Job<JobData>) => {
-      const outcome = await sendQueuedEmail(job.data.emailId);
+      const campaign = job.data.kind === "campaign";
+      const send = campaign ? sendCampaignEmail : sendQueuedEmail;
+      const note = campaign ? recordCampaignAttempt : recordAttempt;
+      const total = campaign ? updateCampaignTotals : updatePublicationTotals;
+
+      const outcome = await send(job.data.emailId);
       if (outcome.result === "sent" || outcome.result === "done") {
-        await updatePublicationTotals(job.data.publicationId);
+        await total(job.data.publicationId);
         return;
       }
       // One attempt left means this is the last one, so the row is settled as failed rather than
       // left saying it will be retried.
       const attemptsMade = job.attemptsMade + 1;
       const attemptsLeft = attemptsMade < (job.opts.attempts ?? MAX_ATTEMPTS);
-      await recordAttempt(
+      await note(
         job.data.emailId,
         outcome,
         attemptsLeft && outcome.result === "retry",
         attemptsMade,
       );
-      await updatePublicationTotals(job.data.publicationId);
+      await total(job.data.publicationId);
       // Thrown so BullMQ schedules the retry. A permanent failure is thrown too, but with no
       // attempts left after this one it simply comes to rest in the failed set.
       if (outcome.result === "retry" && attemptsLeft) throw new Error(outcome.error);
@@ -233,5 +254,92 @@ async function runInProcess(publicationId: string): Promise<void> {
     await updatePublicationTotals(publicationId);
   } finally {
     running.delete(publicationId);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The System Admin's mailbox, on the same queue and the same rate limit.
+
+/** Puts a campaign's unsent messages on the queue. Safe to call again: the row id is the job id. */
+export async function enqueueCampaign(campaignId: string): Promise<number> {
+  const q = getQueue();
+  const sql = await getDb();
+  const rows = await sql<Row[]>`
+    select id from mail_campaign_recipients
+    where campaign_id = ${campaignId} and status = 'queued' and attempts < ${MAX_ATTEMPTS}
+    order by id`;
+  if (!rows.length) return 0;
+
+  if (!q) {
+    void runCampaignInProcess(campaignId).catch((error) =>
+      console.error("[mail] in-process campaign send failed", error),
+    );
+    return rows.length;
+  }
+
+  await q.addBulk(
+    rows.map((r) => ({
+      name: "send",
+      data: { kind: "campaign" as const, emailId: String(r["id"]), publicationId: campaignId },
+      opts: { jobId: `campaign-${String(r["id"])}` },
+    })),
+  );
+  return rows.length;
+}
+
+/** Restarts any campaign that still has messages waiting, the way publications are resumed. */
+export async function resumePendingCampaigns(): Promise<{ pending: number }> {
+  const sql = await getDb();
+  const rows = await sql<Row[]>`
+    select distinct c.id
+    from mail_campaigns c
+    join mail_campaign_recipients r on r.campaign_id = c.id
+    where c.status = 'sending' and r.status = 'queued' and r.attempts < ${MAX_ATTEMPTS}
+    order by c.id desc
+    limit 10`;
+  let pending = 0;
+  for (const row of rows) pending += await enqueueCampaign(row["id"] as string);
+  return { pending };
+}
+
+/** The no-Redis path, at the same pace and the same attempt ceiling as the worker. */
+async function runCampaignInProcess(campaignId: string): Promise<void> {
+  const key = `campaign:${campaignId}`;
+  if (running.has(key)) return;
+  running.add(key);
+  try {
+    const sql = await getDb();
+    for (;;) {
+      const [next] = (await sql<Row[]>`
+        update mail_campaign_recipients
+        set status = 'sending', claimed_at = now(), attempts = attempts + 1
+        where id = (
+          select id from mail_campaign_recipients
+          where campaign_id = ${campaignId} and status = 'queued' and attempts < ${MAX_ATTEMPTS}
+          order by id limit 1 for update skip locked
+        )
+        returning id`) as unknown as [Row | undefined];
+      if (!next) break;
+
+      const recipientId = String(next["id"]);
+      const outcome = await sendCampaignEmail(recipientId);
+      if (outcome.result === "retry" || outcome.result === "failed") {
+        const [attempt] = (await sql<Row[]>`
+          select attempts from mail_campaign_recipients where id = ${recipientId}`) as unknown as [
+          { attempts: number },
+        ];
+        await recordCampaignAttempt(
+          recipientId,
+          outcome,
+          outcome.result === "retry" && attempt.attempts < MAX_ATTEMPTS,
+          attempt.attempts,
+        );
+      }
+      await updateCampaignTotals(campaignId);
+      await new Promise((resolve) => setTimeout(resolve, MAIL_INTERVAL_MS));
+    }
+    await updateCampaignTotals(campaignId);
+  } finally {
+    running.delete(key);
   }
 }

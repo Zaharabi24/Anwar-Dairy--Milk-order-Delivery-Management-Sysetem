@@ -16,6 +16,7 @@ export type Permission =
   | "accounts.manage"
   | "account_audit.view"
   | "email_records.view"
+  | "mailbox.send"
   | "staff.invite"
   | "staff.manage";
 
@@ -31,6 +32,9 @@ const SYSTEM_ADMIN: Permission[] = [
   "account_audit.view",
   // Who was told about which batch, and whether it reached them.
   "email_records.view",
+  // Writing to the Employee Database from the mailbox. Held by nobody else: an email that arrives
+  // over the company's branding, addressed to everyone, is not a thing to hand out widely.
+  "mailbox.send",
 ];
 
 const GRANTS: Record<RoleValue, readonly Permission[]> = {

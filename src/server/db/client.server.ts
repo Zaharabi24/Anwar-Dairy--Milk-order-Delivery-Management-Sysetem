@@ -28,9 +28,13 @@ export function getDb(): Promise<Sql> {
       // by a restart has to carry on by itself, without waiting for somebody to open a page.
       queueMicrotask(() => {
         void import("../mail/mail-queue.server")
-          .then(({ startMailWorker, resumePendingPublications }) => {
+          .then(async ({ startMailWorker, resumePendingPublications, resumePendingCampaigns }) => {
             startMailWorker();
-            return resumePendingPublications();
+            const [batches, campaigns] = await Promise.all([
+              resumePendingPublications(),
+              resumePendingCampaigns(),
+            ]);
+            return { pending: batches.pending + campaigns.pending };
           })
           .then((result) => {
             if (result?.pending) {

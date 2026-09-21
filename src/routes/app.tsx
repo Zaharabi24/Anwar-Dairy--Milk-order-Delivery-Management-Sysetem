@@ -55,6 +55,7 @@ const systemAdminPages: NavItem[] = [
   { label: "Password Resets", to: "/app/admin/password-resets" },
   { label: "Account audit", to: "/app/admin/account-audit" },
   { label: "Employee Database", to: "/app/admin/employees" },
+  { label: "Mailbox", to: "/app/admin/mailbox" },
   { label: "Email records", to: "/app/admin/email-records" },
   { label: "Delivery points", to: "/app/admin/delivery-points" },
   // Settings is deliberately not listed. The page and its route still work for anyone holding
