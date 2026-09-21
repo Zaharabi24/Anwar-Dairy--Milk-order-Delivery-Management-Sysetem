@@ -887,7 +887,7 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
       const [taken] = await tx<Row[]>`
         select id from employees
         where lower(company_email) = lower(${employee.companyEmail})
-          and id <> ${employee.id} and account_status is not null`;
+          and id <> ${employee.id} and account_status is not null and deleted_at is null`;
       if (taken) {
         throw new AppError(`${employee.companyEmail} is the sign-in address for ${taken.id}.`);
       }
@@ -908,8 +908,12 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
             `"${typed}" can't be used as an Employee ID. Use letters, digits, and . _ - / only, with no spaces.`,
           );
         }
+        // Deleted rows are excluded: a tombstone is renamed off its Employee ID, and even if an
+        // older one lingers from before that was true, it must not stand in the way of adding
+        // somebody back.
         const [clash] = await tx<Row[]>`
-          select id, name from employees where lower(id) = lower(${typed})`;
+          select id, name from employees
+          where lower(id) = lower(${typed}) and deleted_at is null`;
         if (clash) {
           throw new AppError(
             `Employee ID ${typed} already belongs to ${clash["name"] as string}. Use a different ID, or edit that record instead.`,
@@ -966,7 +970,8 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
         );
       }
       const [clash] = await tx<Row[]>`
-        select id, name from employees where lower(id) = lower(${renameTo})`;
+        select id, name from employees
+        where lower(id) = lower(${renameTo}) and deleted_at is null`;
       if (clash) {
         throw new AppError(
           `Employee ID ${renameTo} already belongs to ${clash["name"] as string}.`,
@@ -1055,20 +1060,53 @@ export async function deleteEmployee({ id }: EmployeeIdInput) {
     await tx`update booking_links set revoked_at = now()
              where employee_id = ${id} and revoked_at is null`;
 
+    // Before anything moves. The mail records copied their name and address at send time, so
+    // erasing the employee has to reach those too, or the person is still in the system one
+    // screen further in. It has to happen first: renaming the row cascades `employee_id` to the
+    // tombstone, and this would then match nothing. The rows stay -- a send that went out did go
+    // out, and the counts it feeds still have to add up -- but they no longer say who to.
+    await tx`
+      update batch_emails
+      set employee_name = 'Deleted employee', employee_ref = '', to_address = '',
+          department = '', designation = '', phone = '', location = ''
+      where employee_id = ${id}`;
+    await tx`
+      update mail_campaign_recipients
+      set employee_name = 'Deleted employee', employee_ref = '', to_address = '',
+          department = '', designation = '', business_unit = '', location = ''
+      where employee_id = ${id}`;
+
     const [attached] = await tx<Row[]>`
       select exists (select 1 from orders where employee_id = ${id})
           or exists (select 1 from cancellation_requests where employee_id = ${id}) as any_orders`;
 
     if (attached?.any_orders) {
-      // Retained, and out of the directory. The address moves to former_company_email so the same
-      // person can be added again later, or a colleague can inherit it, without a clash.
+      // Their orders are the reason the row cannot simply go: reconciliation, collections and the
+      // revenue reports all read them, and `orders.employee_id` is `on delete restrict` to say so.
+      // What stays is a ledger entry, not a person.
+      //
+      // Everything that identifies them is cleared, and the row is renamed off their Employee ID
+      // so it is free again straight away. That was the bug: the retained row kept the ID, and
+      // kept their name, phone, department and designation with it, so adding the same person
+      // back was refused by a record that was supposed to be deleted -- and refused only on
+      // saving, because the form's own check reads the directory, which hides deleted rows.
+      //
+      // `seq` is the row's own identity and never repeats, so the tombstone is unique without
+      // being derived from anything about them.
       await tx`
         update employees set
+          id = 'DEL-' || seq::text,
+          name = 'Deleted employee',
+          company_email = '',
+          former_company_email = null,
+          phone = '',
+          department = '',
+          designation = '',
+          site = '',
+          business_unit_code = null,
+          date_of_birth = null,
           deleted_at = now(),
           deleted_by = ${user.fullName},
-          former_company_email = case when company_email <> '' then company_email
-                                      else former_company_email end,
-          company_email = '',
           account_status = null,
           password_hash = null,
           active = false,
