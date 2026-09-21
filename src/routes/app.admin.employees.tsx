@@ -24,6 +24,8 @@ import {
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
+import { useAuth } from "@/hooks/use-auth";
+import { hasPermission } from "@/lib/permissions";
 import type { Employee } from "@/lib/types";
 
 export const Route = createFileRoute("/app/admin/employees")({
@@ -67,6 +69,10 @@ function suggestions(values: string[]): string[] {
 function EmployeeDatabasePage() {
   const { employees, businessUnits, saveEmployee, deleteEmployee, setEmployeeActive } =
     useAppData();
+  // Deleting from the directory belongs to the System Admin and the Super Admin. The server
+  // enforces it on every call; this is so the button isn't offered to somebody it would refuse.
+  const { user } = useAuth();
+  const canDelete = hasPermission(user?.roles ?? [], "roster.manage");
   const [query, setQuery] = useState("");
   const [unit, setUnit] = useState("all");
   const [department, setDepartment] = useState("all");
@@ -119,7 +125,13 @@ function EmployeeDatabasePage() {
     const emp = pendingDelete;
     if (!emp) return;
     setPendingDelete(null);
-    if (await deleteEmployee(emp.id)) toast.success(`${emp.name} deleted`);
+    const outcome = await deleteEmployee(emp.id);
+    if (!outcome) return;
+    toast.success(
+      outcome.retainedForHistory
+        ? `${emp.name} deleted. Their past orders stay on the books.`
+        : `${emp.name} deleted`,
+    );
   }
 
   async function toggleActive(emp: Employee) {
@@ -301,14 +313,16 @@ function EmployeeDatabasePage() {
                       >
                         Edit
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="text-destructive"
-                        onClick={() => setPendingDelete(e)}
-                      >
-                        Delete
-                      </Button>
+                      {canDelete ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-destructive"
+                          onClick={() => setPendingDelete(e)}
+                        >
+                          Delete
+                        </Button>
+                      ) : null}
                     </div>
                   </Td>
                 </motion.tr>
@@ -440,7 +454,7 @@ function EmployeeDatabasePage() {
             </div>
           ) : null}
           <DialogFooter className="sm:justify-between">
-            {!isNew && draft ? (
+            {!isNew && draft && canDelete ? (
               <Button
                 variant="outline"
                 className="text-destructive"
@@ -465,11 +479,18 @@ function EmployeeDatabasePage() {
           <DialogHeader>
             <DialogTitle>Delete {pendingDelete?.name}?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            This removes {pendingDelete?.name} ({pendingDelete?.id}) from the Employee Database.
-            Past orders and records stay in the system. To stop the batch email reaching someone who
-            has left, deactivating them is usually the better move.
-          </p>
+          <div className="space-y-3 text-sm text-muted-foreground">
+            <p>
+              This removes {pendingDelete?.name} ({pendingDelete?.id}) from the Employee Database.
+              They come off every list, are never emailed when a batch is published, and any link or
+              sign-in they still hold stops working straight away.
+            </p>
+            <p>
+              Anything they have already ordered stays on the books, so the day&apos;s figures and
+              the reports still add up. To stop the batch email reaching someone who has simply
+              left, deactivating them is the lighter move — and it can be undone.
+            </p>
+          </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPendingDelete(null)}>
               Keep employee

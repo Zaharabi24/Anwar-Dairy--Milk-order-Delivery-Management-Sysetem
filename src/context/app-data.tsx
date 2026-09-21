@@ -116,7 +116,8 @@ interface AppData {
   /** Records a payment; the amount due and status are worked out on the server. */
   upsertCollection: (record: CollectionEntry) => Promise<boolean>;
   saveEmployee: (employee: Employee, isNew: boolean) => Promise<Employee | null>;
-  deleteEmployee: (id: string) => Promise<boolean>;
+  /** Resolves to how the row went, or null if the delete was refused. */
+  deleteEmployee: (id: string) => Promise<{ retainedForHistory: boolean } | null>;
   setEmployeeActive: (id: string, active: boolean) => Promise<boolean>;
   saveDeliveryPoint: (point: DeliveryPoint, isNew: boolean) => Promise<DeliveryPoint | null>;
   setDeliveryPointActive: (id: string, active: boolean) => Promise<boolean>;
@@ -301,7 +302,7 @@ export function AppDataProvider({
             }),
           null,
         ),
-      deleteEmployee: (id: string) => run(() => ok(deleteEmployeeFn({ data: { id } })), false),
+      deleteEmployee: (id: string) => run(() => deleteEmployeeFn({ data: { id } }), null),
       setEmployeeActive: (id: string, active: boolean) =>
         run(() => ok(setEmployeeActiveFn({ data: { id, active } })), false),
       saveDeliveryPoint: (point: DeliveryPoint, isNew: boolean) =>

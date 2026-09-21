@@ -7,7 +7,8 @@ import { recordPublication } from "./auth/booking-links.server";
 import { enqueuePublication } from "./mail/mail-queue.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
-import { ROLE_LABEL } from "@/lib/auth-constants";
+import { isRoleValue, ROLE_LABEL } from "@/lib/auth-constants";
+import { canManageAccount } from "@/lib/permissions";
 import type {
   AppNotification,
   AppSettings,
@@ -198,10 +199,13 @@ export async function readSnapshot(user?: SessionUser): Promise<AppSnapshot> {
   const rows = await sql.begin("isolation level repeatable read read only", (tx) =>
     Promise.all([
       tx`select (extract(epoch from clock_timestamp()) * 1000000)::bigint as version`,
-      // The roster: everyone who can book milk. Staff-only accounts (invited, no employee role) aren't on it.
+      // The roster: everyone who can book milk. Staff-only accounts (invited, no employee role)
+      // aren't on it, and neither is anyone deleted -- a row kept back so its orders still have a
+      // subject is not a member of the directory and must not be listed as one.
       tx`
         select e.* from employees e
         where (${own}::text is null or e.id = ${own})
+          and e.deleted_at is null
           and (e.account_status is null
                or exists (select 1 from user_roles r
                           where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
@@ -892,33 +896,88 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
   });
 }
 
+/**
+ * Removes someone from the Employee Database.
+ *
+ * "Delete" means gone from the directory: off every list, never emailed when a batch is
+ * published, and unable to sign in or open a booking link. It always succeeds, whether or not the
+ * person had an account or has been ordering milk for a year.
+ *
+ * How the row goes depends on whether anything still points at it. With nothing attached, the row
+ * is deleted outright. With orders attached it is retained and marked deleted instead, because
+ * `orders.employee_id` is `on delete restrict` and for good reason: batch reconciliation,
+ * collections and the revenue reports all read those orders, and an order whose subject had been
+ * erased would take a hole in the day's figures with it. Migration 0005 set this up -- a deleted
+ * account keeps its row as a historical record that orders stay attached to. A retained row is
+ * not in the directory in any sense a user can see; it exists so the books still add up.
+ *
+ * Either way the account is ended with it: roles revoked, sessions killed, booking links
+ * withdrawn, password removed, and the address freed so it can be used again.
+ */
 export async function deleteEmployee({ id }: EmployeeIdInput) {
   const user = await requirePermission("roster.manage");
   return mutate(user, async (tx) => {
-    const [employee] = await tx<
-      Row[]
-    >`select name, account_status from employees where id = ${id} for update`;
+    const [employee] = await tx<Row[]>`
+      select id, name, company_email, account_status, deleted_at
+      from employees where id = ${id} for update`;
     if (!employee) throw new AppError(`Employee ${id} doesn't exist.`);
+    if (employee.deleted_at) throw new AppError(`${employee.name} has already been deleted.`);
     if (id === user.employeeId) throw new AppError("You can't delete yourself.");
-    if (employee.account_status) {
+
+    // The one refusal that stays. Roster management is a System Admin's and a Super Admin's to
+    // use on the directory; it is not a way around the seniority rules for accounts, which is
+    // what deleting the row of somebody who outranks you would be.
+    const heldRoles = (
+      await tx<Row[]>`
+        select role from user_roles where employee_id = ${id} and revoked_at is null`
+    )
+      .map((r) => r.role as string)
+      .filter(isRoleValue);
+    if (heldRoles.length && !canManageAccount(user.roles, heldRoles)) {
       throw new AppError(
-        `${employee.name} has a sign-in account — deactivate it in Accounts instead.`,
+        `${employee.name} holds ${heldRoles.map((r) => ROLE_LABEL[r]).join(", ")}, which is above what you can manage.`,
       );
     }
-    const [hasOrders] = await tx<Row[]>`select 1 from orders where employee_id = ${id} limit 1`;
-    if (hasOrders) {
-      throw new AppError(
-        `${employee.name} has order history and can't be deleted — deactivate them instead.`,
-      );
+
+    // Whatever the person is holding stops working now, on either path.
+    await tx`update user_roles set revoked_at = now(), revoked_by = ${user.fullName}
+             where employee_id = ${id} and revoked_at is null`;
+    await tx`update sessions set revoked_at = now()
+             where employee_id = ${id} and revoked_at is null`;
+    await tx`update booking_links set revoked_at = now()
+             where employee_id = ${id} and revoked_at is null`;
+
+    const [attached] = await tx<Row[]>`
+      select exists (select 1 from orders where employee_id = ${id})
+          or exists (select 1 from cancellation_requests where employee_id = ${id}) as any_orders`;
+
+    if (attached?.any_orders) {
+      // Retained, and out of the directory. The address moves to former_company_email so the same
+      // person can be added again later, or a colleague can inherit it, without a clash.
+      await tx`
+        update employees set
+          deleted_at = now(),
+          deleted_by = ${user.fullName},
+          former_company_email = case when company_email <> '' then company_email
+                                      else former_company_email end,
+          company_email = '',
+          account_status = null,
+          password_hash = null,
+          active = false,
+          updated_at = now()
+        where id = ${id}`;
+    } else {
+      await tx`delete from employees where id = ${id}`;
     }
-    await tx`delete from employees where id = ${id}`;
+
     await audit(tx, {
       actor: user.fullName,
       action: "Deleted employee",
       record: id,
-      oldValue: employee.name,
-      newValue: "Deleted",
+      oldValue: employee.name as string,
+      newValue: attached?.any_orders ? "Deleted (order history kept)" : "Deleted",
     });
+    return { retainedForHistory: !!attached?.any_orders };
   });
 }
 
