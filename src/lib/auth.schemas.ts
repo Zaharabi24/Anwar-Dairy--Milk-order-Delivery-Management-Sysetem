@@ -122,3 +122,20 @@ export type UpdateProfileInput = z.infer<typeof updateProfileInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
 export type CreateInvitationInput = z.infer<typeof createInvitationInput>;
 export type AcceptInvitationInput = z.infer<typeof acceptInvitationInput>;
+
+/**
+ * Signing in against the Employee Database: a company email and an employee ID that must belong
+ * to the same active person. Both are checked against the directory on the server; nothing here
+ * decides who is eligible.
+ */
+export const directorySignInInput = z.object({
+  companyEmail: z
+    .string()
+    .trim()
+    .min(1, "Enter your company email.")
+    .max(200)
+    .email("That doesn't look like an email address."),
+  employeeId: z.string().trim().min(1, "Enter your Employee ID.").max(60),
+});
+
+export type DirectorySignInInput = z.infer<typeof directorySignInInput>;

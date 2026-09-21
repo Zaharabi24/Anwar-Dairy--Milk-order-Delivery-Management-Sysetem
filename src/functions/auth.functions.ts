@@ -4,6 +4,7 @@ import { createServerFn } from "@tanstack/react-start";
 import * as schema from "@/lib/auth.schemas";
 
 const auth = () => import("@/server/auth/auth.server");
+const directoryAuth = () => import("@/server/auth/directory-auth.server");
 const invitations = () => import("@/server/auth/invitations.server");
 const profile = () => import("@/server/auth/profile.server");
 const bookingLinks = () => import("@/server/auth/booking-links.server");
@@ -16,6 +17,11 @@ export const getAuthStateFn = createServerFn({ method: "GET" }).handler(async ()
 export const signInFn = createServerFn({ method: "POST" })
   .validator(schema.signInInput)
   .handler(async ({ data }) => (await auth()).signIn(data));
+
+/** Company email + Employee ID, checked against the Employee Database. No password, no account. */
+export const signInFromDirectoryFn = createServerFn({ method: "POST" })
+  .validator(schema.directorySignInInput)
+  .handler(async ({ data }) => (await directoryAuth()).signInFromDirectory(data));
 
 export const createAccountFn = createServerFn({ method: "POST" })
   .validator(schema.createAccountInput)

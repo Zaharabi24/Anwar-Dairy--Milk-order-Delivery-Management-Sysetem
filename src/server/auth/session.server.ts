@@ -122,8 +122,17 @@ export async function revokeCurrentSession(db: Sql | Tx): Promise<void> {
     where token_hash = ${sha256(token)} and revoked_at is null`;
 }
 
-/** How a session was authorised: a password sign-in, or a link mailed when a batch was published. */
-export type SessionOrigin = "password" | "booking_link";
+/**
+ * How a session was authorised.
+ *
+ * `password` is an account holder signing in. The other two belong to people who have no account
+ * at all: `booking_link` is the link mailed when a batch is published, and `directory` is an
+ * employee matching their company email and employee ID against the Employee Database.
+ */
+export type SessionOrigin = "password" | "booking_link" | "directory";
+
+/** The origins with no account behind them, so `account_status` can't be what admits them. */
+const ACCOUNTLESS: SessionOrigin[] = ["booking_link", "directory"];
 
 /**
  * Starts a session and sets the cookie on the current response.
@@ -185,11 +194,11 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     where s.token_hash = ${sha256(token)}
       and s.revoked_at is null
       and s.expires_at > now()
-      -- A booking-link session belongs to someone in the Employee Database who has no account at
-      -- all, so account_status can't be what admits them. What has to hold for them is that they
-      -- are still a live, active directory entry: switch someone off, or delete them, and the
-      -- link they were mailed stops working on their very next request.
-      and case when s.origin = 'booking_link'
+      -- A booking-link or directory session belongs to someone in the Employee Database who has
+      -- no account at all, so account_status can't be what admits them. What has to hold is that
+      -- they are still a live, active directory entry: switch someone off, or delete them, and
+      -- the session ends on their very next request.
+      and case when s.origin = any(${ACCOUNTLESS}::text[])
                then e.active and e.deleted_at is null
                else e.account_status = 'active' end`;
   if (!row) {
@@ -209,6 +218,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
   let activeRole =
     isRoleValue(row.active_role) && roles.includes(row.active_role) ? row.active_role : null;
   const viaBookingLink = row.origin === "booking_link";
+  const withoutAccount = viaBookingLink || row.origin === "directory";
   if (!activeRole || row.stale) {
     activeRole ??= pickDefaultRole(roles);
     // Being used counts as staying signed in: the expiry moves forward and the cookie is reissued
@@ -240,7 +250,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     roles,
     activeRole,
     portal: row.portal,
-    viaBookingLink,
+    withoutAccount,
   };
 }
 

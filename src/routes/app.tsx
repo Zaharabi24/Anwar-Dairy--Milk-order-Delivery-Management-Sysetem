@@ -240,12 +240,12 @@ function AppShell() {
   const { role, roles, setRole, notifications, unreadCount, markNotificationsRead } = useAppData();
   const { user, signOut } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const viaBookingLink = !!user?.viaBookingLink;
+  const withoutAccount = !!user?.withoutAccount;
   // Booking and My orders are what the link is for; today's offer is the page it opens onto.
-  const items = viaBookingLink
+  const items = withoutAccount
     ? navByRole.Employee.filter((i) => i.to !== "/app/offer")
     : navByRole[role];
-  const tail = viaBookingLink ? bookingLinkTail : commonTail;
+  const tail = withoutAccount ? bookingLinkTail : commonTail;
   const [mobileOpen, setMobileOpen] = useState(false);
   const router = useRouter();
   const allowed = rolesFor(pathname);

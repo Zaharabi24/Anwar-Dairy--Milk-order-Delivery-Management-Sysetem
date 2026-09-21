@@ -13,6 +13,7 @@ import {
   Settings2,
 } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
+import { EmployeeLoginDialog, type LoginIntent } from "@/components/auth/EmployeeLoginDialog";
 import { LiveBatchCard } from "@/components/landing/LiveBatchCard";
 import { publicBatchStatusFn } from "@/functions/public.functions";
 import { Button } from "@/components/ui/button";
@@ -59,7 +60,7 @@ function useCountUp(target: number, start: boolean, duration = 1.6) {
   return value;
 }
 
-function Nav({ auth }: { auth: AuthUser | null }) {
+function Nav({ auth, onLogin }: { auth: AuthUser | null; onLogin: (i: LoginIntent) => void }) {
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur">
       {/* The bar is sticky, so on a phone its full height is taken off every screen and sits over
@@ -81,7 +82,7 @@ function Nav({ auth }: { auth: AuthUser | null }) {
           </a>
         </nav>
         <div className="flex items-center gap-2">
-          {auth?.viaBookingLink ? (
+          {auth?.withoutAccount ? (
             // Arrived from the link mailed when the batch was published. They have no account and
             // need none: the link is their authorisation, and booking is the single thing they
             // came to do. Sign In, Sign Up and the account menu are all beside the point for
@@ -101,14 +102,10 @@ function Nav({ auth }: { auth: AuthUser | null }) {
               <AccountMenu />
             </>
           ) : (
-            // Nobody signed in. Employees don't have accounts any more -- the link mailed when a
-            // batch is published is how they book -- so Sign In and Sign Up are offering a door
-            // that leads nowhere they need to go. Book Milk is the one thing a visitor came for,
-            // and for somebody without a link it explains how to get one.
-            <Button asChild size="sm">
-              <Link to="/book" search={{ token: "" }}>
-                Book Milk
-              </Link>
+            // Nobody signed in. Employees have no account and no password: they sign in by
+            // matching the employee list, which the dialog asks for without leaving the page.
+            <Button size="sm" onClick={() => onLogin("book")}>
+              Login
             </Button>
           )}
         </div>
@@ -289,9 +286,11 @@ function Stat({
 
 function Landing() {
   const { auth } = Route.useRouteContext();
+  const [loginIntent, setLoginIntent] = useState<LoginIntent | null>(null);
+  const onLogin = setLoginIntent;
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <Nav auth={auth} />
+      <Nav auth={auth} onLogin={onLogin} />
 
       <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[55fr_45fr] md:py-24">
         <div>
@@ -303,7 +302,7 @@ function Landing() {
             pick your litres before the cut-off and collect it at your usual point.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            {auth?.viaBookingLink ? (
+            {auth?.withoutAccount ? (
               // Booking is the point of the visit, so it leads; the batch is still one click away
               // for anyone who wants to look before they order.
               <>
@@ -331,13 +330,14 @@ function Landing() {
               </>
             ) : (
               <>
-                <Button asChild size="lg">
-                  <Link to="/book" search={{ token: "" }}>
-                    Book Milk
-                  </Link>
+                {/* Both lead into the app, so both ask who is asking. The dialog opens over the
+                    page and takes them on to what they clicked, rather than sending them off to
+                    a sign-in page and back. */}
+                <Button size="lg" onClick={() => onLogin("book")}>
+                  Book Milk
                 </Button>
-                <Button asChild size="lg" variant="outline">
-                  <a href="#how-it-works">See today's batch</a>
+                <Button size="lg" variant="outline" onClick={() => onLogin("batch")}>
+                  See today&apos;s batch
                 </Button>
               </>
             )}
@@ -358,6 +358,8 @@ function Landing() {
       </section>
 
       <SiteFooter auth={auth} />
+
+      <EmployeeLoginDialog intent={loginIntent} onClose={() => setLoginIntent(null)} />
     </div>
   );
 }
@@ -400,7 +402,7 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
           </FooterNav>
 
           <FooterNav title="Your account">
-            {auth?.viaBookingLink ? (
+            {auth?.withoutAccount ? (
               // No account to link to, so the column offers the two things the link does allow.
               <>
                 <li>

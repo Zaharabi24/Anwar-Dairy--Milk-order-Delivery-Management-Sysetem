@@ -25,6 +25,7 @@ import {
   revokeInvitationFn,
   setPasswordFn,
   signInFn,
+  signInFromDirectoryFn,
   signOutFn,
   staffForgotPasswordFn,
   staffSignInFn,
@@ -34,6 +35,7 @@ import {
 import type { RoleValue } from "@/lib/auth-constants";
 import type { AuthResult } from "@/lib/auth-types";
 import type {
+  DirectorySignInInput,
   AcceptInvitationInput,
   AccountActionInput,
   AccountAuditFilter,
@@ -62,6 +64,7 @@ async function call<T>(fn: () => Promise<AuthResult<T>>): Promise<AuthResult<T>>
 export const authService = {
   // Employee portal
   signIn: (p: { employee_id: string; password: string }) => call(() => signInFn({ data: p })),
+  signInFromDirectory: (p: DirectorySignInInput) => call(() => signInFromDirectoryFn({ data: p })),
   createAccount: (p: CreateAccountInput) => call(() => createAccountFn({ data: p })),
   verifyResetIdentity: (p: ForgotPasswordInput) => call(() => forgotPasswordFn({ data: p })),
 
