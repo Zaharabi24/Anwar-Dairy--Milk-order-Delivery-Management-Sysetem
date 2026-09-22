@@ -99,6 +99,8 @@ export const createInvitationInput = z.object({
   role: invitableRole,
   full_name: z.string().trim().max(120).optional(),
   employee_id: z.string().trim().max(40).optional(),
+  /** A business_units code. Checked against the table by the foreign key; "" means not set. */
+  business_unit_code: z.string().trim().max(20).optional(),
 });
 
 export const invitationIdInput = z.object({ invitation_id: z.string().uuid() });

@@ -262,11 +262,24 @@ export async function createInvitation(
         );
       }
 
+      // Checked here rather than left to the foreign key, so a unit that isn't on the list comes
+      // back as a sentence about the field instead of a constraint violation.
+      const unit = input.business_unit_code?.trim() || null;
+      if (unit) {
+        const [known] = await tx<Row[]>`select code from business_units where code = ${unit}`;
+        if (!known) {
+          return fail("Choose a business unit from the list.", {
+            business_unit_code: "That isn't one of the business units.",
+          });
+        }
+      }
+
       const raw = randomToken(32);
       const [row] = await tx<Row[]>`
-      insert into invitations (email, full_name, employee_id, role, token_hash, invited_by, expires_at)
-      values (${email}, ${fullName}, ${employeeId}, ${role}, ${sha256(raw)}, ${actor.employeeId},
-              now() + make_interval(hours => ${INVITE_TTL_HOURS}))
+      insert into invitations (email, full_name, employee_id, role, business_unit_code,
+                               token_hash, invited_by, expires_at)
+      values (${email}, ${fullName}, ${employeeId}, ${role}, ${unit}, ${sha256(raw)},
+              ${actor.employeeId}, now() + make_interval(hours => ${INVITE_TTL_HOURS}))
       returning *`;
       await audit(tx, {
         actor: actor.employeeId,
@@ -602,6 +615,16 @@ export async function acceptInvitation(
           employeeId = created.id;
         }
       }
+    }
+
+    // The business unit the invitation named, if it named one. Applied when the person is
+    // joining, and to an existing record only when it has none -- somebody already attached to a
+    // unit is not silently moved to another because a later invitation mentioned one.
+    if (inv.business_unit_code) {
+      await tx`
+        update employees set business_unit_code = ${inv.business_unit_code as string},
+          updated_at = now()
+        where id = ${employeeId} and (${joining} or business_unit_code is null)`;
     }
 
     // Hashed with the same function every other password in the system uses; the plain one is

@@ -1,3 +1,4 @@
+import { useAppData } from "@/context/app-data";
 import { FilterRow } from "@/components/ui/field";
 import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
@@ -243,6 +244,10 @@ function InviteDialog({
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<InvitableRole | "">("");
   const [employeeId, setEmployeeId] = useState("");
+  // The units come from the business_units table by way of the app snapshot, so this list is the
+  // same one the sign-up form and the Employee Database offer.
+  const { businessUnits } = useAppData();
+  const [businessUnit, setBusinessUnit] = useState("none");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -252,6 +257,7 @@ function InviteDialog({
     setFullName("");
     setRole("");
     setEmployeeId("");
+    setBusinessUnit("none");
     setErrors({});
     setMessage(null);
   };
@@ -276,6 +282,7 @@ function InviteDialog({
       role,
       ...(fullName.trim() ? { full_name: fullName.trim() } : {}),
       ...(employeeId.trim() ? { employee_id: employeeId.trim() } : {}),
+      ...(businessUnit !== "none" ? { business_unit_code: businessUnit } : {}),
     });
     setBusy(false);
     if (!result.ok || !result.data) {
@@ -350,6 +357,31 @@ function InviteDialog({
               </p>
             ) : null}
             {errors["role"] ? <p className="text-xs text-destructive">{errors["role"]}</p> : null}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="invite-unit">Business Unit (optional)</Label>
+            <Select value={businessUnit} onValueChange={setBusinessUnit}>
+              <SelectTrigger
+                id="invite-unit"
+                className={errors["business_unit_code"] ? "border-destructive" : ""}
+              >
+                <SelectValue placeholder="Select a business unit" />
+              </SelectTrigger>
+              <SelectContent>
+                {/* Straight from the business_units table, so a unit renamed or retired there is
+                    renamed or gone here without this list being touched. */}
+                <SelectItem value="none">Not set</SelectItem>
+                {businessUnits.map((u) => (
+                  <SelectItem key={u.code} value={u.code}>
+                    {u.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors["business_unit_code"] ? (
+              <p className="text-xs text-destructive">{errors["business_unit_code"]}</p>
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
