@@ -42,7 +42,7 @@ import type {
   StaffMemberRow,
   TeamData,
 } from "@/lib/auth-types";
-import { validateEmployeeId } from "@/lib/auth-validation";
+import { validateConfirm, validatePassword, validateEmployeeId } from "@/lib/auth-validation";
 import type { AcceptInvitationInput, CreateInvitationInput } from "@/lib/auth.schemas";
 import { canManageAccount } from "@/lib/permissions";
 
@@ -493,9 +493,12 @@ export async function acceptInvitation(
   const sql = await getDb();
   if (!(await tokenLookupAllowed(sql))) return fail("Too many attempts. Try again later.");
 
-  // Accepting an invitation no longer sets a password: the link is the proof, and the person
-  // lands on their dashboard signed in. They choose a password later, from Privacy & security or
-  // through Forgot password, which needs only their email address.
+  // Accepting sets the password for anyone who doesn't already have one.
+  //
+  // The link proves the invitation reached the right mailbox; the password is what makes the
+  // account theirs from then on, so the two are done together and neither is any use alone. An
+  // address that already has a working account is the exception: the role is simply added to it,
+  // and their existing password is neither asked for nor touched.
 
   type Outcome = AuthResult<{ profile: AuthUser }> & { notify?: { to: string; mail: MailMessage } };
   const outcome = await sql.begin(async (tx): Promise<Outcome> => {
@@ -519,6 +522,17 @@ export async function acceptInvitation(
     // invited back and is reactivated below.
     if (account?.account_status === "suspended") {
       return fail("The account for this email isn't active. Contact your Super Admin.");
+    }
+
+    // Checked before anything is written, so an invitation is never spent on a password that
+    // was going to be rejected. The same two rules the form applies, applied again here --
+    // the form is a convenience, this is the check.
+    const joining = !(account?.account_status === "active" && account.password_hash);
+    const password = input.password ?? "";
+    if (joining) {
+      const bad =
+        validatePassword(password) ?? validateConfirm(password, input.confirm ?? password);
+      if (bad) return fail(bad, { password: bad });
     }
 
     let employeeId: string;
@@ -588,6 +602,16 @@ export async function acceptInvitation(
           employeeId = created.id;
         }
       }
+    }
+
+    // Hashed with the same function every other password in the system uses; the plain one is
+    // never written anywhere, and never leaves this request.
+    if (joining) {
+      await tx`
+        update employees set password_hash = ${await hashPassword(password)},
+          account_status = 'active', activated_at = coalesce(activated_at, now()),
+          updated_at = now()
+        where id = ${employeeId}`;
     }
 
     await tx`insert into user_roles (employee_id, role, granted_by)

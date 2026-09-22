@@ -1,10 +1,12 @@
-import { createFileRoute, Link, useNavigate, useRouter } from "@tanstack/react-router";
-import { MailWarning } from "lucide-react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { MailWarning, ShieldCheck } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { AuthShell } from "@/components/auth/AuthShell";
+import { PasswordField } from "@/components/auth/PasswordField";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ROLE_HOME } from "@/lib/auth-constants";
+import { roleLabel } from "@/lib/auth-constants";
+import { validateConfirm, validatePassword } from "@/lib/auth-validation";
 import type { InvitationPreview } from "@/lib/auth-types";
 import { authService } from "@/services/auth-service";
 
@@ -27,35 +29,35 @@ type Stage = InvitationPreview | { state: "loading" } | { state: "error"; messag
 /**
  * The invitation link.
  *
- * Clicking it is the whole of accepting: the link is checked, the account is joined to the role it
- * names, and the person arrives on that role's dashboard signed in. Nothing is asked of them --
- * no name to confirm, no password to choose, no button to press -- because the link that reached
- * their mailbox is already the proof that this is them.
+ * Checking the link and accepting it are two steps, and the second one is the person's own: they
+ * choose the password that will be theirs from then on, and the invitation is not spent until
+ * they submit it. That ordering matters beyond tidiness -- mail scanners and Outlook Safe Links
+ * fetch a URL before anyone sees it, and an invitation consumed on load would be spent by a
+ * scanner, leaving the real person told their link had already been used. The check runs in the
+ * browser, which scanners do not execute, and nothing is consumed until the form is sent.
  *
- * It runs in the browser rather than in the route loader on purpose. Mail scanners and Outlook
- * Safe Links fetch a URL before anyone sees it, and accepting consumes the invitation; doing this
- * on the server would let a scanner spend the link and leave the real person told it was already
- * used. Scanners do not run JavaScript.
+ * Somebody who already has a working account is the exception. There is no password to choose --
+ * they have one -- so accepting only adds the new role to the account they already sign in with.
  */
 function AcceptInvitePage() {
   const { token = "" } = Route.useSearch();
   const navigate = useNavigate();
-  const router = useRouter();
   const [stage, setStage] = useState<Stage>({ state: "loading" });
-  // React runs effects twice in development; accepting is single-use, so it happens once.
-  const started = useRef(false);
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  // React runs effects twice in development; the check is cheap but only needs doing once.
+  const checked = useRef(false);
 
   useEffect(() => {
-    if (started.current) return;
-    started.current = true;
-
+    if (checked.current) return;
+    checked.current = true;
     if (!token) {
       setStage({ state: "invalid", message: "This invitation link is incomplete." });
       return;
     }
-
     void (async () => {
-      // Checked first so an expired or withdrawn link is explained rather than failing silently.
       const preview = await authService.previewInvitation(token);
       if (!preview.ok || !preview.data) {
         setStage({
@@ -64,28 +66,11 @@ function AcceptInvitePage() {
         });
         return;
       }
-      if (preview.data.state !== "valid") {
-        setStage(preview.data);
-        return;
-      }
-
-      const accepted = await authService.acceptInvitation({ token });
-      if (!accepted.ok || !accepted.data) {
-        setStage({
-          state: "error",
-          message: accepted.message ?? "We couldn't accept this invitation.",
-        });
-        return;
-      }
-
-      // The session cookie is set; reload it, then go to the dashboard for the role granted.
-      await router.invalidate();
-      await navigate({ to: ROLE_HOME[accepted.data.profile.activeRole], replace: true });
+      setStage(preview.data);
     })();
-  }, [token, navigate, router]);
+  }, [token]);
 
-  // "valid" is a moment in flight: the link checked out and accepting is under way.
-  if (stage.state === "loading" || stage.state === "valid") {
+  if (stage.state === "loading") {
     return (
       <AuthShell>
         <div className="text-center">
@@ -94,24 +79,118 @@ function AcceptInvitePage() {
         </div>
         <Skeleton className="mt-8 h-24 w-full" />
         <Skeleton className="mt-6 h-11 w-full" />
-        <p className="mt-6 text-center text-sm text-muted-foreground">Setting up your account…</p>
+        <p className="mt-6 text-center text-sm text-muted-foreground">Checking your invitation…</p>
       </AuthShell>
     );
   }
 
-  const accepted = stage.state === "accepted";
+  if (stage.state !== "valid") {
+    const accepted = stage.state === "accepted";
+    return (
+      <AuthShell>
+        <div className="text-center">
+          <MailWarning className="mx-auto size-12 text-muted-foreground" />
+          <h1 className="mt-4 font-display text-2xl font-bold">
+            {accepted ? "Invitation already accepted" : "This invitation can't be used"}
+          </h1>
+          <p className="mt-3 text-sm text-muted-foreground">{stage.message}</p>
+          <Button asChild className="mt-6 w-full" size="lg">
+            <Link to="/login">Go to sign in</Link>
+          </Button>
+        </div>
+      </AuthShell>
+    );
+  }
+
+  // Somebody who already has an account has a password; the role is simply added to it.
+  const joining = stage.existingAccount === null;
+  const passwordError = password ? validatePassword(password) : null;
+  const confirmError = confirm ? validateConfirm(password, confirm) : null;
+  const canSubmit = joining
+    ? !validatePassword(password) && !validateConfirm(password, confirm)
+    : true;
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy || !canSubmit) return;
+    setBusy(true);
+    setFailure(null);
+    const result = await authService.acceptInvitation(
+      joining ? { token, password, confirm } : { token },
+    );
+    if (!result.ok) {
+      setFailure(result.message ?? "We couldn't accept this invitation.");
+      setBusy(false);
+      return;
+    }
+    // Straight to Sign In, deliberately: the account is theirs now, and the first thing it should
+    // do is prove the password they just chose actually works.
+    await navigate({ to: "/login", replace: true });
+  }
+
   return (
     <AuthShell>
       <div className="text-center">
-        <MailWarning className="mx-auto size-12 text-muted-foreground" />
+        <ShieldCheck className="mx-auto size-12 text-primary" />
         <h1 className="mt-4 font-display text-2xl font-bold">
-          {accepted ? "Invitation already accepted" : "This invitation can't be used"}
+          {joining ? "Set your password" : "Accept your invitation"}
         </h1>
-        <p className="mt-3 text-sm text-muted-foreground">{stage.message}</p>
-        <Button asChild className="mt-6 w-full" size="lg">
-          <Link to="/login">Go to sign in</Link>
-        </Button>
+        <p className="mt-3 text-sm text-muted-foreground">
+          {joining ? (
+            <>
+              You have been invited to Anwar Organic as{" "}
+              <span className="font-medium text-foreground">{roleLabel(stage.role)}</span>. Choose a
+              password to finish setting up <span className="font-medium">{stage.email}</span>.
+            </>
+          ) : (
+            <>
+              <span className="font-medium text-foreground">{roleLabel(stage.role)}</span> will be
+              added to your existing account, <span className="font-medium">{stage.email}</span>.
+              Your password stays as it is.
+            </>
+          )}
+        </p>
       </div>
+
+      <form className="mt-8 space-y-4" onSubmit={submit} noValidate>
+        {joining ? (
+          <>
+            <PasswordField
+              id="new-password"
+              label="New Password"
+              value={password}
+              onChange={setPassword}
+              autoComplete="new-password"
+              required
+              showStrength
+              error={passwordError}
+            />
+            <PasswordField
+              id="confirm-password"
+              label="Confirm Password"
+              value={confirm}
+              onChange={setConfirm}
+              autoComplete="new-password"
+              required
+              error={confirmError}
+            />
+          </>
+        ) : null}
+
+        {failure ? (
+          <p role="alert" className="text-sm font-medium text-destructive">
+            {failure}
+          </p>
+        ) : null}
+
+        <Button type="submit" className="w-full" size="lg" disabled={busy || !canSubmit}>
+          {busy ? "Setting up your account…" : joining ? "Activate account" : "Accept invitation"}
+        </Button>
+      </form>
+
+      <p className="mt-6 text-center text-xs text-muted-foreground">
+        This link is for you alone and can only be used once.
+      </p>
     </AuthShell>
   );
 }

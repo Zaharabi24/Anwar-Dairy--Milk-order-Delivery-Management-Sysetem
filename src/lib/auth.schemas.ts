@@ -106,7 +106,10 @@ export const invitationIdInput = z.object({ invitation_id: z.string().uuid() });
 export const acceptInvitationInput = z.object({
   token,
   full_name: z.string().max(120).optional(),
+  /** The password being set. Required for anyone who doesn't already have an account. */
   password: z.string().max(200).optional(),
+  /** Checked against `password` on the server too, not only in the form. */
+  confirm: z.string().max(200).optional(),
   current_password: z.string().max(200).optional(),
 });
 

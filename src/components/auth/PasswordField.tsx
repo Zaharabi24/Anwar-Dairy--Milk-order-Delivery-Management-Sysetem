@@ -64,9 +64,12 @@ export function PasswordField({
         <button
           type="button"
           onClick={() => setVisible(!visible)}
-          // The icon says what the field is doing, not what the click will do: an open eye while
-          // the password is on screen, an eye with a line through it while it is hidden. The
-          // label and aria-pressed carry the action and the state for a screen reader.
+          // The icon says what the click will do, which is the way every browser, phone keyboard
+          // and major product does it: an eye to reveal a hidden password, an eye with a line
+          // through it to hide one that is showing. It read the other way round here -- a
+          // crossed-out eye on a field that was already hidden -- which looks like the control is
+          // stuck, because pressing it changes the field but not the picture you were reading.
+          // The label and aria-pressed carry the action and the state for a screen reader.
           aria-label={visible ? "Hide password" : "Show password"}
           aria-pressed={visible}
           // A 32px square inside the 40px field: a real target, centred, and clear of the
@@ -74,7 +77,7 @@ export function PasswordField({
           // lit the corner of the field up like a warning.
           className="absolute right-1.5 top-1/2 flex size-8 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25"
         >
-          {visible ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+          {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
         </button>
       </div>
 
