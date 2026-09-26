@@ -637,9 +637,17 @@ export async function acceptInvitation(
         where id = ${employeeId}`;
     }
 
+    // Every member of staff is also an employee: the `employee` role is what says somebody works
+    // here and may buy milk, not a rank, and without it an invited admin could not order and was
+    // absent from the Employee Database. A staff-portal session may use every role the person
+    // holds, so this adds to what they can do and takes nothing away.
     await tx`insert into user_roles (employee_id, role, granted_by)
-             values (${employeeId}, ${inv.role}, ${inv.invited_by})
+             values (${employeeId}, ${inv.role}, ${inv.invited_by}),
+                    (${employeeId}, 'employee', ${inv.invited_by})
              on conflict do nothing`;
+    // Active, so they are a full member of the directory rather than one who can order but is
+    // never told a batch exists.
+    await tx`update employees set active = true, updated_at = now() where id = ${employeeId}`;
     await tx`
       update invitations set status = 'accepted', accepted_at = now(), accepted_employee_id = ${employeeId}
       where id = ${inv.id}`;
@@ -756,7 +764,9 @@ export async function bootstrapSuperAdmin(tx: Tx): Promise<MailMessage | null> {
         returning id`;
       id = created.id;
     }
-    await tx`insert into user_roles (employee_id, role) values (${id}, 'super_admin') on conflict do nothing`;
+    await tx`insert into user_roles (employee_id, role)
+             values (${id}, 'super_admin'), (${id}, 'employee') on conflict do nothing`;
+    await tx`update employees set active = true, updated_at = now() where id = ${id}`;
     await tx`insert into auth_audit (subject_id, event, detail)
              values (${id}, 'super_admin_bootstrapped', ${JSON.stringify({ method: "password" })}::jsonb)`;
     console.info(

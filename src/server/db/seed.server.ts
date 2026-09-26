@@ -244,17 +244,19 @@ export async function seedDemoAccounts(tx: postgres.TransactionSql): Promise<voi
   for (const account of DEMO_ACCOUNTS) await createAccount(tx, account, passwordHash);
 }
 
-/** Demo Super Admin (staff portal only, no employee role). Password: DEMO_PASSWORD. */
+/** Demo Super Admin. Holds the employee role too, like every member of staff. Password: DEMO_PASSWORD. */
 export async function seedDemoSuperAdmin(tx: postgres.TransactionSql): Promise<void> {
   const passwordHash = await hashPassword(process.env["DEMO_PASSWORD"] || "Demo@12345");
   await tx`
     insert into employees (id, name, company_email, department, site, active,
                            account_status, password_hash, activated_at)
     values ('STF-0001', 'Rahima Chowdhury', 'superadmin@anwargroup.net', 'Admin', 'Head Office – Gulshan',
-            false, 'active', ${passwordHash}, now())
+            true, 'active', ${passwordHash}, now())
     on conflict (id) do nothing`;
   await tx`select setval('staff_id_seq', greatest((select last_value from staff_id_seq), 1))`;
-  await tx`insert into user_roles (employee_id, role) values ('STF-0001', 'super_admin') on conflict do nothing`;
+  // Staff are employees too, so the demo Super Admin can order milk like anybody else.
+  await tx`insert into user_roles (employee_id, role)
+           values ('STF-0001', 'super_admin'), ('STF-0001', 'employee') on conflict do nothing`;
 }
 
 /**
