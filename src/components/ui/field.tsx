@@ -142,6 +142,13 @@ export function SwitchField({
  * with whatever widths happened to look right -- w-36 next to w-60 next to a max-w-xs search box,
  * so no two filter bars on the platform lined up. Here they share one grid: every control the same
  * width, the same gaps, wrapping the same way.
+ *
+ * `items-start`, for the same reason FieldRow uses it. Bottom-aligning works only while every
+ * field is exactly a label and a control; the moment one carries a hint or an error it grows
+ * taller, and the whole row drops to meet its bottom edge -- so on Reports, a two-line note under
+ * Batch No. pushed Employee Name and Batch Range a hint's height below their own labels. Aligned
+ * from the top, the labels sit on one line and the controls on the next, and a field with
+ * something to say underneath simply says it without moving its neighbours.
  */
 export function FilterBar({
   columns = 4,
@@ -158,7 +165,7 @@ export function FilterBar({
   return (
     <div
       className={cn(
-        "grid items-end gap-3 rounded-xl border border-border bg-card p-4",
+        "grid items-start gap-3 rounded-xl border border-border bg-card p-4",
         "sm:grid-cols-2",
         cols,
         className,
