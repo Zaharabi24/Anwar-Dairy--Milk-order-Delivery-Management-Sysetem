@@ -383,8 +383,12 @@ function SiteFooter({ auth }: { auth: AuthUser | null }) {
           <div className="col-span-2 sm:col-span-1">
             <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
-              Every production day the Savar dairy unit publishes one batch of fresh whole milk,
-              booked by the Anwar Agro team and collected the same day.
+              {/* The tagline takes a line of its own, which is how it was written. Same size and
+                  colour as the sentence under it -- the break is the only distinction, because
+                  emphasis was not asked for. */}
+              <span className="block">Fresh From Our Farm. Whole By Nature.</span>
+              Fresh Whole Milk produced at our Gazaria dairy facility with attention to cow care,
+              feed quality, farm hygiene and careful handling.
             </p>
             <p className="mt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
               An Anwar Agro Farms system
