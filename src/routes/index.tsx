@@ -3,14 +3,13 @@ import { motion, useInView, animate, useReducedMotion } from "framer-motion";
 import logoUrl from "@/assets/anwar-organic-logo.png";
 import { useEffect, useRef, useState } from "react";
 import {
+  Activity,
+  BadgeCheck,
   Factory,
   Send,
   ShoppingBasket,
   Truck,
   PackageCheck,
-  User,
-  ClipboardList,
-  Settings2,
 } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { EmployeeLoginDialog, type LoginIntent } from "@/components/auth/EmployeeLoginDialog";
@@ -197,35 +196,41 @@ function HowItWorks() {
   );
 }
 
-const roleCards = [
+const reasonCards = [
   {
-    icon: User,
-    title: "Employee",
-    copy: "Book your litres before the cut-off and see your order code instantly.",
+    icon: ShoppingBasket,
+    title: "Order Online Easily",
+    copy: "Book your litres from the link in your email, before the cut-off. Nothing to sign up for.",
     wide: true,
   },
   {
-    icon: Factory,
-    title: "Factory Operator",
-    copy: "Publish today's batch and watch it fill up live.",
+    icon: Activity,
+    title: "Real-Time Order Updates",
+    copy: "Watch the litres remaining fall as the batch fills, and your order change the moment it is confirmed.",
   },
   {
-    icon: ClipboardList,
-    title: "Head Office Coordinator",
-    copy: "Work one delivery list, grouped by pickup point.",
+    icon: BadgeCheck,
+    title: "Digital Order Confirmation",
+    copy: "Your order number and collection point, on your phone. Nothing to print or carry.",
   },
-  { icon: Settings2, title: "System Admin", copy: "Manage people, pickup points and daily caps." },
 ];
 
 function Capabilities() {
-  const strip = [...roleCards, ...roleCards];
+  // The track slides by exactly half its width, so the strip has to be two identical halves or
+  // the loop jumps. A half has to be at least as wide as the screen too, or it runs out mid-view
+  // and leaves a gap at the seam -- which the old four-card strip did, at 1388px, on any ordinary
+  // laptop. Three of these cards come to 1064px, so the half repeats them three times and covers
+  // 3232px. The animation was slowed in step, so the distance per second, and the speed the cards
+  // read at, is what it always was.
+  const half = [...reasonCards, ...reasonCards, ...reasonCards];
+  const strip = [...half, ...half];
   return (
     <section
       id="for-your-team"
       className="scroll-mt-20 overflow-hidden border-y border-border bg-card py-12 sm:scroll-mt-0 sm:py-20"
     >
       <div className="mx-auto max-w-6xl px-5">
-        <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">Built for everyone in the chain</h2>
+        <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">Why Order with Anwar Organic?</h2>
       </div>
       <div className="group mt-8 overflow-hidden sm:mt-10">
         <div className="marquee-track flex w-max gap-5 px-5 group-hover:[animation-play-state:paused]">
