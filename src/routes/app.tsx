@@ -7,7 +7,7 @@ import {
   useRouterState,
 } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bell, ChevronDown, LogOut, Menu, ShieldCheck, User } from "lucide-react";
 import {
   DropdownMenu,
@@ -209,6 +209,18 @@ function NavLinks({
     })),
   );
 
+  // Bring the active item into view when it isn't.
+  //
+  // The sidebar keeps its own scroll position, which is what a click needs. A fresh load or a
+  // pasted address is the other case: the menu starts at the top, and on a long one the page you
+  // are actually on can be below the fold, so nothing appears to be selected at all. "nearest"
+  // is doing the work -- it scrolls only when the item is off screen, so it never argues with
+  // where somebody has deliberately scrolled to.
+  const activeRef = useRef<HTMLAnchorElement | null>(null);
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
   return (
     <nav className="flex flex-col gap-1">
       {all.map((item) => (
@@ -224,6 +236,7 @@ function NavLinks({
             // beneath it. Exact stops it deciding for itself; the one item the URL belongs to is
             // decided above and carried by the class and aria-current together.
             activeOptions={{ exact: true }}
+            ref={item.to === active ? activeRef : undefined}
             className={cn(linkClass, item.to === active && linkActiveClass)}
             aria-current={item.to === active ? "page" : undefined}
             onClick={onNavigate}
@@ -277,7 +290,14 @@ function AppShell() {
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      <aside className="hidden w-60 shrink-0 flex-col border-r border-border bg-sidebar px-4 py-6 md:flex">
+      {/* The sidebar scrolls on its own rather than with the page.
+          It had no height and no scroll container, so its full length was part of the document
+          and the window was what scrolled. Navigating resets the window to the top, which took
+          the menu with it -- click Collections near the bottom of a long menu and the thing you
+          just clicked is scrolled off screen, with nothing to show which item is now active.
+          Sticky and full height keeps it where it was, and because this element is not remounted
+          between routes its scroll position survives the navigation. */}
+      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col overflow-y-auto overscroll-contain border-r border-border bg-sidebar px-4 py-6 md:flex">
         <Brand />
         <div className="mt-8">
           <NavLinks items={items} tail={tail} />
