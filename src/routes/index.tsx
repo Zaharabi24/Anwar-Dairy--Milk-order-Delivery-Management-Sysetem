@@ -73,14 +73,6 @@ function Nav({ auth, onLogin }: { auth: AuthUser | null; onLogin: (i: LoginInten
           width={83}
           height={80}
         />
-        <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-          <a href="#how-it-works" className="hover:text-foreground">
-            How it works
-          </a>
-          <a href="#for-your-team" className="hover:text-foreground">
-            For your team
-          </a>
-        </nav>
         <div className="flex items-center gap-2">
           {auth?.withoutAccount ? (
             // Arrived from the link mailed when the batch was published. They have no account and
