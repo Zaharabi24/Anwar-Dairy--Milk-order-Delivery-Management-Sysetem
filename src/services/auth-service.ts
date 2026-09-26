@@ -29,6 +29,7 @@ import {
   signOutFn,
   staffForgotPasswordFn,
   staffSignInFn,
+  updateAccountFn,
   switchRoleFn,
   validatePasswordTokenFn,
 } from "@/functions/auth.functions";
@@ -43,6 +44,7 @@ import type {
   ChangePasswordInput,
   CreateInvitationInput,
   ForgotPasswordInput,
+  UpdateAccountInput,
   UpdateProfileInput,
 } from "@/lib/auth.schemas";
 
@@ -83,6 +85,7 @@ export const authService = {
   // Admin: employee accounts
   listAccounts: () => call(() => listAccountsFn()),
   accountAction: (p: AccountActionInput) => call(() => accountActionFn({ data: p })),
+  updateAccount: (p: UpdateAccountInput) => call(() => updateAccountFn({ data: p })),
   listDeletedAccounts: () => call(() => listDeletedAccountsFn()),
 
   // Everyone: their own profile and security

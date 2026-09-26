@@ -73,6 +73,11 @@ export interface AccountRow {
   employeeId: string;
   fullName: string;
   companyMail: string;
+  /** The rest of the person's details, so the edit form opens filled in. */
+  phone: string;
+  department: string;
+  designation: string;
+  site: string;
   businessUnitCode: string | null;
   businessUnitName: string | null;
   officeName: string | null;

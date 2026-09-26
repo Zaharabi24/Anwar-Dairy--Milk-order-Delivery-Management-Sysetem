@@ -145,3 +145,8 @@ export const acceptInvitationFn = createServerFn({ method: "POST" })
 export const openBookingLinkFn = createServerFn({ method: "POST" })
   .validator(schema.tokenInput)
   .handler(async ({ data }) => (await bookingLinks()).openBookingLink(data.token));
+
+/** Super Admin editing an authorised user's details from the Accounts console. */
+export const updateAccountFn = createServerFn({ method: "POST" })
+  .validator(schema.updateAccountInput)
+  .handler(async ({ data }) => (await auth()).updateAccount(data));

@@ -1,8 +1,9 @@
-import { FilterRow } from "@/components/ui/field";
+import { Field, FieldRow, FilterRow } from "@/components/ui/field";
+import { useAppData } from "@/context/app-data";
 import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MoreHorizontal } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { TableShell, Td, Th, ToneBadge, useAdminList } from "@/components/admin/account-ui";
 import { EmptyState, PageHeader } from "@/components/page-header";
@@ -26,6 +27,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -128,6 +136,7 @@ function AccountsPage() {
   const [query, setQuery] = useState("");
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<AccountRow | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -307,6 +316,9 @@ function AccountsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem onSelect={() => setEditing(a)}>
+                          Edit details
+                        </DropdownMenuItem>
                         {a.status === "awaiting_password" ? (
                           <DropdownMenuItem
                             onSelect={() =>
@@ -408,6 +420,178 @@ function AccountsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EditAccountDialog
+        account={editing}
+        onClose={() => setEditing(null)}
+        onSaved={async () => {
+          setEditing(null);
+          await reload();
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * Editing an authorised user's details.
+ *
+ * The same fields the Employee Database keeps, so the two screens describe a person the same way
+ * -- the difference is who is being looked at, not what is known about them. The Employee ID is
+ * not here: it is the key the record hangs off, and renaming it has to carry the person's orders
+ * and sessions with it, which is what the Employee Database's own rename does.
+ */
+function EditAccountDialog({
+  account,
+  onClose,
+  onSaved,
+}: {
+  account: AccountRow | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { businessUnits } = useAppData();
+  const [draft, setDraft] = useState<AccountRow | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [message, setMessage] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // The dialog opens on whichever row was chosen, so the draft follows it rather than being
+  // seeded once and going stale behind the next person opened.
+  useEffect(() => {
+    setDraft(account);
+    setErrors({});
+    setMessage(null);
+  }, [account]);
+
+  async function save() {
+    if (!draft) return;
+    setBusy(true);
+    setErrors({});
+    setMessage(null);
+    const result = await authService.updateAccount({
+      employee_id: draft.employeeId,
+      full_name: draft.fullName,
+      company_mail: draft.companyMail,
+      phone: draft.phone,
+      department: draft.department,
+      designation: draft.designation,
+      site: draft.site,
+      business_unit_code: draft.businessUnitCode ?? "",
+    });
+    setBusy(false);
+    if (!result.ok) {
+      if (result.errors) setErrors(result.errors);
+      setMessage(result.message ?? "Couldn't save those details.");
+      return;
+    }
+    toast.success(result.message ?? "Details updated.");
+    await onSaved();
+  }
+
+  return (
+    <Dialog open={!!account} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit {account?.fullName}</DialogTitle>
+        </DialogHeader>
+        {draft ? (
+          <div className="space-y-4">
+            {message ? (
+              <p className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                {message}
+              </p>
+            ) : null}
+
+            <FieldRow columns={2}>
+              <Field label="Full name" required>
+                <Input
+                  value={draft.fullName}
+                  onChange={(e) => setDraft({ ...draft, fullName: e.target.value })}
+                />
+              </Field>
+              <Field
+                label="Employee ID"
+                hint="Changed from the Employee Database, where the rename carries their orders with it."
+              >
+                <Input value={draft.employeeId} disabled />
+              </Field>
+            </FieldRow>
+
+            <FieldRow columns={2}>
+              <Field
+                label="Company email"
+                required
+                hint="How they sign in, and where a password reset is sent."
+                {...(errors["company_mail"] ? { error: errors["company_mail"] } : {})}
+              >
+                <Input
+                  value={draft.companyMail}
+                  onChange={(e) => setDraft({ ...draft, companyMail: e.target.value })}
+                />
+              </Field>
+              <Field label="Official phone number">
+                <Input
+                  value={draft.phone}
+                  onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                />
+              </Field>
+            </FieldRow>
+
+            <FieldRow columns={2}>
+              <Field label="Department">
+                <Input
+                  value={draft.department}
+                  onChange={(e) => setDraft({ ...draft, department: e.target.value })}
+                />
+              </Field>
+              <Field label="Designation">
+                <Input
+                  value={draft.designation}
+                  onChange={(e) => setDraft({ ...draft, designation: e.target.value })}
+                />
+              </Field>
+              <Field label="Location">
+                <Input
+                  value={draft.site}
+                  onChange={(e) => setDraft({ ...draft, site: e.target.value })}
+                />
+              </Field>
+              <Field
+                label="Business Unit"
+                {...(errors["business_unit_code"] ? { error: errors["business_unit_code"] } : {})}
+              >
+                <Select
+                  value={draft.businessUnitCode ?? "none"}
+                  onValueChange={(v) =>
+                    setDraft({ ...draft, businessUnitCode: v === "none" ? null : v })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Not set</SelectItem>
+                    {businessUnits.map((u) => (
+                      <SelectItem key={u.code} value={u.code}>
+                        {u.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </FieldRow>
+          </div>
+        ) : null}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button onClick={() => void save()} disabled={busy || !draft?.fullName.trim()}>
+            {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

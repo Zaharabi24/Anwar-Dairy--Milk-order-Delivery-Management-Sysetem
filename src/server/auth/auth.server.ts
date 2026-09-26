@@ -47,7 +47,7 @@ import type {
   MailTestResult,
   PasswordResetRow,
 } from "@/lib/auth-types";
-import { validateDob, validateEmployeeId } from "@/lib/auth-validation";
+import { validateCompanyEmail, validateDob, validateEmployeeId } from "@/lib/auth-validation";
 import type {
   AccountActionInput,
   AccountAuditFilter,
@@ -57,6 +57,7 @@ import type {
   SignInInput,
   StaffForgotPasswordInput,
   StaffSignInInput,
+  UpdateAccountInput,
 } from "@/lib/auth.schemas";
 import { deliveryNotice } from "@/lib/mail-delivery";
 import { canManageAccount } from "@/lib/permissions";
@@ -718,11 +719,96 @@ export async function setPassword(
 // ---------------------------------------------------------------------------
 // Admin: accounts
 
+/**
+ * Edits an authorised user's details from the Accounts console.
+ *
+ * Held by `accounts.manage`, which only the Super Admin has, and bounded by the same seniority
+ * rule as every other action here: you may not edit an account that outranks what you can manage,
+ * and you may not edit your own from this screen -- Profile is where you change your own details,
+ * and letting the console do it would be a way to sidestep the checks that live there.
+ *
+ * The Employee ID is not editable here. It is the key the whole record hangs off, and renaming it
+ * has to carry the person's orders, sessions and booking links with it, which is what the
+ * Employee Database's own rename does.
+ */
+export async function updateAccount(input: UpdateAccountInput): Promise<AuthResult> {
+  const actor = await requirePermission("accounts.manage");
+  const sql = await getDb();
+
+  const email = input.company_mail.trim().toLowerCase();
+  const mailError = validateCompanyEmail(email);
+  if (mailError) return fail(mailError, { company_mail: mailError });
+  if (!input.full_name.trim()) return fail("Name is required.", { full_name: "Name is required." });
+
+  return (await sql.begin(async (tx) => {
+    const [account] = await tx<Row[]>`
+      select id, name, company_email, account_status from employees
+      where id = ${input.employee_id} and deleted_at is null for update`;
+    if (!account) return fail("That account no longer exists.");
+    if (!account.account_status) return fail("That account no longer exists.");
+    if (account.id === actor.employeeId) {
+      return fail("Change your own details from Profile.");
+    }
+
+    const roles = await activeRoles(tx, account.id as string);
+    if (!canManageAccount(actor.roles, roles)) {
+      return fail(`You can't manage ${account.name as string}'s account.`);
+    }
+
+    // The address is how they sign in and where a reset is sent, so it has to stay theirs alone.
+    const [taken] = await tx<Row[]>`
+      select id from employees
+      where lower(company_email) = ${email} and id <> ${account.id}
+        and account_status is not null and deleted_at is null`;
+    if (taken) {
+      return fail(`${email} is already the sign-in address for ${taken.id as string}.`, {
+        company_mail: "That address is already in use.",
+      });
+    }
+
+    if (input.business_unit_code) {
+      const [unit] = await tx<Row[]>`
+        select code from business_units where code = ${input.business_unit_code}`;
+      if (!unit) {
+        return fail("Choose a business unit from the list.", {
+          business_unit_code: "That isn't one of the business units.",
+        });
+      }
+    }
+
+    await tx`
+      update employees set
+        name = ${input.full_name.trim()},
+        company_email = ${email},
+        phone = ${input.phone.trim()},
+        department = ${input.department.trim()},
+        designation = ${input.designation.trim()},
+        site = ${input.site.trim()},
+        business_unit_code = ${input.business_unit_code || null},
+        updated_at = now()
+      where id = ${account.id}`;
+
+    await audit(tx, {
+      actor: actor.employeeId,
+      subject: account.id as string,
+      event: "account_details_updated",
+      detail: {
+        name: input.full_name.trim(),
+        ...(email === String(account.company_email).toLowerCase()
+          ? {}
+          : { email_from: account.company_email, email_to: email }),
+      },
+    });
+    return { ok: true, message: `${input.full_name.trim()}'s details updated.` };
+  })) as AuthResult;
+}
+
 export async function listAccounts(): Promise<AuthResult<AccountRow[]>> {
   const actor = await requirePermission("accounts.manage");
   const sql = await getDb();
   const rows = await sql<Row[]>`
-    select e.id, e.name, e.company_email, e.business_unit_code, bu.name as business_unit_name,
+    select e.id, e.name, e.company_email, e.phone, e.department, e.designation, e.site,
+           e.business_unit_code, bu.name as business_unit_name,
            o.name as office_name, e.account_status, e.last_login_at, e.created_at,
            coalesce(array_agg(r.role order by r.role) filter (where r.role is not null), '{}') as roles
     from employees e
@@ -740,6 +826,10 @@ export async function listAccounts(): Promise<AuthResult<AccountRow[]>> {
         employeeId: r.id,
         fullName: r.name,
         companyMail: r.company_email,
+        phone: r.phone ?? "",
+        department: r.department ?? "",
+        designation: r.designation ?? "",
+        site: r.site ?? "",
         businessUnitCode: r.business_unit_code,
         businessUnitName: r.business_unit_name,
         officeName: r.office_name,

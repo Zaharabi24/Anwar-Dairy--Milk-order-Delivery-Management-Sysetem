@@ -103,6 +103,24 @@ export const createInvitationInput = z.object({
   business_unit_code: z.string().trim().max(20).optional(),
 });
 
+/**
+ * Editing an authorised user's details from Accounts.
+ *
+ * The Employee ID is the key, not a field: it names the account being edited and is changed from
+ * the Employee Database, where the rename carries the person's orders and sessions with it.
+ */
+export const updateAccountInput = z.object({
+  employee_id: z.string().min(1).max(40),
+  full_name: z.string().trim().min(1, "Name is required.").max(120),
+  company_mail: z.string().trim().min(1, "Company email is required.").max(200),
+  phone: z.string().trim().max(40),
+  department: z.string().trim().max(120),
+  designation: z.string().trim().max(120),
+  site: z.string().trim().max(120),
+  /** A business_units code, or "" for none. */
+  business_unit_code: z.string().trim().max(20),
+});
+
 export const invitationIdInput = z.object({ invitation_id: z.string().uuid() });
 
 export const acceptInvitationInput = z.object({
@@ -122,6 +140,7 @@ export type ForgotPasswordInput = z.infer<typeof forgotPasswordInput>;
 export type StaffForgotPasswordInput = z.infer<typeof staffForgotPasswordInput>;
 export type SetPasswordInput = z.infer<typeof setPasswordInput>;
 export type AccountActionInput = z.infer<typeof accountActionInput>;
+export type UpdateAccountInput = z.infer<typeof updateAccountInput>;
 export type AccountAuditFilter = z.infer<typeof accountAuditFilter>;
 export type UpdateProfileInput = z.infer<typeof updateProfileInput>;
 export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
