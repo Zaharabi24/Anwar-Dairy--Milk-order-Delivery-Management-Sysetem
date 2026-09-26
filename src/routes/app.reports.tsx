@@ -72,9 +72,14 @@ const PALETTE = [
 /** Room for the axis labels, and a little air above the tallest bar. */
 const CHART_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 };
 
-type Metric = "produced" | "sealed" | "sold";
-
-const METRICS: { value: Metric; label: string; colour: string }[] = [
+/**
+ * The three measures, drawn side by side for each date.
+ *
+ * Produced, sealed and sold are one story read across: what came out of the dairy, how much of it
+ * was put up for sale, and how much of that went. Apart they are three numbers; together the gap
+ * between each pair is the thing worth seeing.
+ */
+const METRICS: { value: "produced" | "sealed" | "sold"; label: string; colour: string }[] = [
   { value: "produced", label: "Produced", colour: "var(--color-muted-foreground)" },
   { value: "sealed", label: "Sealed", colour: "var(--color-info)" },
   { value: "sold", label: "Sold", colour: "var(--color-primary)" },
@@ -99,9 +104,6 @@ function ReportsPage() {
   const [employeeName, setEmployeeName] = useState("");
   const [batchNo, setBatchNo] = useState("all");
   const [batchRange, setBatchRange] = useState<string>("all");
-  // Which single measure the bar chart draws. Three series at once is a comparison; one is a
-  // trend, and a trend is what a date axis is for.
-  const [metric, setMetric] = useState<Metric>("produced");
 
   const { invalid } = periodState(period);
   const years = useMemo(() => yearsIn(batches.map((b) => b.productionDate)), [batches]);
@@ -428,24 +430,7 @@ function ReportsPage() {
       ) : null}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card
-          title={`${METRICS.find((m) => m.value === metric)!.label} by date`}
-          className="lg:col-span-2"
-          action={
-            <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
-              <SelectTrigger className="w-40" aria-label="What to chart">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {METRICS.map((m) => (
-                  <SelectItem key={m.value} value={m.value}>
-                    {m.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          }
-        >
+        <Card title="Produced vs sealed vs sold by date" className="lg:col-span-2">
           {byDate.length === 0 ? (
             <NoData />
           ) : (
@@ -455,7 +440,7 @@ function ReportsPage() {
                   slab across the card -- the shape of the plot area rather than a reading of
                   anything. With a gap and a ceiling it stays a bar whether there is one day on the
                   chart or thirty, and the rounded top is visible at last. */}
-              <BarChart data={byDate} barCategoryGap="30%" margin={CHART_MARGIN}>
+              <BarChart data={byDate} barCategoryGap="28%" barGap={6} margin={CHART_MARGIN}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="var(--color-border)"
@@ -495,14 +480,23 @@ function ReportsPage() {
                   }}
                   labelStyle={{ fontWeight: 600, marginBottom: 2 }}
                 />
-                {/* One series. Which one is the reader's choice, above. */}
-                <Bar
-                  dataKey={metric}
-                  name={METRICS.find((m) => m.value === metric)!.label}
-                  fill={METRICS.find((m) => m.value === metric)!.colour}
-                  radius={[6, 6, 0, 0]}
-                  maxBarSize={56}
+                <Legend
+                  iconType="circle"
+                  iconSize={9}
+                  wrapperStyle={{ paddingTop: 12, fontSize: 12 }}
                 />
+                {/* The three side by side within each date. `maxBarSize` is per bar, so a day on
+                    its own gets three readable bars rather than three slabs filling the card. */}
+                {METRICS.map((m) => (
+                  <Bar
+                    key={m.value}
+                    dataKey={m.value}
+                    name={m.label}
+                    fill={m.colour}
+                    radius={[4, 4, 0, 0]}
+                    maxBarSize={42}
+                  />
+                ))}
               </BarChart>
             </ResponsiveContainer>
           )}
