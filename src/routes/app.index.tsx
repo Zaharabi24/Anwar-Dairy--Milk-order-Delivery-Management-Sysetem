@@ -17,7 +17,6 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
   ],
   "Head Office Coordinator": [
     { to: "/app/orders", title: "Orders", body: "Search, filter and adjust orders." },
-    { to: "/app/fulfillment", title: "Fulfillment", body: "Update status per delivery point." },
     { to: "/app/collections", title: "Collections", body: "Record payments and dues." },
     { to: "/app/reports", title: "Reports", body: "Daily reconciliation and trends." },
   ],
@@ -45,7 +44,7 @@ const shortcutsByRole: Record<Role, Array<{ to: string; title: string; body: str
     {
       to: "/app/orders",
       title: "Head Office Coordinator",
-      body: "Orders, fulfillment and collections.",
+      body: "Orders, coupons and collections.",
     },
     { to: "/app/reports", title: "Reports", body: "Production, sales and collections trends." },
   ],

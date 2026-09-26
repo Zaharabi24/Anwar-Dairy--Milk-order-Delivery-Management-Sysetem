@@ -72,7 +72,6 @@ const operatorPages: NavItem[] = [
 
 const coordinatorPages: NavItem[] = [
   { label: "Orders", to: "/app/orders" },
-  { label: "Fulfillment", to: "/app/fulfillment" },
   { label: "Coupons", to: "/app/coupons" },
   { label: "Collections", to: "/app/collections" },
 ];
@@ -133,7 +132,6 @@ const routeRoles: Array<[prefix: string, roles: RoleValue[]]> = [
   ["/app/admin", ADMINS],
   ["/app/operator", OPERATOR],
   ["/app/orders", COORDINATOR],
-  ["/app/fulfillment", COORDINATOR],
   ["/app/coupons", COORDINATOR],
   ["/app/collections", COORDINATOR],
   ["/app/reports", ["factory_operator", "head_office_coordinator", ...ADMINS]],

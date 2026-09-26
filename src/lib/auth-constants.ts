@@ -38,7 +38,7 @@ export const INVITABLE_ROLES: { value: InvitableRole; label: string; description
   {
     value: "head_office_coordinator",
     label: "Head Office Coordinator",
-    description: "Confirms orders, runs fulfillment and records collections.",
+    description: "Confirms orders and records collections.",
   },
   {
     value: "system_admin",
@@ -84,7 +84,8 @@ export const OFFICES = [{ code: "AGI_HO", label: "AGI Head Office" }];
 export const ROLE_HOME: Record<RoleValue, string> = {
   employee: "/app/offer",
   factory_operator: "/app/operator",
-  head_office_coordinator: "/app/fulfillment",
+  // Orders, since confirming a request is the whole of the job now that it settles the order.
+  head_office_coordinator: "/app/orders",
   // Employees: accounts are created by the people who hold them now, so there are no requests to
   // land on, and signing in onto a page the sidebar doesn't list leaves nothing highlighted.
   system_admin: "/app/admin/employees",

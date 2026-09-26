@@ -731,18 +731,58 @@ export async function confirmOrder(input: ConfirmOrderInput) {
   });
 }
 
+/**
+ * Confirming an order request, which is now the whole of it.
+ *
+ * Fulfillment used to be a screen of its own: the coordinator confirmed the request here, then
+ * went there to mark the order packed, then delivered, and the handover coupon was written when
+ * they did. That screen has gone, so confirming has to carry what it carried -- otherwise an order
+ * would stop at Confirmed, no coupon would ever be written, and the delivered litres a batch
+ * records when it closes would always be zero.
+ *
+ * So one act settles the order. The status goes to its final state, the handover is recorded as a
+ * delivery coupon, and the amount becomes due in Collections, which it already did for anything
+ * past Pending. The employee is told once, about a confirmed order, rather than three times about
+ * steps they have no part in.
+ */
 export async function approveOrder({ orderNo }: OrderActionInput) {
   const user = await requirePermission("orders.manage");
   return mutate(user, async (tx) => {
     const order = await lockOrder(tx, orderNo);
     if (order.status !== "Pending") return;
-    await tx`update orders set status = 'Confirmed', updated_at = now() where order_no = ${orderNo}`;
+    await tx`update orders set status = 'Delivered', updated_at = now() where order_no = ${orderNo}`;
+
+    // The person and the point as they stand now, copied onto the coupon: a coupon is a record of
+    // a handover, so it has to keep saying who collected what even if the directory changes later.
+    const [detail] = await tx<Row[]>`
+      select e.name as employee_name, e.phone, p.name as point_name, p.address
+      from orders o
+      left join employees e on e.id = o.employee_id
+      left join delivery_points p on p.id = o.delivery_point_id
+      where o.order_no = ${orderNo}`;
+
+    // Guarded on the order rather than by `on conflict`: delivery_records is keyed by coupon_no,
+    // so the constraint that would catch a repeat does not exist. Confirming already returns early
+    // unless the order is Pending, which makes a second coupon unreachable in practice; this makes
+    // it unreachable in fact, including for an order the old Fulfillment screen already handed
+    // over.
+    await tx`
+      insert into delivery_records (coupon_no, order_no, recipient_name, contact, date_time,
+                                    location, floor, quantity, receiver_name, remarks)
+      select 'DC-' || nextval('coupon_no_seq'), ${orderNo},
+             ${(detail?.["employee_name"] as string) || (order.employee_id as string)}, ${(detail?.["phone"] as string) || "—"}, now(),
+             ${(detail?.["point_name"] as string) || "—"},
+             ${(detail?.["address"] as string) || ""},
+             ${order.litres}, ${(detail?.["employee_name"] as string) || (order.employee_id as string)},
+             'Confirmed by the head office coordinator'
+      where not exists (select 1 from delivery_records where order_no = ${orderNo})`;
+
     await audit(tx, {
       actor: user.fullName,
       action: "Confirmed order request",
       record: orderNo,
       oldValue: "Pending",
-      newValue: "Confirmed",
+      newValue: "Delivered",
     });
     await notify(tx, {
       kind: "OrderConfirmed",
