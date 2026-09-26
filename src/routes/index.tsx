@@ -297,11 +297,7 @@ function Landing() {
           <h1 className="text-4xl font-extrabold leading-[1.05] sm:text-6xl">
             Today's milk, booked in under a minute.
           </h1>
-          <p className="mt-5 max-w-lg text-lg text-muted-foreground">
-            Every production day the Savar dairy unit publishes one batch of fresh whole milk — you
-            pick your litres before the cut-off and collect it at your usual point.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-6 flex flex-wrap gap-3">
             {auth?.withoutAccount ? (
               // Booking is the point of the visit, so it leads; the batch is still one click away
               // for anyone who wants to look before they order.
