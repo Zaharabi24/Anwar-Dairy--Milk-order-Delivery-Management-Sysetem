@@ -321,6 +321,66 @@ function toClientError(error: unknown): Error {
   return new AppError("Something went wrong saving your change. Please try again.");
 }
 
+/**
+ * Takes an Employee ID off a row that has already been deleted, so it can be used again.
+ *
+ * Deleting frees the ID as it goes, but that has not always been true, and a database carrying a
+ * row soft-deleted by the older code still has that person's ID locked away. The symptom was
+ * unhelpful in a particular way: every check that looks somebody up hides deleted rows, so the
+ * form said the ID was free and the primary key -- which has no opinion about `deleted_at` --
+ * refused the insert. What came back was "That record already exists", naming neither the field
+ * nor the record, about a person the admin had deleted themselves.
+ *
+ * Fixing it in a migration would fix the databases that existed when the migration was written.
+ * Doing it here fixes it wherever it is found: the ID is released at the moment somebody tries to
+ * use it, so the next attempt succeeds whatever state the row was left in.
+ *
+ * The two paths are the ones deletion itself uses. A row with orders behind it cannot go --
+ * `orders.employee_id` is `on delete restrict`, because reconciliation and the revenue reports
+ * read them -- so it is renamed to a tombstone and stripped of anything that identifies a person.
+ * A row with nothing attached goes entirely.
+ */
+async function releaseDeletedId(tx: Tx, id: string, actor: string): Promise<void> {
+  // Before the rename, which cascades `employee_id` and would leave this matching nothing.
+  await tx`
+    update batch_emails
+    set employee_name = 'Deleted employee', employee_ref = '', to_address = '',
+        department = '', designation = '', phone = '', location = ''
+    where employee_id = ${id}`;
+  await tx`
+    update mail_campaign_recipients
+    set employee_name = 'Deleted employee', employee_ref = '', to_address = '',
+        department = '', designation = '', business_unit = '', location = ''
+    where employee_id = ${id}`;
+
+  const [attached] = await tx<Row[]>`
+    select exists (select 1 from orders where employee_id = ${id})
+        or exists (select 1 from cancellation_requests where employee_id = ${id}) as any_orders`;
+
+  if (attached?.any_orders) {
+    await tx`
+      update employees set
+        id = 'DEL-' || seq::text,
+        name = 'Deleted employee',
+        company_email = '',
+        former_company_email = null,
+        phone = '',
+        department = '',
+        designation = '',
+        site = '',
+        business_unit_code = null,
+        date_of_birth = null,
+        deleted_by = coalesce(deleted_by, ${actor}),
+        account_status = null,
+        password_hash = null,
+        active = false,
+        updated_at = now()
+      where id = ${id}`;
+  } else {
+    await tx`delete from employees where id = ${id}`;
+  }
+}
+
 function audit(
   tx: Tx,
   entry: { actor: string; action: string; record: string; oldValue: string; newValue: string },
@@ -968,17 +1028,20 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
             `"${typed}" can't be used as an Employee ID. Use letters, digits, and . _ - / only, with no spaces.`,
           );
         }
-        // Deleted rows are excluded: a tombstone is renamed off its Employee ID, and even if an
-        // older one lingers from before that was true, it must not stand in the way of adding
-        // somebody back.
-        const [clash] = await tx<Row[]>`
-          select id, name from employees
-          where lower(id) = lower(${typed}) and deleted_at is null`;
-        if (clash) {
+        // Every row holding this ID, deleted or not -- because the primary key counts them all,
+        // and looking only at the living ones is what let a deleted row pass this check and then
+        // fail the insert with "That record already exists".
+        const [holder] = await tx<Row[]>`
+          select id, name, deleted_at from employees
+          where lower(id) = lower(${typed}) for update`;
+        if (holder && !holder["deleted_at"]) {
           throw new AppError(
-            `Employee ID ${typed} already belongs to ${clash["name"] as string}. Use a different ID, or edit that record instead.`,
+            `Employee ID ${typed} already belongs to ${holder["name"] as string}. Use a different ID, or edit that record instead.`,
           );
         }
+        // Deleted, but still sitting on the ID. Adding the person back is precisely what the
+        // admin is asking for, so the ID is freed here rather than refused.
+        if (holder) await releaseDeletedId(tx, holder["id"] as string, user.fullName);
       }
       const [{ next }] = (await tx<Row[]>`
         select coalesce(max(substring(id from '^EMP-([0-9]+)$')::int), 1000) + 1 as next
@@ -1029,14 +1092,17 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
           `"${renameTo}" can't be used as an Employee ID. Use letters, digits, and . _ - / only, with no spaces.`,
         );
       }
-      const [clash] = await tx<Row[]>`
-        select id, name from employees
-        where lower(id) = lower(${renameTo}) and deleted_at is null`;
-      if (clash) {
+      // Same reasoning as the add path: the primary key does not exclude deleted rows, so nor
+      // can the check that stands in front of it.
+      const [holder] = await tx<Row[]>`
+        select id, name, deleted_at from employees
+        where lower(id) = lower(${renameTo}) for update`;
+      if (holder && !holder["deleted_at"]) {
         throw new AppError(
-          `Employee ID ${renameTo} already belongs to ${clash["name"] as string}.`,
+          `Employee ID ${renameTo} already belongs to ${holder["name"] as string}.`,
         );
       }
+      if (holder) await releaseDeletedId(tx, holder["id"] as string, user.fullName);
       await tx`update employees set id = ${renameTo}, updated_at = now() where id = ${employee.id}`;
       await audit(tx, {
         actor: user.fullName,
