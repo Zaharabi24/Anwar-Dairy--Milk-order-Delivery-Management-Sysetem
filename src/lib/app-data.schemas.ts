@@ -24,6 +24,13 @@ const money = z.number().nonnegative().max(100_000_000);
 
 export const batchStatusInput = z.object({ batchNo: id, status: z.enum(batchStatuses) });
 
+/**
+ * The batch to delete. Typing the number back is the confirmation: this removes the day's orders,
+ * collections, coupons and email records with it, and a mis-click on a row is not enough to ask
+ * for that.
+ */
+export const deleteBatchInput = z.object({ batchNo: id, confirmBatchNo: id });
+
 export const createBatchInput = z.object({
   batch: z.object({
     productionDate: isoDate,
@@ -153,6 +160,7 @@ export const saveSettingsInput = z.object({
 });
 
 export type BatchStatusInput = z.infer<typeof batchStatusInput>;
+export type DeleteBatchInput = z.infer<typeof deleteBatchInput>;
 export type CreateBatchInput = z.infer<typeof createBatchInput>;
 export type ConfirmOrderInput = z.infer<typeof confirmOrderInput>;
 export type OrderActionInput = z.infer<typeof orderActionInput>;

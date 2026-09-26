@@ -15,6 +15,11 @@ export const setBatchStatusFn = createServerFn({ method: "POST" })
   .validator(schema.batchStatusInput)
   .handler(async ({ data }) => (await server()).setBatchStatus(data));
 
+/** Super Admin only, checked in the server module. Takes the batch and everything under it. */
+export const deleteBatchFn = createServerFn({ method: "POST" })
+  .validator(schema.deleteBatchInput)
+  .handler(async ({ data }) => (await server()).deleteBatch(data));
+
 export const createBatchFn = createServerFn({ method: "POST" })
   .validator(schema.createBatchInput)
   .handler(async ({ data }) => (await server()).createBatch(data));

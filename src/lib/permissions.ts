@@ -19,7 +19,8 @@ export type Permission =
   | "mailbox.send"
   | "staff.invite"
   | "staff.manage"
-  | "employee_id.change";
+  | "employee_id.change"
+  | "batches.delete";
 
 const SYSTEM_ADMIN: Permission[] = [
   "batches.manage",
@@ -48,12 +49,17 @@ const GRANTS: Record<RoleValue, readonly Permission[]> = {
   // Changing an Employee ID is the Super Admin's alone. It is the key the whole record hangs
   // off -- orders, sessions, booking links and the sign-in itself all name it -- so correcting
   // one is a different kind of act from editing a phone number, which any System Admin may do.
+  // Deleting a batch is the Super Admin's alone, for the same reason changing an Employee ID is:
+  // it takes the orders, collections, coupons, booking links and email records that hang off the
+  // batch with it. Closing or pausing a batch is what an operator does when a day is over; there
+  // is no ordinary reason to need the day itself gone.
   super_admin: [
     ...SYSTEM_ADMIN,
     "accounts.manage",
     "staff.invite",
     "staff.manage",
     "employee_id.change",
+    "batches.delete",
   ],
 };
 

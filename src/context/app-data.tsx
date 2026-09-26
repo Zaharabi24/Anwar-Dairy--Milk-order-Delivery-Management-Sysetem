@@ -25,6 +25,7 @@ import {
   saveEmployeeFn,
   saveSettingsFn,
   setBatchStatusFn,
+  deleteBatchFn,
   setDeliveryPointActiveFn,
   setEmployeeActiveFn,
   updateOrderFn,
@@ -96,6 +97,11 @@ interface AppData {
   markNotificationsRead: () => void;
   remainingLitres: (batchNo: string) => number;
   setBatchStatus: (batchNo: string, status: BatchStatus) => void;
+  /**
+   * Deletes a batch and everything under it. Super Admin only; the server refuses anyone else.
+   * Resolves to what was removed, or null if it was refused.
+   */
+  deleteBatch: (batchNo: string, confirmBatchNo: string) => Promise<Record<string, number> | null>;
   /** Saves a draft batch; the database assigns the batch number. */
   addBatch: (batch: NewBatch) => Promise<DailyMilkBatch | null>;
   confirmOrder: (input: NewOrder) => Promise<Order | null>;
@@ -259,6 +265,8 @@ export function AppDataProvider({
       markNotificationsRead: () => void run(() => markNotificationsReadFn(), undefined),
       setBatchStatus: (batchNo: string, status: BatchStatus) =>
         void run(() => setBatchStatusFn({ data: { batchNo, status } }), undefined),
+      deleteBatch: (batchNo: string, confirmBatchNo: string) =>
+        run(() => deleteBatchFn({ data: { batchNo, confirmBatchNo } }), null),
       addBatch: (batch: NewBatch) => run(() => createBatchFn({ data: { batch } }), null),
       confirmOrder: (input: NewOrder) => run(() => confirmOrderFn({ data: input }), null),
       approveOrder: (orderNo: string) =>

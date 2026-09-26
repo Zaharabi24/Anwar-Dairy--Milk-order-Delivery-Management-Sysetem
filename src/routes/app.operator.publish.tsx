@@ -1,10 +1,23 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { BatchStatusBadge } from "@/components/status-badge";
 import { useAppData } from "@/context/app-data";
+import { useAuth } from "@/hooks/use-auth";
+import { hasPermission } from "@/lib/permissions";
 import { dateShort, taka, timeShort } from "@/lib/format";
 
 export const Route = createFileRoute("/app/operator/publish")({
@@ -23,8 +36,14 @@ export const Route = createFileRoute("/app/operator/publish")({
 });
 
 function Publish() {
-  const { batches, deliveryPoints, setBatchStatus } = useAppData();
+  const { batches, deliveryPoints, setBatchStatus, deleteBatch } = useAppData();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const [confirming, setConfirming] = useState(false);
+  // A draft has never been published, so it is not in Publish records, which is where a batch is
+  // otherwise deleted from. Without this there would be one kind of batch a Super Admin could not
+  // remove -- the only kind with nothing behind it.
+  const canDelete = hasPermission(user?.roles ?? [], "batches.delete");
   const draft =
     batches.find((b) => b.status === "Draft") ?? batches.find((b) => b.status === "Active");
 
@@ -110,7 +129,39 @@ function Publish() {
         <Button variant="outline" onClick={() => void navigate({ to: "/app/operator/new-batch" })}>
           Edit details
         </Button>
+        {canDelete ? (
+          <Button variant="outline" onClick={() => setConfirming(true)}>
+            Delete batch
+          </Button>
+        ) : null}
       </div>
+
+      <AlertDialog open={confirming} onOpenChange={setConfirming}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {draft.batchNo}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {isDraft
+                ? "This draft has not been published, so nothing has been sent and nobody has booked against it. It will be removed entirely."
+                : "This batch is live. Deleting it removes every order placed against it, the payments collected, the coupons handed out, the booking links and the email records. This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                void deleteBatch(draft.batchNo, draft.batchNo).then((removed) => {
+                  if (!removed) return;
+                  toast.success(`${draft.batchNo} deleted`);
+                  void navigate({ to: "/app/operator" });
+                });
+              }}
+            >
+              Delete batch
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

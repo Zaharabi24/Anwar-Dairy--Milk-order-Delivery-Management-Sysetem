@@ -653,6 +653,9 @@ function ConfirmDialog({
 
 function History({ initial, batches }: { initial: CampaignSummary[]; batches: string[] }) {
   const [campaigns, setCampaigns] = useState(initial);
+  // Refreshed with the history, so a batch published while the Mailbox is open reaches the Batch
+  // No. dropdown without waiting for a navigation.
+  const [batchNumbers, setBatchNumbers] = useState(batches);
   const [open, setOpen] = useState<CampaignSummary | null>(null);
   const [recipients, setRecipients] = useState<CampaignRecipient[] | null>(null);
   const [busy, setBusy] = useState(false);
@@ -685,6 +688,12 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
   const totalFailed = shown.reduce((n, c) => n + c.failedCount, 0);
   const filtered = shown.length !== campaigns.length;
 
+  async function reload() {
+    const [list, published] = await Promise.all([listCampaignsFn(), listPublishedBatchNumbersFn()]);
+    setCampaigns(list);
+    setBatchNumbers(published);
+  }
+
   async function openCampaign(c: CampaignSummary) {
     setOpen(c);
     setRecipients(null);
@@ -704,7 +713,7 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
           ? `${r.queued} failed message${r.queued === 1 ? "" : "s"} back on the queue.`
           : "Nothing failed on this send.",
       );
-      setCampaigns(await listCampaignsFn());
+      await reload();
     } catch {
       toast.error("Couldn't retry those just now.");
     } finally {
@@ -719,7 +728,7 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
       toast.success(
         r.queued > 0 ? `${r.queued} message(s) back on the queue.` : "Nothing left to send.",
       );
-      setCampaigns(await listCampaignsFn());
+      await reload();
     } catch {
       toast.error("Couldn't resume the send.");
     } finally {
@@ -748,7 +757,7 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All batches</SelectItem>
-              {batches.map((b) => (
+              {batchNumbers.map((b) => (
                 <SelectItem key={b} value={b}>
                   {b}
                 </SelectItem>

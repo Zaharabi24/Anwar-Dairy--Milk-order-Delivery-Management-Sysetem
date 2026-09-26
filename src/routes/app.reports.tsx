@@ -86,10 +86,21 @@ function ReportsPage() {
   const [orderNo, setOrderNo] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [employeeName, setEmployeeName] = useState("");
+  const [batchNo, setBatchNo] = useState("all");
   const [batchRange, setBatchRange] = useState<string>("all");
 
   const { invalid } = periodState(period);
   const years = useMemo(() => yearsIn(batches.map((b) => b.productionDate)), [batches]);
+
+  /**
+   * The batch numbers the Batch No. dropdown offers: every batch that has been published.
+   *
+   * Read from the batches the page already holds rather than fetched, which is what makes it keep
+   * itself up to date -- publishing a batch moves it off Draft, the snapshot refreshes, and the
+   * number is in the list. A draft is left out on purpose: nobody has been told about it, so there
+   * is nothing to report on yet.
+   */
+  const publishedBatches = useMemo(() => batches.filter((b) => b.status !== "Draft"), [batches]);
 
   /**
    * The batches in scope: those produced inside the date filter, then cut to the batch range.
@@ -99,11 +110,12 @@ function ReportsPage() {
    * is meant to be narrowing.
    */
   const selection = useMemo(() => {
+    // Batch No. names one batch, so it answers on its own: the dates and the range are there to
+    // find a batch, and once one has been named there is nothing left for them to narrow.
+    if (batchNo !== "all") return batches.filter((b) => b.batchNo === batchNo);
     const matched = batches.filter((b) => periodMatches(period, b.productionDate));
-    const byBatch =
-      batchRange === "all" ? matched : matched.slice(0, Number(batchRange) || matched.length);
-    return byBatch;
-  }, [batches, period, batchRange]);
+    return batchRange === "all" ? matched : matched.slice(0, Number(batchRange) || matched.length);
+  }, [batches, period, batchNo, batchRange]);
 
   const selectedBatchNos = useMemo(
     () => new Set(selection.map((batch) => batch.batchNo)),
@@ -206,6 +218,7 @@ function ReportsPage() {
 
   const dirty =
     period.mode !== "all" ||
+    batchNo !== "all" ||
     batchRange !== "all" ||
     Boolean(orderNo.trim() || employeeId.trim() || employeeName.trim());
 
@@ -214,6 +227,7 @@ function ReportsPage() {
     setOrderNo("");
     setEmployeeId("");
     setEmployeeName("");
+    setBatchNo("all");
     setBatchRange("all");
   }
 
@@ -285,6 +299,34 @@ function ReportsPage() {
             placeholder="Any part of the name"
           />
         </Field>
+        {/* One named batch. Its contents are every batch that has been published, so a batch
+            published today is in the list without anyone having to add it. */}
+        <Field
+          label="Batch No."
+          htmlFor="report-batch-no"
+          {...(batchNo !== "all"
+            ? { hint: "Reporting on this batch alone — the date and range filters don't apply." }
+            : {})}
+        >
+          <Select value={batchNo} onValueChange={setBatchNo}>
+            <SelectTrigger id="report-batch-no">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All batch numbers</SelectItem>
+              {publishedBatches.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  No batch published yet
+                </SelectItem>
+              ) : null}
+              {publishedBatches.map((b) => (
+                <SelectItem key={b.batchNo} value={b.batchNo}>
+                  {b.batchNo} · {dateShort(b.productionDate)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
         {/* Last, because it narrows what the other filters matched rather than choosing it. */}
         <Field label="Batch Range" htmlFor="report-batch-range">
           <Select value={batchRange} onValueChange={setBatchRange}>
@@ -295,11 +337,6 @@ function ReportsPage() {
               {BATCH_RANGES.map((r) => (
                 <SelectItem key={r.value} value={r.value}>
                   {r.label}
-                </SelectItem>
-              ))}
-              {batches.map((batch) => (
-                <SelectItem key={batch.batchNo} value={batch.batchNo}>
-                  {batch.batchNo}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -313,8 +350,8 @@ function ReportsPage() {
 
         <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:col-span-2 lg:col-span-4">
           <p className="text-xs text-muted-foreground">
-            {periodLabel(period)} ·{" "}
-            {batchRange === "all"
+            {batchNo === "all" ? periodLabel(period) : batchNo} ·{" "}
+            {batchNo !== "all" || batchRange === "all"
               ? `${series.length} batch${series.length === 1 ? "" : "es"}`
               : (BATCH_RANGES.find((r) => r.value === batchRange)?.label ?? batchRange)}{" "}
             · {totalOrders} order{totalOrders === 1 ? "" : "s"}

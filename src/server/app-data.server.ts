@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types";
 import type {
   BatchStatusInput,
+  DeleteBatchInput,
   CollectionInput,
   ConfirmOrderInput,
   CreateBatchInput,
@@ -440,6 +441,65 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
     );
   }
   return outcome;
+}
+
+/**
+ * Deletes a batch and everything that belongs to it. Super Admin only.
+ *
+ * `orders.batch_no` is `on delete restrict`, deliberately, so a batch with bookings behind it
+ * cannot be removed by accident. That is why the orders are deleted first and explicitly, rather
+ * than relying on a cascade: removing a day's takings should be something the code says out loud.
+ *
+ * What goes, and why it has to:
+ *
+ *   orders          -> collections, delivery_records, cancellation_requests, by cascade.
+ *                      A collection is money owed on an order and a coupon is the handover of
+ *                      one; neither means anything once the order has gone.
+ *   the batch        -> batch_delivery_points, batch_recipients, booking_links, and
+ *                      batch_publications with their batch_emails, by cascade. A booking link
+ *                      that opens a batch that no longer exists is a dead link, and an email
+ *                      record is the announcement of a day that is being erased.
+ *
+ * The count of what was removed is returned so the screen can say what it did rather than just
+ * that it worked -- "3 orders, 2 collections" is the difference between a confirmation and a
+ * surprise.
+ */
+export async function deleteBatch({ batchNo, confirmBatchNo }: DeleteBatchInput) {
+  const user = await requirePermission("batches.delete");
+  if (batchNo !== confirmBatchNo) throw new AppError("Type the batch number to confirm.");
+  return mutate(user, async (tx) => {
+    const [batch] = await tx<Row[]>`
+      select batch_no, status, product from batches where batch_no = ${batchNo} for update`;
+    if (!batch) throw new AppError(`Batch ${batchNo} doesn't exist.`);
+
+    // Counted before anything is removed, so the numbers describe what was actually there.
+    const [counts] = (await tx<Row[]>`
+      select
+        (select count(*) from orders where batch_no = ${batchNo})::int as orders,
+        (select count(*) from collections c join orders o on o.order_no = c.order_no
+          where o.batch_no = ${batchNo})::int as collections,
+        (select count(*) from delivery_records d join orders o on o.order_no = d.order_no
+          where o.batch_no = ${batchNo})::int as coupons,
+        (select count(*) from booking_links where batch_no = ${batchNo})::int as links,
+        (select count(*) from batch_emails where batch_no = ${batchNo})::int as emails,
+        (select count(*) from batch_publications where batch_no = ${batchNo})::int as publishes
+      `) as unknown as [Record<string, number>];
+
+    await tx`delete from orders where batch_no = ${batchNo}`;
+    await tx`delete from batches where batch_no = ${batchNo}`;
+
+    await audit(tx, {
+      actor: user.fullName,
+      action: "Deleted batch",
+      record: batchNo,
+      oldValue:
+        `${batch.status as string} · ${counts["orders"]} orders, ` +
+        `${counts["collections"]} collections, ${counts["coupons"]} coupons, ` +
+        `${counts["emails"]} email records`,
+      newValue: "Deleted",
+    });
+    return counts;
+  });
 }
 
 export async function createBatch({ batch }: CreateBatchInput) {

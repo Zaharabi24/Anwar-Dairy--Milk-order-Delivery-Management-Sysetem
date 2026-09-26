@@ -22,6 +22,16 @@ import {
   resendFailedBatchMailFn,
   resumePublicationMailFn,
 } from "@/functions/records.functions";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useAppData } from "@/context/app-data";
+import { useAuth } from "@/hooks/use-auth";
+import { hasPermission } from "@/lib/permissions";
 import { dateShort, taka, timeShort } from "@/lib/format";
 import { EMPTY_EMAIL_QUERY, type EmailRecordQuery } from "@/lib/records.schemas";
 import type {
@@ -130,10 +140,16 @@ function PublishRecords() {
 
 function Batches({ records }: { records: PublishRecord[] }) {
   const router = useRouter();
+  const { user } = useAuth();
+  const { deleteBatch } = useAppData();
+  // Deleting a batch belongs to the Super Admin. The server refuses anyone else either way; this
+  // is so an operator isn't shown a button that will only tell them no.
+  const canDelete = hasPermission(user?.roles ?? [], "batches.delete");
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<PublishRecord | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -230,13 +246,119 @@ function Batches({ records }: { records: PublishRecord[] }) {
                   busy={busy === r.id}
                   onResume={() => void act(r.id, "resume")}
                   onRetryFailed={() => void act(r.id, "retry")}
+                  {...(canDelete ? { onDelete: () => setDeleting(r) } : {})}
                 />
               ))}
             </tbody>
           </table>
         )}
       </div>
+
+      <DeleteBatchDialog
+        record={deleting}
+        onClose={() => setDeleting(null)}
+        onConfirm={async (batchNo, typed) => {
+          const removed = await deleteBatch(batchNo, typed);
+          if (!removed) return false;
+          toast.success(
+            `${batchNo} deleted — ${removed["orders"]} order${removed["orders"] === 1 ? "" : "s"}, ` +
+              `${removed["collections"]} collection${removed["collections"] === 1 ? "" : "s"}, ` +
+              `${removed["coupons"]} coupon${removed["coupons"] === 1 ? "" : "s"} and ` +
+              `${removed["emails"]} email record${removed["emails"] === 1 ? "" : "s"} went with it.`,
+          );
+          setDeleting(null);
+          await router.invalidate();
+          return true;
+        }}
+      />
     </div>
+  );
+}
+
+/**
+ * Confirming a batch delete.
+ *
+ * It says what will go and how much of it, then asks for the batch number to be typed. A row of
+ * buttons where one of them silently removes a day's orders, money owed and handover coupons is
+ * not a row anybody should be one mis-click away from.
+ */
+function DeleteBatchDialog({
+  record,
+  onClose,
+  onConfirm,
+}: {
+  record: PublishRecord | null;
+  onClose: () => void;
+  onConfirm: (batchNo: string, typed: string) => Promise<boolean>;
+}) {
+  const [typed, setTyped] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setTyped("");
+    setBusy(false);
+  }, [record]);
+
+  const matches = record ? typed.trim().toUpperCase() === record.batchNo.toUpperCase() : false;
+
+  return (
+    <Dialog open={!!record} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete {record?.batchNo}?</DialogTitle>
+        </DialogHeader>
+        {record ? (
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This cannot be undone. Everything belonging to the batch goes with it:
+            </p>
+            <ul className="space-y-1 rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm">
+              <li>
+                <span className="font-medium">{record.orderCount}</span>{" "}
+                {record.orderCount === 1 ? "order" : "orders"} ({record.bookedLitres} L booked),
+                with the payments collected against them and the coupons handed out
+              </li>
+              <li>
+                <span className="font-medium">{record.recipients}</span> email record
+                {record.recipients === 1 ? "" : "s"} and every booking link issued for the batch
+              </li>
+              <li>the batch itself, its collection points and its chosen recipients</li>
+            </ul>
+            <Field
+              label={`Type ${record.batchNo} to confirm`}
+              htmlFor="confirm-batch-no"
+              {...(typed.trim() && !matches ? { error: "That isn't the batch number." } : {})}
+            >
+              <Input
+                id="confirm-batch-no"
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder={record.batchNo}
+                autoComplete="off"
+              />
+            </Field>
+          </div>
+        ) : null}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={busy}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            disabled={!matches || busy}
+            onClick={() => {
+              if (!record) return;
+              setBusy(true);
+              void onConfirm(record.batchNo, typed.trim().toUpperCase()).then((done) => {
+                if (!done) setBusy(false);
+              });
+            }}
+          >
+            {busy ? "Deleting…" : "Delete batch"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -248,6 +370,7 @@ function PublishRow({
   busy,
   onResume,
   onRetryFailed,
+  onDelete,
 }: {
   record: PublishRecord;
   index: number;
@@ -256,6 +379,8 @@ function PublishRow({
   busy: boolean;
   onResume: () => void;
   onRetryFailed: () => void;
+  /** Given only to a Super Admin; absent for everybody else. */
+  onDelete?: () => void;
 }) {
   return (
     <>
@@ -315,6 +440,11 @@ function PublishRow({
             {r.failedCount ? (
               <Button variant="outline" size="sm" disabled={busy} onClick={onRetryFailed}>
                 {busy ? "Queueing…" : `Resend ${r.failedCount} failed`}
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button variant="outline" size="sm" onClick={onDelete}>
+                Delete batch
               </Button>
             ) : null}
           </div>

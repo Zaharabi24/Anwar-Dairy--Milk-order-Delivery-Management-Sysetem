@@ -137,6 +137,10 @@ function EmailRecords() {
 function Records({ initial, batches }: { initial: EmailRecordPage; batches: string[] }) {
   const [page, setPage] = useState(initial);
   const [loading, setLoading] = useState(false);
+  // Refreshed with the records rather than only on navigation, so a batch published while this
+  // page is open is in the dropdown the next time the list reloads instead of being missing until
+  // somebody thinks to reload.
+  const [batchNumbers, setBatchNumbers] = useState(batches);
 
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -161,7 +165,12 @@ function Records({ initial, batches }: { initial: EmailRecordPage; batches: stri
   const load = useCallback(async (q: EmailRecordQuery) => {
     setLoading(true);
     try {
-      setPage(await listEmailRecordsFn({ data: q }));
+      const [records, published] = await Promise.all([
+        listEmailRecordsFn({ data: q }),
+        listPublishedBatchNumbersFn(),
+      ]);
+      setPage(records);
+      setBatchNumbers(published);
     } catch {
       toast.error("Couldn't load the email records. Try again.");
     } finally {
@@ -221,7 +230,7 @@ function Records({ initial, batches }: { initial: EmailRecordPage; batches: stri
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All batches</SelectItem>
-              {batches.map((b) => (
+              {batchNumbers.map((b) => (
                 <SelectItem key={b} value={b}>
                   {b}
                 </SelectItem>
