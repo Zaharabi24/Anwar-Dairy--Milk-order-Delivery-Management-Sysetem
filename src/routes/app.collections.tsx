@@ -24,7 +24,7 @@ import {
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
-import { dateShort, taka } from "@/lib/format";
+import { dateShort, taka, timeShort } from "@/lib/format";
 import type { CollectionRecord, Order } from "@/lib/types";
 
 export const Route = createFileRoute("/app/collections")({
@@ -197,9 +197,25 @@ function CollectionsPage() {
                     <Td className="font-medium">
                       {taka(Math.max(0, order.amount - (record?.amountCollected ?? 0)))}
                     </Td>
-                    <Td>{record?.method ?? "—"}</Td>
+                    {/* Orders shows the amount alone; the detail of how and when it was taken
+                        belongs here, which is the screen about payments. */}
+                    <Td>
+                      {record?.method ?? "—"}
+                      {record?.reference && record.reference !== "—" ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {record.reference}
+                        </span>
+                      ) : null}
+                    </Td>
                     <Td className="text-muted-foreground">
-                      {record ? dateShort(record.date) : "—"}
+                      {record ? (
+                        <>
+                          {dateShort(record.date)}
+                          <span className="block text-xs">{timeShort(record.date)}</span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
                     </Td>
                     <Td>
                       <PayBadge status={status} />

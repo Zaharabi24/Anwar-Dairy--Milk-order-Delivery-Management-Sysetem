@@ -293,25 +293,15 @@ function OrdersPage() {
                         </span>
                       )}
                     </Td>
+                    {/* The amount, and nothing else. Method, time and reference are what the
+                        Collection section is for -- repeating them here made the widest column on
+                        the page out of the smallest fact in it. */}
                     <Td>
                       {(() => {
                         const paid = paymentFor(o.orderNo);
-                        if (!payable(o)) return <span className="text-muted-foreground">—</span>;
-                        if (!paid)
-                          return (
-                            <span className="text-muted-foreground">{taka(o.amount)} due</span>
-                          );
-                        return (
-                          <>
-                            {taka(paid.amountCollected)} of {taka(o.amount)}
-                            <span className="block text-xs text-muted-foreground">
-                              {paid.method} · {dateTime(paid.date)}
-                              {paid.reference && paid.reference !== "—"
-                                ? ` · ${paid.reference}`
-                                : ""}
-                            </span>
-                          </>
-                        );
+                        if (!payable(o) || !paid)
+                          return <span className="text-muted-foreground">—</span>;
+                        return <span className="font-medium">{taka(paid.amountCollected)}</span>;
                       })()}
                     </Td>
                     <Td>
