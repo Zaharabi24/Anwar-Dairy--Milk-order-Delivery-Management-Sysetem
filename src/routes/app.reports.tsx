@@ -69,6 +69,9 @@ const PALETTE = [
  * How many batches the Batch Range covers. "All" is the default so the report opens on everything
  * the date filter matched rather than on an arbitrary last-seven.
  */
+/** Room for the axis labels, and a little air above the tallest bar. */
+const CHART_MARGIN = { top: 8, right: 8, bottom: 0, left: 0 };
+
 type Metric = "produced" | "sealed" | "sold";
 
 const METRICS: { value: Metric; label: string; colour: string }[] = [
@@ -447,28 +450,58 @@ function ReportsPage() {
             <NoData />
           ) : (
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={byDate}>
+              {/* `barCategoryGap` is what gives a bar its width when there is only one of them.
+                  Left to itself the single bar takes the whole band, so one production day drew a
+                  slab across the card -- the shape of the plot area rather than a reading of
+                  anything. With a gap and a ceiling it stays a bar whether there is one day on the
+                  chart or thirty, and the rounded top is visible at last. */}
+              <BarChart data={byDate} barCategoryGap="30%" margin={CHART_MARGIN}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="var(--color-border)"
                   vertical={false}
                 />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-                <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                <XAxis
+                  dataKey="name"
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  tickMargin={10}
+                  stroke="var(--color-muted-foreground)"
+                  interval="preserveStartEnd"
+                  minTickGap={16}
+                />
+                <YAxis
+                  tickLine={false}
+                  axisLine={false}
+                  fontSize={12}
+                  width={56}
+                  tickMargin={8}
+                  allowDecimals={false}
+                  stroke="var(--color-muted-foreground)"
+                  tickFormatter={(v: number) => v.toLocaleString("en-BD")}
+                />
                 <Tooltip
+                  // The default cursor is an opaque grey block the width of the whole band, which
+                  // covered the bar it was meant to be pointing at.
+                  cursor={{ fill: "var(--color-muted-foreground)", fillOpacity: 0.08 }}
+                  separator=": "
                   formatter={(v: number) => litres(v)}
                   contentStyle={{
                     background: "var(--color-card)",
                     border: "1px solid var(--color-border)",
                     borderRadius: 12,
+                    boxShadow: "0 8px 24px rgb(0 0 0 / 0.08)",
                   }}
+                  labelStyle={{ fontWeight: 600, marginBottom: 2 }}
                 />
                 {/* One series. Which one is the reader's choice, above. */}
                 <Bar
                   dataKey={metric}
                   name={METRICS.find((m) => m.value === metric)!.label}
                   fill={METRICS.find((m) => m.value === metric)!.colour}
-                  radius={[4, 4, 0, 0]}
+                  radius={[6, 6, 0, 0]}
+                  maxBarSize={56}
                 />
               </BarChart>
             </ResponsiveContainer>
