@@ -201,7 +201,6 @@ const reasonCards = [
     icon: ShoppingBasket,
     title: "Order Online Easily",
     copy: "Book your litres from the link in your email, before the cut-off. Nothing to sign up for.",
-    wide: true,
   },
   {
     icon: Activity,
@@ -219,9 +218,9 @@ function Capabilities() {
   // The track slides by exactly half its width, so the strip has to be two identical halves or
   // the loop jumps. A half has to be at least as wide as the screen too, or it runs out mid-view
   // and leaves a gap at the seam -- which the old four-card strip did, at 1388px, on any ordinary
-  // laptop. Three of these cards come to 1064px, so the half repeats them three times and covers
-  // 3232px. The animation was slowed in step, so the distance per second, and the speed the cards
-  // read at, is what it always was.
+  // laptop. Three equal 19rem cards come to 966px, so the half repeats them three times and
+  // covers 2916px. The animation is timed against that width, so the cards move at the speed they
+  // always did rather than at whatever the new distance would have made it.
   const half = [...reasonCards, ...reasonCards, ...reasonCards];
   const strip = [...half, ...half];
   return (
@@ -235,18 +234,19 @@ function Capabilities() {
       <div className="group mt-8 overflow-hidden sm:mt-10">
         <div className="marquee-track flex w-max gap-5 px-5 group-hover:[animation-play-state:paused]">
           {strip.map((c, i) => (
+            // One card, three times over. The first used to be singled out as the wide one --
+            // a 26rem box with a larger icon and a heading two steps up -- which read as a
+            // difference in importance where there is none: three reasons of equal weight. Now
+            // every card is the same width, icon, heading and body, so the eye can compare them
+            // instead of ranking them. A 19rem card is wider than a phone, so it comes down
+            // below sm.
             <article
               key={i}
-              // A 26rem card is wider than a phone, so the widths come down below sm.
-              className={`shrink-0 rounded-xl border border-border bg-background p-5 sm:p-6 ${
-                c.wide ? "w-[18rem] sm:w-[26rem]" : "w-[15rem] sm:w-[19rem]"
-              }`}
+              className="flex w-[15rem] shrink-0 flex-col rounded-xl border border-border bg-background p-5 sm:w-[19rem] sm:p-6"
             >
-              <c.icon className={`text-primary ${c.wide ? "size-7" : "size-5"}`} />
-              <h3 className={`mt-4 font-semibold ${c.wide ? "text-xl sm:text-2xl" : "text-lg"}`}>
-                {c.title}
-              </h3>
-              <p className="mt-2 text-sm text-muted-foreground">{c.copy}</p>
+              <c.icon className="size-6 text-primary" aria-hidden="true" />
+              <h3 className="mt-4 text-lg font-semibold leading-snug">{c.title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{c.copy}</p>
             </article>
           ))}
         </div>

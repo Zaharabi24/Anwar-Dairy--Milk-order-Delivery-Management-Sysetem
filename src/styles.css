@@ -239,13 +239,13 @@
 }
 
 /*
- * One pass carries the track half its own width. That half grew -- three cards repeated three
- * times, so it stays wider than the screen at the seam -- and covering a longer distance in the
- * same 42s would have been the same cards going faster. 98s holds the speed at the 2.06rem/s the
- * cards had before, which is the point: only the content changed.
+ * One pass carries the track half its own width, and that half is nine equal 19rem cards and
+ * their gaps: 182.25rem, wide enough that the seam never shows on screen. The duration is set
+ * against that distance rather than left where it was, so the cards keep the 2.06rem/s they read
+ * at before -- the strip's content and proportions changed, the speed did not.
  */
 @utility marquee-track {
-  animation: marquee-x 98s linear infinite;
+  animation: marquee-x 88s linear infinite;
 }
 
 @media (prefers-reduced-motion: reduce) {
