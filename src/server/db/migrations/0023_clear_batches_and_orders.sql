@@ -1,0 +1,37 @@
+-- Clear every batch and every order, once, for go-live.
+--
+-- The platform opens to the group today, and what is in these tables is the work of building it:
+-- demo batches, test bookings, orders placed to prove the emailed link worked. None of it is a
+-- record of anything that happened, and carrying it into live operation would put invented figures
+-- into the first reports anybody reads.
+--
+-- Two statements, in this order, because they have to be. `orders.batch_no` is `on delete
+-- restrict` -- deliberately, so a batch with bookings behind it cannot be removed by accident --
+-- so the orders go first or the second statement is refused.
+--
+-- Everything keyed to an order or to a batch goes with it, through cascades already declared:
+--
+--   from orders     collections, delivery_records (the coupons), cancellation_requests
+--   from batches    batch_delivery_points, batch_recipients, booking_links,
+--                   batch_publications -> batch_emails (Publish Records and Email Records)
+--
+-- That breadth is the request, not a side effect: a collection is money owed on an order, a coupon
+-- is a handover of one, and an email record is the announcement of a batch. None of them mean
+-- anything once the thing they are about has gone.
+--
+-- Deliberately left alone, because they were not asked for and are not batch or order data:
+--
+--   employees, user_roles, sessions, invitations   who works here and who can sign in
+--   delivery_points, offices, business_units       master data, not per batch
+--   app_settings                                   the rate, cutoff, caps and terms
+--   notifications, audit_logs, email_outbox        records of what was done, not what was ordered
+--   mail_campaigns                                 the System Admin's own letters
+--
+-- The number sequences are left where they are, so the first live order carries on from the last
+-- test one rather than reusing a number that has already been printed on a coupon somewhere.
+--
+-- Runs once. `schema_migrations` records it, so a later deploy will not run it again, and on a
+-- fresh database it finds nothing and does nothing.
+
+delete from orders;
+delete from batches;
