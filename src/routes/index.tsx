@@ -297,7 +297,14 @@ function Landing() {
           <h1 className="text-4xl font-extrabold leading-[1.05] sm:text-6xl">
             Today's milk, booked in under a minute.
           </h1>
-          <div className="mt-6 flex flex-wrap gap-3">
+          {/* Two sentences rather than one, so it reads at max-w-xl: at the narrower measure the
+              heading used it would fall to six short lines and stop being a standfirst. */}
+          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
+            With Anwar Organic, the journey begins at our own Gazaria dairy facility. From the care
+            of our cows and management of their feed to hygienic milking and careful handling, we
+            focus on the fundamentals that matter when producing fresh milk.
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
             {auth?.withoutAccount ? (
               // Booking is the point of the visit, so it leads; the batch is still one click away
               // for anyone who wants to look before they order.
