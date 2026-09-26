@@ -107,7 +107,10 @@ export async function listBatchEmails(query: EmailRecordQuery): Promise<EmailRec
   return queryEmailRecords(query);
 }
 
-async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPage> {
+async function queryEmailRecords(
+  query: EmailRecordQuery,
+  options: { unresolvedOnly?: boolean } = {},
+): Promise<EmailRecordPage> {
   // Looking at the records is a good moment to make sure the rest is on its way.
   await resumePendingPublications().catch((error: unknown) =>
     console.error("[mail] resuming pending publications failed", error),
@@ -126,6 +129,7 @@ async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPa
            or (e.created_at at time zone 'Asia/Dhaka')::date <= ${query.to}::date)
       and (${query.batchNo}::text is null or e.batch_no = ${query.batchNo})
       and (${query.status}::text is null or e.status = ${query.status})
+      and (${!options.unresolvedOnly} or e.resent_as is null)
       and (${like}::text is null
            or lower(e.employee_name) like ${like}
            or lower(e.employee_ref) like ${like}
@@ -137,7 +141,8 @@ async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPa
     sql<Row[]>`
       select e.id, e.publication_id, e.batch_no, e.employee_id, e.employee_name, e.employee_ref,
              e.to_address, e.department, e.designation, e.phone, e.location, e.status, e.error,
-             e.link_expires_at, e.created_at, e.sent_at,
+             e.link_expires_at, e.created_at, e.sent_at, e.attempts,
+             (e.resent_as is not null) as resent,
              p.published_at, p.collection_points,
              exists (select 1 from orders o
                      where o.batch_no = e.batch_no and o.employee_id = e.employee_id
@@ -154,6 +159,7 @@ async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPa
       select count(*) as total,
              count(*) filter (where e.status in ('sent', 'captured', 'logged')) as sent,
              count(*) filter (where e.status = 'failed') as failed,
+             count(*) filter (where e.status = 'failed' and e.resent_as is null) as unresolved,
              count(*) filter (where exists (
                select 1 from orders o
                where o.batch_no = e.batch_no and o.employee_id = e.employee_id
@@ -178,6 +184,8 @@ async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPa
     linkExpiresAt: iso(r["link_expires_at"]),
     createdAt: iso(r["created_at"])!,
     sentAt: iso(r["sent_at"]),
+    attempts: Number(r["attempts"] ?? 0),
+    resent: Boolean(r["resent"]),
     ordered: Boolean(r["ordered"]),
   }));
 
@@ -186,6 +194,7 @@ async function queryEmailRecords(query: EmailRecordQuery): Promise<EmailRecordPa
     total: Number(totals?.["total"] ?? 0),
     sent: Number(totals?.["sent"] ?? 0),
     failed: Number(totals?.["failed"] ?? 0),
+    unresolved: Number(totals?.["unresolved"] ?? 0),
     booked: Number(totals?.["booked"] ?? 0),
   };
 }
@@ -224,4 +233,88 @@ export async function resendFailedBatchMail(input: { publicationId: string }) {
   await requirePermission("batches.manage");
   const queued = await resendFailedPublication(input.publicationId);
   return { queued, durable: isQueueEnabled() };
+}
+
+/**
+ * The failures nothing has been done about yet -- what the Resend tab lists and pre-selects.
+ *
+ * A failure that has already been resent is left out, whatever became of the retry. If the retry
+ * arrived, there is nothing to do; if it failed in turn, the retry is itself an unresolved failure
+ * and appears here in its own right. Either way the list is the work outstanding, so selecting all
+ * of it and pressing send is always the right thing to do with it.
+ */
+export async function listFailedEmails(query: EmailRecordQuery): Promise<EmailRecordPage> {
+  await requirePermission("email_records.view");
+  return queryEmailRecords({ ...query, status: "failed" }, { unresolvedOnly: true });
+}
+
+/**
+ * Resends the chosen failed emails, one new attempt each.
+ *
+ * A resend is a new row, not an edit of the old one. The failure stays in Email Records exactly as
+ * it was recorded -- which is the point of a record -- and the retry is written beside it as its
+ * own attempt, so a message that failed on Tuesday and arrived on Wednesday reads as both those
+ * things. The old row is pointed at the new one, which is what takes it out of this list.
+ *
+ * Only rows that are genuinely failed and not already superseded are touched. Selecting a row that
+ * somebody else resent a moment ago is not an error: it is simply already done, and is skipped.
+ */
+export async function resendEmails(input: { ids: string[] }) {
+  const user = await requirePermission("email_records.view");
+  if (input.ids.length === 0) return { queued: 0, skipped: 0, durable: isQueueEnabled() };
+
+  const sql = await getDb();
+  const publications = await sql.begin(async (tx) => {
+    // Locked so two admins pressing Resend at the same moment cannot both copy the same row.
+    const rows = await tx<Row[]>`
+      select id, publication_id from batch_emails
+      where id = any(${input.ids}::bigint[]) and status = 'failed' and resent_as is null
+      order by id
+      for update`;
+    if (!rows.length) return [];
+
+    const ids = rows.map((r) => String(r["id"]));
+    // The copy carries the details that were snapshotted at publish time, not today's directory:
+    // the retry is another attempt at the same message, so it must say the same things about the
+    // person it is addressed to. `attempts` starts again at zero and the outcome fields are clear,
+    // because nothing has been tried for this row yet.
+    const created = await tx<Row[]>`
+      insert into batch_emails (publication_id, batch_no, employee_id, employee_name, employee_ref,
+                                to_address, department, designation, phone, location,
+                                status, link_expires_at)
+      select publication_id, batch_no, employee_id, employee_name, employee_ref,
+             to_address, department, designation, phone, location,
+             'queued', link_expires_at
+      from batch_emails where id = any(${ids}::bigint[])
+      order by id
+      returning id, publication_id`;
+
+    // Old row -> its retry, in the order both were produced, so each failure points at its own.
+    for (const [i, row] of created.entries()) {
+      await tx`update batch_emails set resent_as = ${row["id"] as number}
+               where id = ${ids[i]!}::bigint`;
+    }
+
+    const affected = [...new Set(created.map((r) => String(r["publication_id"])))];
+    // The publication has outstanding mail again, so the resumer will keep it moving.
+    await tx`
+      update batch_publications set status = 'sending', completed_at = null
+      where id = any(${affected}::bigint[])`;
+
+    await tx`
+      insert into audit_logs (actor, action, record, old_value, new_value)
+      values (${user.fullName}, 'Resent failed emails',
+              ${`${created.length} email${created.length === 1 ? "" : "s"}`},
+              'failed', 'queued')`;
+    return affected;
+  });
+
+  // Fresh rows have fresh ids, so there are no finished jobs in the way -- nothing to forget.
+  let queued = 0;
+  for (const publicationId of publications) queued += await enqueuePublication(publicationId);
+  return {
+    queued: Math.min(queued, input.ids.length),
+    skipped: input.ids.length - Math.min(queued, input.ids.length),
+    durable: isQueueEnabled(),
+  };
 }

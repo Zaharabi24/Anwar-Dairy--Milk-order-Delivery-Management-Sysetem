@@ -63,6 +63,15 @@ export interface EmailRecordRow {
   linkExpiresAt: string | null;
   createdAt: string;
   sentAt: string | null;
+  /** How many times sending this row has been tried. */
+  attempts: number;
+  /**
+   * Whether a later attempt has been made at this message.
+   *
+   * True only on the earlier row of a pair: a failure that was resent. What became of the retry is
+   * the retry's own record, which is why a resend leaves two rows rather than rewriting one.
+   */
+  resent: boolean;
   /** Whether this person went on to place an order against the batch. */
   ordered: boolean;
 }
@@ -73,8 +82,10 @@ export interface EmailRecordPage {
   total: number;
   /** Of those, how many the mail server took. */
   sent: number;
-  /** Of those, how many it refused for good. */
+  /** Of those, how many it refused for good, counting every attempt that ended that way. */
   failed: number;
+  /** Of those failures, how many nothing has been done about yet -- the Resend tab's work. */
+  unresolved: number;
   /** Of those, how many led to an order that still stands. */
   booked: number;
 }

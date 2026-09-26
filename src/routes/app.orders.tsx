@@ -35,7 +35,9 @@ import { OrderStatusBadge } from "@/components/status-badge";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
 import { dateTime, litres, taka } from "@/lib/format";
-import type { Order, OrderStatus } from "@/lib/types";
+import type { CollectionRecord, Order, OrderStatus, PaymentMethod } from "@/lib/types";
+
+const paymentMethods: PaymentMethod[] = ["Cash", "bKash", "Payroll deduction"];
 
 const statuses: OrderStatus[] = [
   "Pending",
@@ -68,6 +70,8 @@ function OrdersPage() {
     orders,
     employees,
     deliveryPoints,
+    collections,
+    upsertCollection,
     activeBatch,
     updateOrder,
     cancelOrder,
@@ -86,6 +90,10 @@ function OrdersPage() {
   const [approvingCancel, setApprovingCancel] = useState<string | null>(null);
   const [rejectingCancel, setRejectingCancel] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const [paying, setPaying] = useState<Order | null>(null);
+  const [payAmount, setPayAmount] = useState(0);
+  const [payMethod, setPayMethod] = useState<PaymentMethod>("Cash");
+  const [payReference, setPayReference] = useState("");
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -107,6 +115,53 @@ function OrdersPage() {
         );
       });
   }, [orders, employees, activeBatch, query, status, point]);
+
+  // Collections is keyed by order, so the payment shown here and the row in the Collection
+  // section are the same record read twice -- not a copy that has to be kept in step.
+  const paymentFor = (orderNo: string) => collections.find((c) => c.orderNo === orderNo);
+
+  /** Due is raised once the coordinator confirms the request, which is when it can be paid. */
+  const payable = (o: Order) => o.status !== "Pending" && o.status !== "Cancelled";
+
+  function paymentStatus(o: Order): CollectionRecord["status"] | null {
+    if (!payable(o)) return null;
+    return paymentFor(o.orderNo)?.status ?? "Unpaid";
+  }
+
+  function openPayment(o: Order) {
+    const existing = paymentFor(o.orderNo);
+    setPaying(o);
+    setPayAmount(Math.max(0, o.amount - (existing?.amountCollected ?? 0)));
+    setPayMethod(existing?.method ?? o.paymentMethod ?? "Cash");
+    setPayReference(existing?.reference ?? "");
+  }
+
+  async function savePayment() {
+    if (!paying) return;
+    const already = paymentFor(paying.orderNo)?.amountCollected ?? 0;
+    const remaining = Math.max(0, paying.amount - already);
+    if (payAmount < 0 || payAmount > remaining) {
+      toast.error(`Amount must be between ৳0 and ${taka(remaining)}.`);
+      return;
+    }
+    const total = already + payAmount;
+    // One call, one record: what is saved here is what the Collection section shows, because
+    // both read the same row. The server sets the status, the collector and the audit entry.
+    const saved = await upsertCollection({
+      orderNo: paying.orderNo,
+      amountCollected: total,
+      method: payMethod,
+      reference: payReference.trim() || "—",
+      date: new Date().toISOString(),
+    });
+    if (!saved) return;
+    toast.success(
+      total >= paying.amount
+        ? `${paying.orderNo} paid in full — also recorded in Collections`
+        : `${taka(total)} recorded against ${paying.orderNo} — ${taka(paying.amount - total)} still due`,
+    );
+    setPaying(null);
+  }
 
   const totalLitres = rows
     .filter((o) => o.status !== "Cancelled")
@@ -171,7 +226,7 @@ function OrdersPage() {
             <EmptyState title="No orders match" hint="Try clearing the filters." />
           </div>
         ) : (
-          <table className="w-full min-w-[1080px] text-sm">
+          <table className="w-full min-w-[1400px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
                 <Th>Order</Th>
@@ -183,7 +238,9 @@ function OrdersPage() {
                 <Th>Point</Th>
                 <Th>Placed</Th>
                 <Th>Status</Th>
-                <Th> </Th>
+                <Th>Payment Status</Th>
+                <Th>Payment Record</Th>
+                <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
@@ -223,8 +280,47 @@ function OrdersPage() {
                         </span>
                       ) : null}
                     </Td>
+                    {/* Payment sits beside the order it belongs to, so a coordinator confirming
+                        a request can settle it without leaving the screen. Both columns read the
+                        Collection record for this order -- the same row the Collections section
+                        shows -- so the two can never disagree. */}
+                    <Td>
+                      {paymentStatus(o) ? (
+                        <PayBadge status={paymentStatus(o)!} />
+                      ) : (
+                        <span className="text-muted-foreground">
+                          {o.status === "Cancelled" ? "—" : "Not due yet"}
+                        </span>
+                      )}
+                    </Td>
+                    <Td>
+                      {(() => {
+                        const paid = paymentFor(o.orderNo);
+                        if (!payable(o)) return <span className="text-muted-foreground">—</span>;
+                        if (!paid)
+                          return (
+                            <span className="text-muted-foreground">{taka(o.amount)} due</span>
+                          );
+                        return (
+                          <>
+                            {taka(paid.amountCollected)} of {taka(o.amount)}
+                            <span className="block text-xs text-muted-foreground">
+                              {paid.method} · {dateTime(paid.date)}
+                              {paid.reference && paid.reference !== "—"
+                                ? ` · ${paid.reference}`
+                                : ""}
+                            </span>
+                          </>
+                        );
+                      })()}
+                    </Td>
                     <Td>
                       <div className="flex gap-2">
+                        {payable(o) ? (
+                          <Button variant="outline" size="sm" onClick={() => openPayment(o)}>
+                            {paymentFor(o.orderNo) ? "Update payment" : "Record payment"}
+                          </Button>
+                        ) : null}
                         {o.status === "CancellationRequested" ? (
                           <>
                             <Button size="sm" onClick={() => setApprovingCancel(o.orderNo)}>
@@ -276,6 +372,72 @@ function OrdersPage() {
           </table>
         )}
       </div>
+
+      <Dialog open={!!paying} onOpenChange={(v) => !v && setPaying(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record payment — {paying?.orderNo}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Billed{" "}
+              <span className="font-medium text-foreground">{taka(paying?.amount ?? 0)}</span> ·
+              already collected{" "}
+              <span className="font-medium text-foreground">
+                {taka(paying ? (paymentFor(paying.orderNo)?.amountCollected ?? 0) : 0)}
+              </span>{" "}
+              · due now{" "}
+              <span className="font-medium text-foreground">
+                {taka(
+                  paying
+                    ? Math.max(
+                        0,
+                        paying.amount - (paymentFor(paying.orderNo)?.amountCollected ?? 0),
+                      )
+                    : 0,
+                )}
+              </span>
+            </p>
+            <Field label="Amount collected now (৳)">
+              <Input
+                type="number"
+                value={payAmount}
+                onChange={(e) => setPayAmount(Number(e.target.value))}
+              />
+            </Field>
+            <Field label="Method">
+              <Select value={payMethod} onValueChange={(v) => setPayMethod(v as PaymentMethod)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {paymentMethods.map((m) => (
+                    <SelectItem key={m} value={m}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+            <Field label="Reference">
+              <Input
+                value={payReference}
+                onChange={(e) => setPayReference(e.target.value)}
+                placeholder="Receipt or transaction no."
+              />
+            </Field>
+            <p className="text-xs text-muted-foreground">
+              Saving this also records it in the Collection section against this order.
+            </p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPaying(null)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void savePayment()}>Save payment</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editing} onOpenChange={(v) => !v && setEditing(null)}>
         <DialogContent>
@@ -406,6 +568,21 @@ function OrdersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+/** The same three states, and the same colours, the Collection section uses. */
+function PayBadge({ status }: { status: CollectionRecord["status"] }) {
+  const styles =
+    status === "Paid"
+      ? "bg-primary text-primary-foreground border-primary"
+      : status === "Partial"
+        ? "bg-accent/15 text-accent-foreground border-accent/40"
+        : "bg-destructive/10 text-destructive border-destructive/25";
+  return (
+    <span className={`inline-flex rounded-md border px-2 py-0.5 text-xs font-medium ${styles}`}>
+      {status}
+    </span>
   );
 }
 

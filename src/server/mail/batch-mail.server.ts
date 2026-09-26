@@ -250,7 +250,14 @@ export async function recordAttempt(
     where id = ${emailId}`;
 }
 
-/** Rolls the per-message outcomes up onto the publication. Stays 'sending' while any are left. */
+/**
+ * Rolls the per-message outcomes up onto the publication. Stays 'sending' while any are left.
+ *
+ * Superseded rows are left out. A failure that has been resent is a record of what happened, not
+ * a thing still outstanding -- counted here it would hold the publication at 'partial' for good,
+ * however well the retry went, and a publication that ended up reaching everybody would be
+ * reported as one that hadn't.
+ */
 export async function updatePublicationTotals(publicationId: string): Promise<number> {
   const sql: Sql = await getDb();
   const [pending] = (await sql<Row[]>`
@@ -276,7 +283,8 @@ export async function updatePublicationTotals(publicationId: string): Promise<nu
              count(*) filter (where status in ('sent', 'captured', 'logged')) as delivered,
              count(*) filter (where status = 'failed') as failed,
              count(*) filter (where status = 'skipped') as skipped
-      from batch_emails where publication_id = ${publicationId}
+      from batch_emails
+      where publication_id = ${publicationId} and resent_as is null
     ) t
     where p.id = ${publicationId}`;
   return pending.n;

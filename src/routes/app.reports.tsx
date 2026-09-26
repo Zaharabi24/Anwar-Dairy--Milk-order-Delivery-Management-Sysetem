@@ -27,8 +27,17 @@ import {
 } from "@/components/ui/select";
 import { Field, FilterBar } from "@/components/ui/field";
 import { PageHeader } from "@/components/page-header";
+import { PeriodFilterFields } from "@/components/period-filter";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
+import {
+  EMPTY_PERIOD,
+  periodLabel,
+  periodMatches,
+  periodState,
+  yearsIn,
+  type PeriodFilter,
+} from "@/lib/date-filter";
 import { dateShort, litres, taka } from "@/lib/format";
 
 export const Route = createFileRoute("/app/reports")({
@@ -37,12 +46,12 @@ export const Route = createFileRoute("/app/reports")({
       { title: "Reports — Anwar Organic" },
       {
         name: "description",
-        content: "Daily reconciliation: produced, booked, delivered, collected and sell-through.",
+        content: "Daily reconciliation: produced, sealed, sold, ordered and collected.",
       },
       { property: "og:title", content: "Reports — Anwar Organic" },
       {
         property: "og:description",
-        content: "Daily reconciliation: produced, booked, delivered, collected and sell-through.",
+        content: "Daily reconciliation: produced, sealed, sold, ordered and collected.",
       },
     ],
   }),
@@ -56,73 +65,123 @@ const PALETTE = [
   "var(--color-muted-foreground)",
 ];
 
+/**
+ * How many batches the Batch Range covers. "All" is the default so the report opens on everything
+ * the date filter matched rather than on an arbitrary last-seven.
+ */
+const BATCH_RANGES = [
+  { value: "all", label: "All batches" },
+  { value: "5", label: "Last 5 batches" },
+  { value: "7", label: "Last 7 batches" },
+  { value: "10", label: "Last 10 batches" },
+  { value: "20", label: "Last 20 batches" },
+] as const;
+
 function ReportsPage() {
-  const { batches, batchTotals, orders, collections, deliveryPoints } = useAppData();
-  const [range, setRange] = useState("7");
-  const [batchNo, setBatchNo] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  const { batches, orders, collections, deliveryPoints, employees } = useAppData();
 
-  const invalidDateRange = Boolean(from && to && from > to);
+  // Date first, because it is the axis a report is normally read along; the batch range narrows
+  // whatever the dates matched, which is why it comes last.
+  const [period, setPeriod] = useState<PeriodFilter>(EMPTY_PERIOD);
+  const [orderNo, setOrderNo] = useState("");
+  const [employeeId, setEmployeeId] = useState("");
+  const [employeeName, setEmployeeName] = useState("");
+  const [batchRange, setBatchRange] = useState<string>("all");
 
+  const { invalid } = periodState(period);
+  const years = useMemo(() => yearsIn(batches.map((b) => b.productionDate)), [batches]);
+
+  /**
+   * The batches in scope: those produced inside the date filter, then cut to the batch range.
+   *
+   * `batches` arrives newest first, so "last 10" is the first ten of what the dates matched --
+   * the ten most recent, not the ten most recent overall, which would ignore the date filter it
+   * is meant to be narrowing.
+   */
   const selection = useMemo(() => {
-    if (range === "batch") {
-      const requestedBatch = batchNo.trim().toLocaleUpperCase();
-      return batches.filter((b) => b.batchNo.toLocaleUpperCase() === requestedBatch);
-    }
-    if (range === "custom") {
-      if (invalidDateRange) return [];
-      return batches.filter((b) => {
-        const productionDate = b.productionDate.slice(0, 10);
-        return (!from || productionDate >= from) && (!to || productionDate <= to);
-      });
-    }
-    return batches.slice(0, Number(range));
-  }, [batches, range, batchNo, from, to, invalidDateRange]);
+    const matched = batches.filter((b) => periodMatches(period, b.productionDate));
+    const byBatch =
+      batchRange === "all" ? matched : matched.slice(0, Number(batchRange) || matched.length);
+    return byBatch;
+  }, [batches, period, batchRange]);
 
   const selectedBatchNos = useMemo(
     () => new Set(selection.map((batch) => batch.batchNo)),
     [selection],
   );
 
-  const filteredOrders = useMemo(
-    () => orders.filter((order) => selectedBatchNos.has(order.batchNo)),
-    [orders, selectedBatchNos],
-  );
+  const nameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const e of employees) map.set(e.id, e.name.toLowerCase());
+    return map;
+  }, [employees]);
 
+  /**
+   * The orders in scope.
+   *
+   * The batch filters decide which batches are being reported on; Order No, Employee ID and
+   * Employee Name narrow the orders *within* them. Cancelled orders are left out throughout --
+   * nothing was sold, so counting them would overstate every figure on the page.
+   */
+  const filteredOrders = useMemo(() => {
+    const no = orderNo.trim().toLowerCase();
+    const id = employeeId.trim().toLowerCase();
+    const name = employeeName.trim().toLowerCase();
+    return orders
+      .filter((o) => selectedBatchNos.has(o.batchNo))
+      .filter((o) => o.status !== "Cancelled")
+      .filter((o) => (no ? o.orderNo.toLowerCase().includes(no) : true))
+      .filter((o) => (id ? o.employeeId.toLowerCase().includes(id) : true))
+      .filter((o) => (name ? (nameById.get(o.employeeId) ?? "").includes(name) : true));
+  }, [orders, selectedBatchNos, orderNo, employeeId, employeeName, nameById]);
+
+  /** Whether the orders on screen are a subset of the batches', which changes how to read them. */
+  const narrowedToOrders = Boolean(orderNo.trim() || employeeId.trim() || employeeName.trim());
+
+  /**
+   * One row per batch, computed from the filtered orders — so every chart and the table below
+   * move together when a filter changes, instead of the charts showing the batch's whole story
+   * beside cards showing one employee's part of it.
+   *
+   * Sold, Orders and Revenue all come from the same orders. They used to disagree: Sold preferred
+   * a closed batch's recorded `final_booked_litres` while Revenue was summed from the order rows,
+   * so the dashboard could read 5,135 litres sold for ৳18,400 — about ৳3.58 a litre, against a
+   * rate of ৳92. Three figures presented side by side have to be three views of one set of
+   * orders, or each of them quietly contradicts the other two. Produced and Sealed are properties
+   * of the batch and come from the batch.
+   */
   const series = useMemo(
     () =>
       selection
         .slice()
         .reverse()
         .map((b) => {
-          const totals = batchTotals[b.batchNo];
-          const live = filteredOrders.filter(
-            (o) => o.batchNo === b.batchNo && o.status !== "Cancelled",
-          );
-          const booked = totals?.booked ?? live.reduce((s, o) => s + o.litres, 0);
-          const delivered =
-            totals?.delivered ??
-            live.filter((o) => o.status === "Delivered").reduce((s, o) => s + o.litres, 0);
+          const live = filteredOrders.filter((o) => o.batchNo === b.batchNo);
+          const sold = live.reduce((s, o) => s + o.litres, 0);
           return {
             batchNo: b.batchNo,
             date: dateShort(b.productionDate),
-            name: range === "batch" ? b.batchNo : dateShort(b.productionDate).slice(0, 6),
+            name: dateShort(b.productionDate).slice(0, 6),
             produced: b.producedLitres,
-            booked,
-            delivered,
-            unsold: Math.max(0, b.saleableLitres - booked),
-            revenue: delivered * b.ratePerLitre,
-            sellThrough: Math.round((booked / b.saleableLitres) * 100),
+            sealed: b.saleableLitres,
+            sold,
+            orders: live.length,
+            unsold: Math.max(0, b.saleableLitres - sold),
+            revenue: live.reduce((s, o) => s + o.amount, 0),
+            sellThrough: b.saleableLitres ? Math.round((sold / b.saleableLitres) * 100) : 0,
           };
         }),
-    [selection, filteredOrders, range, batchTotals],
+    [selection, filteredOrders],
   );
 
-  const produced = series.reduce((s, r) => s + r.produced, 0);
-  const booked = series.reduce((s, r) => s + r.booked, 0);
-  const delivered = series.reduce((s, r) => s + r.delivered, 0);
-  const revenue = series.reduce((s, r) => s + r.revenue, 0);
+  // The five dashboard figures. Each one is a sum of the same rows the charts are drawn from, so
+  // a card and the bar above it can never disagree.
+  const totalProduced = series.reduce((s, r) => s + r.produced, 0);
+  const totalSealed = series.reduce((s, r) => s + r.sealed, 0);
+  const totalOrders = filteredOrders.length;
+  const totalSold = series.reduce((s, r) => s + r.sold, 0);
+  const totalRevenue = series.reduce((s, r) => s + r.revenue, 0);
+
   const filteredOrderNos = useMemo(
     () => new Set(filteredOrders.map((order) => order.orderNo)),
     [filteredOrders],
@@ -130,24 +189,49 @@ function ReportsPage() {
   const collected = collections
     .filter((collection) => filteredOrderNos.has(collection.orderNo))
     .reduce((s, c) => s + c.amountCollected, 0);
-  const sellThrough = produced ? Math.round((booked / produced) * 100) : 0;
+  const sellThrough = totalSealed ? Math.round((totalSold / totalSealed) * 100) : 0;
 
   const byPoint = useMemo(
     () =>
-      deliveryPoints.map((p) => ({
-        name: p.name,
-        value: filteredOrders
-          .filter((o) => o.deliveryPointId === p.id && o.status !== "Cancelled")
-          .reduce((s, o) => s + o.litres, 0),
-      })),
+      deliveryPoints
+        .map((p) => ({
+          name: p.name,
+          value: filteredOrders
+            .filter((o) => o.deliveryPointId === p.id)
+            .reduce((s, o) => s + o.litres, 0),
+        }))
+        .filter((slice) => slice.value > 0),
     [deliveryPoints, filteredOrders],
   );
 
+  const dirty =
+    period.mode !== "all" ||
+    batchRange !== "all" ||
+    Boolean(orderNo.trim() || employeeId.trim() || employeeName.trim());
+
+  function clearFilters() {
+    setPeriod(EMPTY_PERIOD);
+    setOrderNo("");
+    setEmployeeId("");
+    setEmployeeName("");
+    setBatchRange("all");
+  }
+
   function exportCsv() {
-    const header = "Batch No.,Date,Produced,Booked,Delivered,Unsold,Revenue\n";
+    const header = "Batch No.,Date,Produced,Sealed,Orders,Sold,Unsold,Sell-through,Revenue\n";
     const body = series
       .map((r) =>
-        [r.batchNo, r.date, r.produced, r.booked, r.delivered, r.unsold, r.revenue].join(","),
+        [
+          r.batchNo,
+          r.date,
+          r.produced,
+          r.sealed,
+          r.orders,
+          r.sold,
+          r.unsold,
+          `${r.sellThrough}%`,
+          r.revenue,
+        ].join(","),
       )
       .join("\n");
     const blob = new Blob([header + body], { type: "text/csv" });
@@ -164,180 +248,225 @@ function ReportsPage() {
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
         title="Reports"
-        description="Reconcile what was produced, booked, delivered and collected."
+        description="Reconcile what was produced, sealed, sold and collected."
         action={
-          <Button variant="outline" onClick={exportCsv}>
+          <Button variant="outline" onClick={exportCsv} disabled={series.length === 0}>
             Export CSV
           </Button>
         }
       />
 
       {/* The filters were in the page header, five controls of four different heights wrapping
-          against the title, with a bare "to" nudged down by a padding value to sit level with the
-          boxes either side of it. They are a row of their own now: one grid, one width, one
-          baseline. */}
-      <FilterBar className="mb-4">
-        <Field label="Range" htmlFor="report-range">
-          <Select value={range} onValueChange={setRange}>
-            <SelectTrigger id="report-range">
+          against the title. They are a row of their own now: one grid, one width, one baseline. */}
+      <FilterBar columns={4} className="mb-4">
+        <PeriodFilterFields value={period} onChange={setPeriod} years={years} idPrefix="report" />
+        <Field label="Order No." htmlFor="report-order">
+          <Input
+            id="report-order"
+            value={orderNo}
+            onChange={(e) => setOrderNo(e.target.value)}
+            placeholder="e.g. ORD-1042"
+          />
+        </Field>
+        <Field label="Employee ID" htmlFor="report-employee-id">
+          <Input
+            id="report-employee-id"
+            value={employeeId}
+            onChange={(e) => setEmployeeId(e.target.value)}
+            placeholder="e.g. 019163"
+          />
+        </Field>
+        <Field label="Employee Name" htmlFor="report-employee-name">
+          <Input
+            id="report-employee-name"
+            list="report-employee-names"
+            value={employeeName}
+            onChange={(e) => setEmployeeName(e.target.value)}
+            placeholder="Any part of the name"
+          />
+        </Field>
+        {/* Last, because it narrows what the other filters matched rather than choosing it. */}
+        <Field label="Batch Range" htmlFor="report-batch-range">
+          <Select value={batchRange} onValueChange={setBatchRange}>
+            <SelectTrigger id="report-batch-range">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="5">Last 5 batches</SelectItem>
-              <SelectItem value="7">Last 7 batches</SelectItem>
-              <SelectItem value="10">Last 10 batches</SelectItem>
+              {BATCH_RANGES.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
+              {batches.map((batch) => (
+                <SelectItem key={batch.batchNo} value={batch.batchNo}>
+                  {batch.batchNo}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Batch No." htmlFor="report-batch">
-          <Input
-            id="report-batch"
-            list="report-batch-numbers"
-            value={batchNo}
-            onChange={(e) => {
-              setBatchNo(e.target.value);
-              setRange("batch");
-            }}
-            placeholder="Select or enter batch"
-          />
-        </Field>
-        <Field label="Start Date" htmlFor="report-from">
-          <Input
-            id="report-from"
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => {
-              setFrom(e.target.value);
-              setRange("custom");
-            }}
-          />
-        </Field>
-        <Field
-          label="End Date"
-          htmlFor="report-to"
-          {...(invalidDateRange ? { error: "Must be on or after Start Date." } : {})}
-        >
-          <Input
-            id="report-to"
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => {
-              setTo(e.target.value);
-              setRange("custom");
-            }}
-          />
-        </Field>
-        <datalist id="report-batch-numbers">
-          {batches.map((batch) => (
-            <option key={batch.batchNo} value={batch.batchNo} />
+        <datalist id="report-employee-names">
+          {employees.map((e) => (
+            <option key={e.id} value={e.name} />
           ))}
         </datalist>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:col-span-2 lg:col-span-4">
+          <p className="text-xs text-muted-foreground">
+            {periodLabel(period)} ·{" "}
+            {batchRange === "all"
+              ? `${series.length} batch${series.length === 1 ? "" : "es"}`
+              : (BATCH_RANGES.find((r) => r.value === batchRange)?.label ?? batchRange)}{" "}
+            · {totalOrders} order{totalOrders === 1 ? "" : "s"}
+          </p>
+          <Button variant="outline" size="sm" disabled={!dirty} onClick={clearFilters}>
+            Clear filters
+          </Button>
+        </div>
       </FilterBar>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Produced" value={produced} format={litres} />
-        <StatCard label="Booked" value={booked} format={litres} emphasis />
-        <StatCard label="Delivered" value={delivered} format={litres} />
-        <StatCard label="Sell-through" value={sellThrough} format={(v) => `${v}%`} />
-      </div>
-
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <StatCard label="Revenue value" value={revenue} format={taka} />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard label="Total Produced (L)" value={totalProduced} format={litres} />
+        <StatCard label="Total Sealed (L)" value={totalSealed} format={litres} />
+        <StatCard label="Total Orders" value={totalOrders} />
+        <StatCard label="Total Sold (L)" value={totalSold} format={litres} emphasis />
+        <StatCard label="Total Revenue" value={totalRevenue} format={taka} />
         <StatCard label="Cash collected" value={collected} format={taka} />
       </div>
 
+      {narrowedToOrders ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Produced and Sealed are the whole of each batch in range. Orders, Sold and Revenue cover
+          only the orders matching the Order No., Employee ID and Employee Name filters.
+        </p>
+      ) : (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Sell-through {sellThrough}% of sealed litres. Cancelled orders are excluded throughout.
+        </p>
+      )}
+
+      {invalid ? (
+        <p className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          The custom range ends before it starts, so there is nothing to report. Correct the dates
+          to see the figures.
+        </p>
+      ) : null}
+
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card title="Produced vs booked vs delivered" className="lg:col-span-2">
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={series}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis tickLine={false} axisLine={false} fontSize={12} />
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 12,
-                }}
-              />
-              <Legend />
-              <Bar dataKey="produced" fill="var(--color-muted-foreground)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="booked" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="delivered" fill="var(--color-accent)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+        <Card title="Produced vs sealed vs sold" className="lg:col-span-2">
+          {series.length === 0 ? (
+            <NoData />
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={series}>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
+                <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                  }}
+                />
+                <Legend />
+                <Bar
+                  dataKey="produced"
+                  fill="var(--color-muted-foreground)"
+                  radius={[4, 4, 0, 0]}
+                />
+                <Bar dataKey="sealed" fill="var(--color-info)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="sold" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </Card>
 
         <Card title="Litres by delivery point">
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie
-                data={byPoint}
-                dataKey="value"
-                nameKey="name"
-                innerRadius={55}
-                outerRadius={90}
-                paddingAngle={3}
-              >
-                {byPoint.map((entry, i) => (
-                  <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 12,
-                }}
-              />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          {byPoint.length === 0 ? (
+            <NoData />
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={byPoint}
+                  dataKey="value"
+                  nameKey="name"
+                  innerRadius={55}
+                  outerRadius={90}
+                  paddingAngle={3}
+                >
+                  {byPoint.map((entry, i) => (
+                    <Cell key={entry.name} fill={PALETTE[i % PALETTE.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                  }}
+                />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
         </Card>
 
         <Card title="Revenue trend" className="lg:col-span-3">
-          <ResponsiveContainer width="100%" height={240}>
-            <AreaChart data={series}>
-              <defs>
-                <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-              <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
-              <YAxis tickLine={false} axisLine={false} fontSize={12} />
-              <Tooltip
-                formatter={(v: number) => taka(v)}
-                contentStyle={{
-                  background: "var(--color-card)",
-                  border: "1px solid var(--color-border)",
-                  borderRadius: 12,
-                }}
-              />
-              <Area
-                type="monotone"
-                dataKey="revenue"
-                stroke="var(--color-primary)"
-                strokeWidth={2}
-                fill="url(#rev)"
-              />
-            </AreaChart>
-          </ResponsiveContainer>
+          {series.length === 0 ? (
+            <NoData />
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={series}>
+                <defs>
+                  <linearGradient id="rev" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid
+                  strokeDasharray="3 3"
+                  stroke="var(--color-border)"
+                  vertical={false}
+                />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
+                <YAxis tickLine={false} axisLine={false} fontSize={12} />
+                <Tooltip
+                  formatter={(v: number) => taka(v)}
+                  contentStyle={{
+                    background: "var(--color-card)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: 12,
+                  }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="var(--color-primary)"
+                  strokeWidth={2}
+                  fill="url(#rev)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
         </Card>
       </div>
 
       <div className="mt-6 overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full min-w-[680px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="border-b border-border text-left text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-medium">Date</th>
               <th className="px-4 py-3 font-medium">Batch No.</th>
               <th className="px-4 py-3 font-medium">Produced</th>
-              <th className="px-4 py-3 font-medium">Booked</th>
-              <th className="px-4 py-3 font-medium">Delivered</th>
+              <th className="px-4 py-3 font-medium">Sealed</th>
+              <th className="px-4 py-3 font-medium">Orders</th>
+              <th className="px-4 py-3 font-medium">Sold</th>
               <th className="px-4 py-3 font-medium">Unsold</th>
               <th className="px-4 py-3 font-medium">Sell-through</th>
               <th className="px-4 py-3 font-medium">Revenue</th>
@@ -349,8 +478,9 @@ function ReportsPage() {
                 <td className="px-4 py-3 font-medium">{r.date}</td>
                 <td className="px-4 py-3">{r.batchNo}</td>
                 <td className="px-4 py-3">{litres(r.produced)}</td>
-                <td className="px-4 py-3">{litres(r.booked)}</td>
-                <td className="px-4 py-3">{litres(r.delivered)}</td>
+                <td className="px-4 py-3">{litres(r.sealed)}</td>
+                <td className="px-4 py-3">{r.orders}</td>
+                <td className="px-4 py-3">{litres(r.sold)}</td>
                 <td className="px-4 py-3">{litres(r.unsold)}</td>
                 <td className="px-4 py-3">{r.sellThrough}%</td>
                 <td className="px-4 py-3">{taka(r.revenue)}</td>
@@ -358,14 +488,22 @@ function ReportsPage() {
             ))}
             {series.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
-                  No batches match the selected filter.
+                <td colSpan={9} className="px-4 py-10 text-center text-muted-foreground">
+                  No batches match the selected filters.
                 </td>
               </tr>
             ) : null}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function NoData() {
+  return (
+    <div className="flex h-[240px] items-center justify-center text-sm text-muted-foreground">
+      Nothing to chart for these filters.
     </div>
   );
 }

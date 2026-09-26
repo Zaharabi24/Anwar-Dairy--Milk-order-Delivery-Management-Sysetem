@@ -34,3 +34,13 @@ export const EMPTY_EMAIL_QUERY: EmailRecordQuery = {
 export const resumePublicationInput = z.object({
   publicationId: z.string().trim().min(1).max(40),
 });
+
+/**
+ * The emails to resend. Ids rather than a publication, because the System Admin chooses: the tab
+ * arrives with every outstanding failure selected and they take out whoever should be left alone.
+ */
+export const resendEmailsInput = z.object({
+  ids: z.array(z.string().trim().regex(/^\d+$/, "Not an email record")).min(1).max(1000),
+});
+
+export type ResendEmailsInput = z.infer<typeof resendEmailsInput>;

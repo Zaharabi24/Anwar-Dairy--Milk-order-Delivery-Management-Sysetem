@@ -18,7 +18,6 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
-import { Field } from "@/components/ui/field";
 import { FILTER_SEARCH } from "@/components/ui/control-styles";
 import { useAppData } from "@/context/app-data";
 import {
@@ -30,6 +29,23 @@ import {
   resumeCampaignFn,
   sendCampaignFn,
 } from "@/functions/mailbox.functions";
+import { listPublishedBatchNumbersFn } from "@/functions/records.functions";
+import {
+  EMPTY_PERIOD,
+  periodLabel,
+  periodMatches,
+  yearsIn,
+  type PeriodFilter,
+} from "@/lib/date-filter";
+import { PeriodFilterFields } from "@/components/period-filter";
+import { Field, FilterBar } from "@/components/ui/field";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { dateShort, timeShort } from "@/lib/format";
 import type {
   CampaignRecipient,
@@ -65,9 +81,14 @@ export const Route = createFileRoute("/app/admin/mailbox")({
       return {
         campaigns: await listCampaignsFn(),
         allRecipients: await countAllRecipientsFn(),
+        batches: await listPublishedBatchNumbersFn(),
       };
     } catch {
-      return { campaigns: [] as CampaignSummary[], allRecipients: { total: 0 } };
+      return {
+        campaigns: [] as CampaignSummary[],
+        allRecipients: { total: 0 },
+        batches: [] as string[],
+      };
     }
   },
   component: Mailbox,
@@ -119,7 +140,7 @@ function Mailbox() {
           <Compose allRecipients={initial.allRecipients.total} />
         </TabsContent>
         <TabsContent value="history" className="mt-6">
-          <History initial={initial.campaigns} />
+          <History initial={initial.campaigns} batches={initial.batches} />
         </TabsContent>
       </Tabs>
     </div>
@@ -630,14 +651,39 @@ function ConfirmDialog({
 // ---------------------------------------------------------------------------
 // History
 
-function History({ initial }: { initial: CampaignSummary[] }) {
+function History({ initial, batches }: { initial: CampaignSummary[]; batches: string[] }) {
   const [campaigns, setCampaigns] = useState(initial);
   const [open, setOpen] = useState<CampaignSummary | null>(null);
   const [recipients, setRecipients] = useState<CampaignRecipient[] | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const totalSent = campaigns.reduce((n, c) => n + c.sentCount, 0);
-  const totalFailed = campaigns.reduce((n, c) => n + c.failedCount, 0);
+  const [period, setPeriod] = useState<PeriodFilter>(EMPTY_PERIOD);
+  const [batchNo, setBatchNo] = useState("all");
+  const [status, setStatus] = useState("all");
+
+  const years = useMemo(() => yearsIn(campaigns.map((c) => c.createdAt)), [campaigns]);
+
+  // Filtered here rather than in a query: the history is the last two hundred messages, already
+  // loaded, so narrowing it is a matter of reading what is on the client.
+  const shown = useMemo(
+    () =>
+      campaigns
+        .filter((c) => periodMatches(period, c.createdAt))
+        .filter((c) => (status === "all" ? true : c.status === status))
+        .filter((c) => {
+          if (batchNo === "all") return true;
+          // A composed email has no batch of its own -- it is written by hand, not raised by a
+          // publish -- so what ties one to a batch is the batch it talks about. Matched against
+          // the subject and the body, which is where a batch number is written.
+          const needle = batchNo.toLowerCase();
+          return c.subject.toLowerCase().includes(needle) || c.body.toLowerCase().includes(needle);
+        }),
+    [campaigns, period, status, batchNo],
+  );
+
+  const totalSent = shown.reduce((n, c) => n + c.sentCount, 0);
+  const totalFailed = shown.reduce((n, c) => n + c.failedCount, 0);
+  const filtered = shown.length !== campaigns.length;
 
   async function openCampaign(c: CampaignSummary) {
     setOpen(c);
@@ -684,33 +730,103 @@ function History({ initial }: { initial: CampaignSummary[] }) {
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Emails composed" value={campaigns.length} />
+        <StatCard label="Emails composed" value={shown.length} />
         <StatCard label="Total sent" value={totalSent} emphasis />
         <StatCard label="Total failed" value={totalFailed} />
       </div>
 
+      <FilterBar columns={4}>
+        {/* Batch No. first and set to All, so the history opens showing everything. */}
+        <Field
+          label="Batch No."
+          htmlFor="mailbox-batch"
+          hint="Emails that name the batch in their subject or message."
+        >
+          <Select value={batchNo} onValueChange={setBatchNo}>
+            <SelectTrigger id="mailbox-batch">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All batches</SelectItem>
+              {batches.map((b) => (
+                <SelectItem key={b} value={b}>
+                  {b}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <PeriodFilterFields value={period} onChange={setPeriod} years={years} idPrefix="mailbox" />
+        <Field label="Delivery status" htmlFor="mailbox-status">
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger id="mailbox-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any status</SelectItem>
+              {(Object.keys(STATUS_LABEL) as CampaignStatus[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {STATUS_LABEL[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <div className="flex items-end sm:col-span-2 lg:col-span-4">
+          <p className="text-xs text-muted-foreground">
+            {periodLabel(period)}
+            {batchNo === "all" ? "" : ` · ${batchNo}`}
+            {status === "all" ? "" : ` · ${STATUS_LABEL[status as CampaignStatus]}`}
+            {" · "}
+            {shown.length} of {campaigns.length} email{campaigns.length === 1 ? "" : "s"}
+          </p>
+          {filtered ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-3"
+              onClick={() => {
+                setPeriod(EMPTY_PERIOD);
+                setBatchNo("all");
+                setStatus("all");
+              }}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+      </FilterBar>
+
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        {campaigns.length === 0 ? (
+        {shown.length === 0 ? (
           <div className="p-6">
             <EmptyState
-              title="Nothing sent yet"
-              hint="Emails you send from the Compose tab are recorded here, with who received them."
+              title={campaigns.length === 0 ? "Nothing sent yet" : "No emails match"}
+              hint={
+                campaigns.length === 0
+                  ? "Emails you send from the Compose tab are recorded here, with who received them."
+                  : "Try a wider date filter, or set Batch No. back to All."
+              }
             />
           </div>
         ) : (
-          <table className="w-full min-w-[880px] text-sm">
+          <table className="w-full min-w-[1000px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
+                {/* "Sent by" and "Actions" had no headings. The sender was a grey sub-line
+                    under the date, and the buttons sat under a blank cell, so two of the six
+                    columns were things a reader had to work out from their contents. */}
                 <Th>Sent</Th>
+                <Th>Sent by</Th>
                 <Th>Subject</Th>
                 <Th>Audience</Th>
                 <Th>Recipients</Th>
-                <Th>Status</Th>
-                <Th> </Th>
+                <Th>Delivery status</Th>
+                <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
-              {campaigns.map((c, i) => (
+              {shown.map((c, i) => (
                 <motion.tr
                   key={c.id}
                   initial={{ opacity: 0, y: 6 }}
@@ -721,9 +837,10 @@ function History({ initial }: { initial: CampaignSummary[] }) {
                   <Td>
                     {dateShort(c.createdAt)}
                     <span className="block text-xs text-muted-foreground">
-                      {timeShort(c.createdAt)} · {c.sentBy}
+                      {timeShort(c.createdAt)}
                     </span>
                   </Td>
+                  <Td>{c.sentBy}</Td>
                   <Td className="max-w-xs">
                     <span className="block truncate font-medium">{c.subject}</span>
                   </Td>

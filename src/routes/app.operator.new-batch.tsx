@@ -23,6 +23,9 @@ import { useAppData } from "@/context/app-data";
 import type { BatchAudience } from "@/lib/types";
 import { taka } from "@/lib/format";
 
+/** How many rows the picker draws at once. The directory is a few hundred people. */
+const RECIPIENT_WINDOW = 500;
+
 export const Route = createFileRoute("/app/operator/new-batch")({
   head: () => ({
     meta: [
@@ -81,6 +84,10 @@ function NewBatch() {
   const [audience, setAudience] = useState<BatchAudience>("all");
   const [recipients, setRecipients] = useState<Set<string>>(new Set());
   const [recipientQuery, setRecipientQuery] = useState("");
+  // Picking people out of an empty list means finding 350 employees one at a time to reach the
+  // 340 you wanted. The list opens with everybody already ticked, and the operator takes out the
+  // few who should not be written to -- which is the way round the job is actually done.
+  const [seeded, setSeeded] = useState(false);
 
   const activePoints = useMemo(() => deliveryPoints.filter((p) => p.active), [deliveryPoints]);
 
@@ -90,6 +97,14 @@ function NewBatch() {
     () => employees.filter((e) => e.active && e.companyEmail.trim()),
     [employees],
   );
+  const chooseSelected = () => {
+    setAudience("selected");
+    if (!seeded) {
+      setRecipients(new Set(reachable.map((e) => e.id)));
+      setSeeded(true);
+    }
+  };
+
   const matchingEmployees = useMemo(() => {
     const q = recipientQuery.trim().toLowerCase();
     if (!q) return reachable;
@@ -367,9 +382,9 @@ function NewBatch() {
             />
             <AudienceChoice
               chosen={audience === "selected"}
-              onChoose={() => setAudience("selected")}
+              onChoose={chooseSelected}
               title="Selected employees"
-              detail="Only the people you pick below."
+              detail="Everyone, less anyone you take out below."
               count={recipients.size}
             />
           </div>
@@ -379,7 +394,7 @@ function NewBatch() {
               <div className="flex flex-wrap items-center gap-3">
                 <Input
                   className={FILTER_SEARCH}
-                  placeholder="Search name, ID, email, department"
+                  placeholder="Search by email address, Employee ID or name"
                   value={recipientQuery}
                   onChange={(e) => setRecipientQuery(e.target.value)}
                 />
@@ -388,18 +403,33 @@ function NewBatch() {
                   variant="outline"
                   size="sm"
                   disabled={matchingEmployees.length === 0}
-                  onClick={() => setRecipients(new Set(matchingEmployees.map((e) => e.id)))}
+                  onClick={() =>
+                    setRecipients((prev) => {
+                      const next = new Set(prev);
+                      for (const e of matchingEmployees) next.add(e.id);
+                      return next;
+                    })
+                  }
                 >
-                  Select all {recipientQuery.trim() ? "matching" : ""} ({matchingEmployees.length})
+                  Select {recipientQuery.trim() ? "matching" : "all"} ({matchingEmployees.length})
                 </Button>
+                {/* The other half of the search: find the handful you don't want -- by email or
+                    Employee ID -- and take exactly those out, leaving everyone else ticked. */}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={recipients.size === 0}
-                  onClick={() => setRecipients(new Set())}
+                  disabled={matchingEmployees.every((e) => !recipients.has(e.id))}
+                  onClick={() =>
+                    setRecipients((prev) => {
+                      const next = new Set(prev);
+                      for (const e of matchingEmployees) next.delete(e.id);
+                      return next;
+                    })
+                  }
                 >
-                  Clear
+                  Deselect {recipientQuery.trim() ? "matching" : "all"} (
+                  {matchingEmployees.filter((e) => recipients.has(e.id)).length})
                 </Button>
               </div>
 
@@ -410,7 +440,7 @@ function NewBatch() {
                   </div>
                 ) : (
                   <ul className="divide-y divide-border">
-                    {matchingEmployees.slice(0, 300).map((e) => (
+                    {matchingEmployees.slice(0, RECIPIENT_WINDOW).map((e) => (
                       <li key={e.id}>
                         <label className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary">
                           <Checkbox
@@ -439,18 +469,25 @@ function NewBatch() {
                   </ul>
                 )}
               </div>
-              {matchingEmployees.length > 300 ? (
+              {matchingEmployees.length > RECIPIENT_WINDOW ? (
                 <p className="text-xs text-muted-foreground">
-                  Showing the first 300 of {matchingEmployees.length}. Narrow the search to reach
-                  the rest — &quot;Select all matching&quot; still takes every one of them.
+                  Showing the first {RECIPIENT_WINDOW} of {matchingEmployees.length}. Search by
+                  email address or Employee ID to reach the rest &mdash; the Select and Deselect
+                  buttons act on every match, not only the ones on screen.
                 </p>
               ) : null}
               {recipients.size === 0 ? (
-                <p className="text-sm text-destructive">Pick at least one employee.</p>
+                <p className="text-sm text-destructive">
+                  Everyone has been taken out. Put at least one person back.
+                </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {recipients.size} {recipients.size === 1 ? "employee" : "employees"} will be
-                  emailed when this batch is published.
+                  {recipients.size} of {reachable.length}{" "}
+                  {reachable.length === 1 ? "employee" : "employees"} will be emailed when this
+                  batch is published
+                  {reachable.length - recipients.size > 0
+                    ? ` — ${reachable.length - recipients.size} taken out.`
+                    : "."}
                 </p>
               )}
             </div>
