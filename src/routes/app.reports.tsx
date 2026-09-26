@@ -69,6 +69,14 @@ const PALETTE = [
  * How many batches the Batch Range covers. "All" is the default so the report opens on everything
  * the date filter matched rather than on an arbitrary last-seven.
  */
+type Metric = "produced" | "sealed" | "sold";
+
+const METRICS: { value: Metric; label: string; colour: string }[] = [
+  { value: "produced", label: "Produced", colour: "var(--color-muted-foreground)" },
+  { value: "sealed", label: "Sealed", colour: "var(--color-info)" },
+  { value: "sold", label: "Sold", colour: "var(--color-primary)" },
+];
+
 const BATCH_RANGES = [
   { value: "all", label: "All batches" },
   { value: "5", label: "Last 5 batches" },
@@ -88,6 +96,9 @@ function ReportsPage() {
   const [employeeName, setEmployeeName] = useState("");
   const [batchNo, setBatchNo] = useState("all");
   const [batchRange, setBatchRange] = useState<string>("all");
+  // Which single measure the bar chart draws. Three series at once is a comparison; one is a
+  // trend, and a trend is what a date axis is for.
+  const [metric, setMetric] = useState<Metric>("produced");
 
   const { invalid } = periodState(period);
   const years = useMemo(() => yearsIn(batches.map((b) => b.productionDate)), [batches]);
@@ -185,6 +196,30 @@ function ReportsPage() {
         }),
     [selection, filteredOrders],
   );
+
+  /**
+   * The chart's rows: one per production date, not one per batch.
+   *
+   * The x-axis is a date, so two batches produced on the same day drew two bars labelled the same
+   * thing -- four of them on a busy day, indistinguishable, each holding a slice of the day's
+   * figures. Reading the day's production off it meant adding the bars up by eye. Batches on one
+   * date are summed into one bar; the table below still lists them separately, which is where the
+   * batch-by-batch detail belongs.
+   */
+  const byDate = useMemo(() => {
+    const days = new Map<
+      string,
+      { name: string; produced: number; sealed: number; sold: number }
+    >();
+    for (const r of series) {
+      const day = days.get(r.date) ?? { name: r.name, produced: 0, sealed: 0, sold: 0 };
+      day.produced += r.produced;
+      day.sealed += r.sealed;
+      day.sold += r.sold;
+      days.set(r.date, day);
+    }
+    return [...days.values()];
+  }, [series]);
 
   // The five dashboard figures. Each one is a sum of the same rows the charts are drawn from, so
   // a card and the bar above it can never disagree.
@@ -390,12 +425,29 @@ function ReportsPage() {
       ) : null}
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        <Card title="Produced vs sealed vs sold" className="lg:col-span-2">
-          {series.length === 0 ? (
+        <Card
+          title={`${METRICS.find((m) => m.value === metric)!.label} by date`}
+          className="lg:col-span-2"
+          action={
+            <Select value={metric} onValueChange={(v) => setMetric(v as Metric)}>
+              <SelectTrigger className="w-40" aria-label="What to chart">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {METRICS.map((m) => (
+                  <SelectItem key={m.value} value={m.value}>
+                    {m.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          }
+        >
+          {byDate.length === 0 ? (
             <NoData />
           ) : (
             <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={series}>
+              <BarChart data={byDate}>
                 <CartesianGrid
                   strokeDasharray="3 3"
                   stroke="var(--color-border)"
@@ -404,20 +456,20 @@ function ReportsPage() {
                 <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={12} />
                 <YAxis tickLine={false} axisLine={false} fontSize={12} />
                 <Tooltip
+                  formatter={(v: number) => litres(v)}
                   contentStyle={{
                     background: "var(--color-card)",
                     border: "1px solid var(--color-border)",
                     borderRadius: 12,
                   }}
                 />
-                <Legend />
+                {/* One series. Which one is the reader's choice, above. */}
                 <Bar
-                  dataKey="produced"
-                  fill="var(--color-muted-foreground)"
+                  dataKey={metric}
+                  name={METRICS.find((m) => m.value === metric)!.label}
+                  fill={METRICS.find((m) => m.value === metric)!.colour}
                   radius={[4, 4, 0, 0]}
                 />
-                <Bar dataKey="sealed" fill="var(--color-info)" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="sold" fill="var(--color-primary)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -548,15 +600,21 @@ function NoData() {
 function Card({
   title,
   className = "",
+  action,
   children,
 }: {
   title: string;
   className?: string;
+  /** A control belonging to this chart, sitting on the title's line. */
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <div className={`rounded-xl border border-border bg-card p-5 ${className}`}>
-      <h2 className="mb-4 font-display text-lg font-bold">{title}</h2>
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-bold">{title}</h2>
+        {action}
+      </div>
       {children}
     </div>
   );
