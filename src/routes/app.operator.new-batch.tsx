@@ -84,10 +84,10 @@ function NewBatch() {
   const [audience, setAudience] = useState<BatchAudience>("all");
   const [recipients, setRecipients] = useState<Set<string>>(new Set());
   const [recipientQuery, setRecipientQuery] = useState("");
-  // Picking people out of an empty list means finding 350 employees one at a time to reach the
-  // 340 you wanted. The list opens with everybody already ticked, and the operator takes out the
-  // few who should not be written to -- which is the way round the job is actually done.
-  const [seeded, setSeeded] = useState(false);
+  // Whether the list of who has been picked is open. Closed by default: it is a record of the
+  // choice, consulted when you want to check it, not a second list competing with the search
+  // results above it.
+  const [showChosen, setShowChosen] = useState(false);
 
   const activePoints = useMemo(() => deliveryPoints.filter((p) => p.active), [deliveryPoints]);
 
@@ -97,14 +97,6 @@ function NewBatch() {
     () => employees.filter((e) => e.active && e.companyEmail.trim()),
     [employees],
   );
-  const chooseSelected = () => {
-    setAudience("selected");
-    if (!seeded) {
-      setRecipients(new Set(reachable.map((e) => e.id)));
-      setSeeded(true);
-    }
-  };
-
   const matchingEmployees = useMemo(() => {
     const q = recipientQuery.trim().toLowerCase();
     if (!q) return reachable;
@@ -117,6 +109,13 @@ function NewBatch() {
         e.designation.toLowerCase().includes(q),
     );
   }, [reachable, recipientQuery]);
+  // The people picked, in the directory's own order rather than the order they were clicked, so
+  // the list reads the same way twice and somebody checking it can find a name where they expect.
+  const chosenEmployees = useMemo(
+    () => reachable.filter((e) => recipients.has(e.id)),
+    [reachable, recipients],
+  );
+
   // Filtered every render, so a point that is removed or deactivated drops out of the selection
   // instead of failing at save time.
   const points = (chosen ?? activePoints.map((p) => p.id)).filter((id) =>
@@ -382,9 +381,9 @@ function NewBatch() {
             />
             <AudienceChoice
               chosen={audience === "selected"}
-              onChoose={chooseSelected}
+              onChoose={() => setAudience("selected")}
               title="Selected employees"
-              detail="Everyone, less anyone you take out below."
+              detail="Only the people you pick below."
               count={recipients.size}
             />
           </div>
@@ -402,7 +401,7 @@ function NewBatch() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={matchingEmployees.length === 0}
+                  disabled={matchingEmployees.every((e) => recipients.has(e.id))}
                   onClick={() =>
                     setRecipients((prev) => {
                       const next = new Set(prev);
@@ -411,25 +410,16 @@ function NewBatch() {
                     })
                   }
                 >
-                  Select {recipientQuery.trim() ? "matching" : "all"} ({matchingEmployees.length})
+                  Select all {recipientQuery.trim() ? "matching" : ""} ({matchingEmployees.length})
                 </Button>
-                {/* The other half of the search: find the handful you don't want -- by email or
-                    Employee ID -- and take exactly those out, leaving everyone else ticked. */}
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={matchingEmployees.every((e) => !recipients.has(e.id))}
-                  onClick={() =>
-                    setRecipients((prev) => {
-                      const next = new Set(prev);
-                      for (const e of matchingEmployees) next.delete(e.id);
-                      return next;
-                    })
-                  }
+                  disabled={recipients.size === 0}
+                  onClick={() => setRecipients(new Set())}
                 >
-                  Deselect {recipientQuery.trim() ? "matching" : "all"} (
-                  {matchingEmployees.filter((e) => recipients.has(e.id)).length})
+                  Clear
                 </Button>
               </div>
 
@@ -471,23 +461,88 @@ function NewBatch() {
               </div>
               {matchingEmployees.length > RECIPIENT_WINDOW ? (
                 <p className="text-xs text-muted-foreground">
-                  Showing the first {RECIPIENT_WINDOW} of {matchingEmployees.length}. Search by
-                  email address or Employee ID to reach the rest &mdash; the Select and Deselect
-                  buttons act on every match, not only the ones on screen.
+                  Showing the first {RECIPIENT_WINDOW} of {matchingEmployees.length}. Search by name
+                  or Employee ID to reach the rest &mdash; &quot;Select all matching&quot; still
+                  takes every one of them.
                 </p>
               ) : null}
+
+              {/* Who has been picked so far, collected in one place.
+                  Searching narrows the list above, so the people already chosen scroll out of
+                  sight the moment you look for the next one -- and the only record of the choice
+                  was a count. This is that record: open it to read the names back, and take
+                  somebody out from here without having to search for them again. */}
+              <div className="rounded-lg border border-border">
+                <button
+                  type="button"
+                  onClick={() => setShowChosen((open) => !open)}
+                  aria-expanded={showChosen}
+                  aria-controls="chosen-recipients"
+                  className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-secondary"
+                >
+                  <ChevronDown
+                    className={`size-4 shrink-0 text-muted-foreground transition-transform ${
+                      showChosen ? "rotate-180" : ""
+                    }`}
+                    aria-hidden="true"
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-sm font-medium">Selected employees</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {chosenEmployees.length === 0
+                        ? "Nobody picked yet"
+                        : chosenEmployees.map((e) => e.name).join(", ")}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    {chosenEmployees.length}
+                  </span>
+                </button>
+
+                {showChosen ? (
+                  <div id="chosen-recipients" className="border-t border-border">
+                    {chosenEmployees.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+                        Search above by name or Employee ID and tick somebody to add them here.
+                      </p>
+                    ) : (
+                      <ul className="max-h-60 divide-y divide-border overflow-y-auto">
+                        {chosenEmployees.map((e) => (
+                          <li key={e.id} className="flex items-center gap-3 px-4 py-2.5 text-sm">
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate font-medium">{e.name}</span>
+                              <span className="block truncate text-xs text-muted-foreground">
+                                {e.id} &middot; {e.companyEmail}
+                              </span>
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                setRecipients((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(e.id);
+                                  return next;
+                                })
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+
               {recipients.size === 0 ? (
-                <p className="text-sm text-destructive">
-                  Everyone has been taken out. Put at least one person back.
-                </p>
+                <p className="text-sm text-destructive">Pick at least one employee.</p>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {recipients.size} of {reachable.length}{" "}
-                  {reachable.length === 1 ? "employee" : "employees"} will be emailed when this
-                  batch is published
-                  {reachable.length - recipients.size > 0
-                    ? ` — ${reachable.length - recipients.size} taken out.`
-                    : "."}
+                  {recipients.size} {recipients.size === 1 ? "employee" : "employees"} will be
+                  emailed when this batch is published.
                 </p>
               )}
             </div>
