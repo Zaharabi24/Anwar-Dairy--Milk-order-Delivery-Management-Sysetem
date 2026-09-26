@@ -131,20 +131,37 @@ function EmployeeDatabasePage() {
   // way to their record — is the difference between "already in the database" and a red banner
   // after the whole form has been filled in, which reads like adding simply doesn't work.
   const clash = useMemo(() => {
-    if (!draft || !isNew) return null;
+    if (!draft) return null;
     const typed = draft.id.trim().toLowerCase();
     if (!typed) return null;
-    return employees.find((e) => e.id.toLowerCase() === typed) ?? null;
-  }, [draft, isNew, employees]);
+    // On an edit the record being edited is not a clash with itself, so it is excluded by its
+    // original ID. Everything else is: a Super Admin can change an Employee ID now, and typing
+    // one that belongs to somebody else has to say so here rather than after Save. It only did
+    // it while adding, which is why editing a record onto a taken ID looked like the form simply
+    // refusing to work.
+    return (
+      employees.find(
+        (e) =>
+          e.id.toLowerCase() === typed &&
+          (isNew || e.id.toLowerCase() !== (originalId ?? "").toLowerCase()),
+      ) ?? null
+    );
+  }, [draft, isNew, originalId, employees]);
 
   // An address on two records is allowed — two people in the directory really do share one — so
   // this is said out loud rather than blocked.
   const sharesAddressWith = useMemo(() => {
-    if (!draft || !isNew) return null;
+    if (!draft) return null;
     const typed = draft.companyEmail.trim().toLowerCase();
     if (!typed) return null;
-    return employees.find((e) => e.companyEmail.trim().toLowerCase() === typed) ?? null;
-  }, [draft, isNew, employees]);
+    return (
+      employees.find(
+        (e) =>
+          e.companyEmail.trim().toLowerCase() === typed &&
+          (isNew || e.id.toLowerCase() !== (originalId ?? "").toLowerCase()),
+      ) ?? null
+    );
+  }, [draft, isNew, originalId, employees]);
 
   /** Swaps the Add dialog for the record they were really looking for. */
   function openExisting(employee: Employee) {
@@ -395,8 +412,18 @@ function EmployeeDatabasePage() {
               {clash ? (
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/40 bg-accent/10 p-3">
                   <p className="text-sm">
-                    <span className="font-medium">{clash.name}</span> is already in the Employee
-                    Database under {clash.id}.
+                    {isNew ? (
+                      <>
+                        <span className="font-medium">{clash.name}</span> is already in the Employee
+                        Database under {clash.id}.
+                      </>
+                    ) : (
+                      <>
+                        {clash.id} already belongs to{" "}
+                        <span className="font-medium">{clash.name}</span>. Two records can&apos;t
+                        share an Employee ID — open theirs to check which one to keep.
+                      </>
+                    )}
                   </p>
                   <Button size="sm" variant="outline" onClick={() => openExisting(clash)}>
                     Open their record
