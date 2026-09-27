@@ -12,7 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Transporter } from "nodemailer";
 import { getDb } from "../db/client.server";
-import { isRateLimited, MAIL_RATE_PER_MINUTE } from "../mail/rate.server";
+import { isRateLimited, SMTP_CEILING_PER_MINUTE } from "../mail/rate.server";
 import type { MailDelivery } from "@/lib/auth-types";
 
 // HTML email can't read CSS variables, so the brand colour lives here. This is the same green as
@@ -290,14 +290,16 @@ async function smtpTransport(candidate: SmtpCandidate): Promise<Transporter> {
     // "421 4.4.2 Message submission rate for this client has exceeded the configured limit" --
     // then drops the connection, so a burst becomes a run of failures rather than one. Three
     // parallel connections reached that in seconds when a published batch went to the whole
-    // directory. Nodemailer's own limiter is the innermost guard: the queue paces the batch mail,
-    // and this makes sure a password reset arriving at the same moment can't push the account
-    // over the line anyway.
+    // directory. Nodemailer's own limiter is the innermost guard, set to the provider's ceiling and not
+    // to our pace: the queue paces the batch, and this catches a password reset arriving at
+    // the same moment that would otherwise push the account over the line. Set to our pace as
+    // well it became a second brake in series -- the queue waited its gap, then this waited
+    // again inside the send -- and the run came out slower than either was asking for.
     pool: true,
     maxConnections: 1,
     maxMessages: 100,
     rateDelta: 60_000,
-    rateLimit: MAIL_RATE_PER_MINUTE,
+    rateLimit: SMTP_CEILING_PER_MINUTE,
     connectionTimeout: 10_000,
     greetingTimeout: 10_000,
     socketTimeout: 20_000,

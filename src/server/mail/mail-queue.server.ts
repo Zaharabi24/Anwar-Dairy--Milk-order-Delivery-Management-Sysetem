@@ -263,6 +263,19 @@ export async function pendingCount(publicationId: string): Promise<number> {
 // ---------------------------------------------------------------------------
 // The fallback, for a deployment without Redis.
 
+/**
+ * Waits only for what is left of the gap.
+ *
+ * Sleeping a whole interval *after* each send makes the cycle "time to send" plus "the gap", so a
+ * pace set to 25 a minute delivered rather fewer -- a 365 submission can take seconds on its own,
+ * and every one of those seconds was added to the wait rather than counted against it. Measuring
+ * from the start of the send is what makes the configured rate the rate that actually happens.
+ */
+function paceFrom(startedAt: number): Promise<void> {
+  const left = MAIL_INTERVAL_MS - (Date.now() - startedAt);
+  return left > 0 ? new Promise((resolve) => setTimeout(resolve, left)) : Promise.resolve();
+}
+
 const running = new Set<string>();
 
 /**
@@ -297,6 +310,7 @@ async function runInProcess(publicationId: string): Promise<void> {
       if (!next) break;
 
       const emailId = String(next["id"]);
+      const startedAt = Date.now();
       const outcome = await sendQueuedEmail(emailId);
       if (outcome.result === "retry" || outcome.result === "failed") {
         const [attempt] = (await sql<Row[]>`
@@ -313,7 +327,7 @@ async function runInProcess(publicationId: string): Promise<void> {
         );
       }
       await updatePublicationTotals(publicationId);
-      await new Promise((resolve) => setTimeout(resolve, MAIL_INTERVAL_MS));
+      await paceFrom(startedAt);
     }
     await updatePublicationTotals(publicationId);
   } finally {
@@ -393,6 +407,7 @@ async function runCampaignInProcess(campaignId: string): Promise<void> {
       if (!next) break;
 
       const recipientId = String(next["id"]);
+      const startedAt = Date.now();
       const outcome = await sendCampaignEmail(recipientId);
       if (outcome.result === "retry" || outcome.result === "failed") {
         const [attempt] = (await sql<Row[]>`
@@ -407,7 +422,7 @@ async function runCampaignInProcess(campaignId: string): Promise<void> {
         );
       }
       await updateCampaignTotals(campaignId);
-      await new Promise((resolve) => setTimeout(resolve, MAIL_INTERVAL_MS));
+      await paceFrom(startedAt);
     }
     await updateCampaignTotals(campaignId);
   } finally {
