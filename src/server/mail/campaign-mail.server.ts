@@ -19,6 +19,11 @@ type Row = Record<string, string | number | boolean | Date | null>;
  * carry arbitrary markup over the company's own branding is a phishing template waiting to be
  * borrowed. Blank lines separate paragraphs and single line breaks are kept, which is what
  * somebody typing into a box expects to happen.
+ *
+ * Bold is the one exception, written as **like this**. It is applied after escaping, never
+ * before: the <strong> that comes out is one this function wrote, so allowing emphasis does
+ * not reopen the door to markup the composer typed. Anything else with asterisks around it --
+ * a single pair, an unclosed one, a footnote marker -- is left exactly as it was typed.
  */
 export function renderCampaignBody(body: string): string {
   return body
@@ -28,9 +33,18 @@ export function renderCampaignBody(body: string): string {
     .filter(Boolean)
     .map(
       (paragraph) =>
-        `<p style="margin:0 0 16px;">${escapeHtml(paragraph).replace(/\n/g, "<br />")}</p>`,
+        `<p style="margin:0 0 16px;">${bold(escapeHtml(paragraph)).replace(/\n/g, "<br />")}</p>`,
     )
     .join("");
+}
+
+/**
+ * `**text**` becomes bold. Non-greedy, so two bold runs on one line stay two runs rather than
+ * swallowing what sits between them, and the contents may not start with another asterisk --
+ * `****` is four asterisks somebody typed, not emphasis around nothing.
+ */
+function bold(escaped: string): string {
+  return escaped.replace(/\*\*([^*][\s\S]*?)\*\*/g, "<strong>$1</strong>");
 }
 
 /** The finished email, exactly as a recipient receives it. Used for sending and for the preview. */

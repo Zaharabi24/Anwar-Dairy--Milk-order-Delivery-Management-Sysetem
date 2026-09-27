@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Check, Loader2, Mail, Users } from "lucide-react";
+import { AlertTriangle, Bold, Check, Loader2, Mail, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -155,6 +155,49 @@ function Compose({ allRecipients }: { allRecipients: number }) {
   const [audience, setAudience] = useState<MailboxAudience>("selected");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Bold the selection, or unbold it if it is already bold.
+   *
+   * The markers are written into the text rather than held as formatting state, so what is stored,
+   * what the preview renders and what the history shows are all the one string. That is also why
+   * unbolding has to look both ways: the marks may sit inside the selection, if the whole
+   * `**word**` was selected, or just outside it, if only the word was.
+   *
+   * With nothing selected it opens an empty pair and puts the caret between them, which is what
+   * pressing Bold before typing is asking for.
+   */
+  function toggleBold() {
+    const el = bodyRef.current;
+    if (!el) return;
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const before = body.slice(0, start);
+    const selected = body.slice(start, end);
+    const after = body.slice(end);
+
+    const restore = (from: number, to: number) => {
+      // After React has written the new value back into the box.
+      requestAnimationFrame(() => {
+        el.focus();
+        el.setSelectionRange(from, to);
+      });
+    };
+
+    if (selected.length >= 4 && selected.startsWith("**") && selected.endsWith("**")) {
+      setBody(before + selected.slice(2, -2) + after);
+      restore(start, end - 4);
+      return;
+    }
+    if (before.endsWith("**") && after.startsWith("**")) {
+      setBody(before.slice(0, -2) + selected + after.slice(2));
+      restore(start - 2, end - 2);
+      return;
+    }
+    setBody(`${before}**${selected}**${after}`);
+    restore(start + 2, end + 2);
+  }
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
@@ -270,18 +313,50 @@ function Compose({ allRecipients }: { allRecipients: number }) {
             label="Message"
             htmlFor="mail-body"
             required
-            hint="Plain text. Leave a blank line between paragraphs. It is sent on the official Anwar Organic template, addressed to each person by name."
+            hint="Leave a blank line between paragraphs. Sent on the official Anwar Organic template, addressed to each person by name."
           >
-            <Textarea
-              id="mail-body"
-              rows={12}
-              value={body}
-              maxLength={20_000}
-              placeholder={
-                "Write your message here.\n\nLeave a blank line to start a new paragraph."
-              }
-              onChange={(e) => setBody(e.target.value)}
-            />
+            <div className="space-y-2">
+              {/* A toolbar of one. The box stays a plain textarea -- what is typed is what is
+                  stored, and what the history shows -- and the button only writes the markers, so
+                  there is no editor state to keep in step with the text. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={toggleBold}
+                  title="Bold (Ctrl+B)"
+                >
+                  <Bold className="size-4" aria-hidden="true" />
+                  Bold
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Select words and press Bold, or wrap them in{" "}
+                  <code className="rounded bg-secondary px-1 py-0.5">**two asterisks**</code>.
+                </p>
+              </div>
+              <Textarea
+                id="mail-body"
+                // Field attaches this to whatever single child it is given, and that is now the
+                // wrapper holding the toolbar, not the control. Named here so the hint stays tied
+                // to the box a screen reader lands in.
+                aria-describedby="mail-body-description"
+                ref={bodyRef}
+                rows={12}
+                value={body}
+                maxLength={20_000}
+                placeholder={
+                  "Write your message here.\n\nLeave a blank line to start a new paragraph."
+                }
+                onChange={(e) => setBody(e.target.value)}
+                onKeyDown={(e) => {
+                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
+                    e.preventDefault();
+                    toggleBold();
+                  }
+                }}
+              />
+            </div>
           </Field>
           <div className="flex flex-wrap items-center gap-3">
             <Button variant="outline" onClick={() => void openPreview()} disabled={!body.trim()}>
