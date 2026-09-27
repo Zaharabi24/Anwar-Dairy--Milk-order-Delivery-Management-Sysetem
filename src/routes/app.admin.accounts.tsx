@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -44,7 +45,15 @@ import {
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/hooks/use-auth";
-import { ALL_ROLES, BUSINESS_UNITS, roleLabel, type RoleValue } from "@/lib/auth-constants";
+import {
+  ALL_ROLES,
+  BUSINESS_UNITS,
+  INVITABLE_ROLES,
+  isStaffRole,
+  roleLabel,
+  type InvitableRole,
+  type RoleValue,
+} from "@/lib/auth-constants";
 import type { AccountRow, AccountStatus, DeletedAccountRow } from "@/lib/auth-types";
 import type { AccountActionInput } from "@/lib/auth.schemas";
 import { dateTime } from "@/lib/format";
@@ -137,6 +146,7 @@ function AccountsPage() {
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<AccountRow | null>(null);
+  const [roleFor, setRoleFor] = useState<AccountRow | null>(null);
 
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -319,6 +329,11 @@ function AccountsPage() {
                         <DropdownMenuItem onSelect={() => setEditing(a)}>
                           Edit details
                         </DropdownMenuItem>
+                        {a.roles.some(isStaffRole) ? (
+                          <DropdownMenuItem onSelect={() => setRoleFor(a)}>
+                            Manage roles
+                          </DropdownMenuItem>
+                        ) : null}
                         {a.status === "awaiting_password" ? (
                           <DropdownMenuItem
                             onSelect={() =>
@@ -420,6 +435,20 @@ function AccountsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ManageRolesDialog
+        account={roleFor}
+        onClose={() => setRoleFor(null)}
+        onChange={async (role, grant) => {
+          if (!roleFor) return;
+          await act({
+            employee_id: roleFor.employeeId,
+            action: grant ? "grant_role" : "revoke_role",
+            role,
+          });
+          setRoleFor(null);
+        }}
+      />
 
       <EditAccountDialog
         account={editing}
@@ -589,6 +618,88 @@ function EditAccountDialog({
           </Button>
           <Button onClick={() => void save()} disabled={busy || !draft?.fullName.trim()}>
             {busy ? "Saving…" : "Save changes"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * Which staff roles one person holds.
+ *
+ * Roles were a switch: Change role moved somebody from one to another and revoked the rest, which
+ * is right when they change job and wrong when they take on a second. One person can cover two
+ * desks — a System Admin who also works the coordinator's orders — and nothing underneath needed
+ * changing for that. `user_roles` has always been a row per role, a permission check is the union
+ * of every role held, and the header offers Switch role as soon as there is more than one.
+ *
+ * Each tick is its own grant or revoke rather than a form that saves a set, so the audit trail
+ * names the role that moved and nobody has to reason about what a half-applied save would leave
+ * behind. The last staff role can't be unticked here: an account that can sign in to the staff
+ * portal and reach nothing is Remove employee access, which settles the account too.
+ */
+function ManageRolesDialog({
+  account,
+  onClose,
+  onChange,
+}: {
+  account: AccountRow | null;
+  onClose: () => void;
+  onChange: (role: InvitableRole, grant: boolean) => Promise<void>;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const held = account?.roles ?? [];
+  const staffHeld = held.filter(isStaffRole);
+
+  return (
+    <Dialog open={!!account} onOpenChange={(v) => !v && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Roles for {account?.fullName}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Tick every role this person should hold. Holding more than one puts Switch role in their
+            header, and they see each workspace in turn.
+          </p>
+          {INVITABLE_ROLES.map((r) => {
+            const has = held.includes(r.value);
+            const last = has && staffHeld.length <= 1;
+            return (
+              <label
+                key={r.value}
+                className={`flex items-start gap-3 rounded-lg border p-4 ${
+                  has ? "border-primary bg-secondary" : "border-border"
+                } ${last ? "opacity-70" : "cursor-pointer"}`}
+              >
+                <Checkbox
+                  className="mt-0.5"
+                  checked={has}
+                  disabled={busy !== null || last}
+                  onCheckedChange={() => {
+                    setBusy(r.value);
+                    void onChange(r.value, !has).finally(() => setBusy(null));
+                  }}
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-medium">{r.label}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {last ? "Their only staff role — use Remove employee access." : r.description}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+          {held.includes("super_admin") ? (
+            <p className="text-xs text-muted-foreground">
+              Super Admin isn&apos;t granted from here.
+            </p>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose} disabled={busy !== null}>
+            Close
           </Button>
         </DialogFooter>
       </DialogContent>

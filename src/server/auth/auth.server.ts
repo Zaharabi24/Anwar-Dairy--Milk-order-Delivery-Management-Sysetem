@@ -881,7 +881,11 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
   //   change_role / remove_staff_access  -> Team & invitations, the Super Admin's own page
   //   delete                             -> Accounts, which a System Admin still owns
   //   everything else                    -> Accounts, which is now the Super Admin's
-  const staffAction = input.action === "change_role" || input.action === "remove_staff_access";
+  const staffAction =
+    input.action === "change_role" ||
+    input.action === "grant_role" ||
+    input.action === "revoke_role" ||
+    input.action === "remove_staff_access";
   const actor = await requirePermission(
     staffAction
       ? "staff.manage"
@@ -1027,6 +1031,72 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
             to: input.role,
           });
           return { ok: true, message: `${emp.name} is now ${roleLabel(input.role)}.` };
+        }
+
+        /**
+         * Adds a staff role, keeping the ones already held.
+         *
+         * `change_role` is a move: it revokes everything else first, which is what you want when
+         * somebody leaves one job for another. This is the other case -- one person covering two
+         * desks, a System Admin who also works the Head Office Coordinator's orders. They hold
+         * both roles and switch between the workspaces from the header.
+         *
+         * Nothing else has to change for that to work. `user_roles` has always been one row per
+         * role, permissions are the union of what every role grants, and the session reads the
+         * roles live on each request -- so a role given or taken away is in force on the person's
+         * very next page, without them signing in again.
+         */
+        case "grant_role": {
+          if (!input.role) return fail("Choose a role.");
+          if (!hasStaffRole) {
+            return fail("This person isn't on the employee team. Send them an invitation instead.");
+          }
+          if (roles.includes(input.role)) {
+            return fail(`${emp.name as string} already holds ${roleLabel(input.role)}.`);
+          }
+          // The same seniority rule as everything else here: you may not hand out a role you
+          // could not manage the holder of.
+          if (!canManageAccount(actor.roles, [input.role])) {
+            return fail(`You can't grant ${roleLabel(input.role)}.`);
+          }
+          await tx`insert into user_roles (employee_id, role, granted_by)
+                   values (${emp.id}, ${input.role}, ${actor.employeeId})
+                   on conflict (employee_id, role) where revoked_at is null do nothing`;
+          await log("staff_role_granted", { role: input.role, now: [...roles, input.role] });
+          return {
+            ok: true,
+            message: `${emp.name as string} now also holds ${roleLabel(input.role)}.`,
+          };
+        }
+
+        /** Takes one staff role away and leaves the rest. The last one goes through Remove access. */
+        case "revoke_role": {
+          if (!input.role) return fail("Choose a role.");
+          if (!roles.includes(input.role)) {
+            return fail(`${emp.name as string} doesn't hold ${roleLabel(input.role)}.`);
+          }
+          if (!canManageAccount(actor.roles, [input.role])) {
+            return fail(`You can't remove ${roleLabel(input.role)}.`);
+          }
+          // Revoking the only staff role would leave an account that can sign in to the staff
+          // portal and reach nothing. That is Remove employee access, which also settles what
+          // happens to the account itself, so it is sent there rather than half-done here.
+          if (roles.filter(isStaffRole).length <= 1) {
+            return fail(
+              `${roleLabel(input.role)} is ${emp.name as string}'s only staff role. Use Remove employee access instead.`,
+            );
+          }
+          await tx`
+            update user_roles set revoked_at = now(), revoked_by = ${actor.employeeId}
+            where employee_id = ${emp.id} and role = ${input.role} and revoked_at is null`;
+          await log("staff_role_revoked", {
+            role: input.role,
+            now: roles.filter((r) => r !== input.role),
+          });
+          return {
+            ok: true,
+            message: `${emp.name as string} no longer holds ${roleLabel(input.role)}.`,
+          };
         }
 
         case "remove_staff_access": {

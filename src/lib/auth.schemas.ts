@@ -67,6 +67,10 @@ export const accountActionInput = z.object({
     "resend_setup",
     "send_reset",
     "change_role",
+    // Add or take away one staff role, leaving the others alone. `change_role` replaces the lot,
+    // which is right when somebody moves job and wrong when they take on a second one.
+    "grant_role",
+    "revoke_role",
     "remove_staff_access",
   ]),
   note: z.string().max(1000).optional(),
