@@ -8,7 +8,15 @@ import { useAppData } from "@/context/app-data";
 import { countdown, taka } from "@/lib/format";
 import type { PaymentMethod } from "@/lib/types";
 
-const paymentMethods: PaymentMethod[] = ["Cash", "bKash", "Payroll deduction"];
+/**
+ * What an employee may choose when booking. Cash only.
+ *
+ * The other two are still on the system, and still on the Collections screen, because that is
+ * where the coordinator records what was actually handed over -- somebody may well settle by
+ * bKash at the counter. This is the booking form, and what it asks is what the employee is
+ * committing to, which is now the one thing.
+ */
+const paymentMethods: PaymentMethod[] = ["Cash"];
 
 export const Route = createFileRoute("/app/order/new")({
   head: () => ({
@@ -24,13 +32,8 @@ export const Route = createFileRoute("/app/order/new")({
 });
 
 function NewOrderPage() {
-  const {
-    activeBatch,
-    remainingLitres,
-    deliveryPoints,
-    currentEmployee,
-    confirmOrder,
-  } = useAppData();
+  const { activeBatch, remainingLitres, deliveryPoints, currentEmployee, confirmOrder } =
+    useAppData();
   const navigate = useNavigate();
   const [litres, setLitres] = useState(2);
   const [point, setPoint] = useState<string>(activeBatch?.deliveryPoints[0] ?? "");
@@ -160,7 +163,13 @@ function NewOrderPage() {
 
         <section className="rounded-xl border border-border bg-card p-6">
           <h2 className="font-semibold">How will you pay?</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          {/* Written out both ways rather than built from the count: Tailwind finds class names
+              by reading the source, so a class assembled at runtime is one that never exists. */}
+          <div
+            className={`mt-4 grid gap-3 ${
+              paymentMethods.length > 1 ? "sm:grid-cols-3" : "sm:max-w-xs"
+            }`}
+          >
             {paymentMethods.map((m) => (
               <label
                 key={m}
@@ -180,11 +189,10 @@ function NewOrderPage() {
             ))}
           </div>
           <p className="mt-4 text-sm text-muted-foreground">
-            Collection time: <span className="font-medium text-foreground">{activeBatch.deliveryWindow}</span>
+            Collection time:{" "}
+            <span className="font-medium text-foreground">{activeBatch.deliveryWindow}</span>
           </p>
         </section>
-
-
 
         <section className="rounded-xl border border-border bg-card p-6">
           <div className="flex items-center justify-between">
@@ -201,7 +209,7 @@ function NewOrderPage() {
             </Button>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            Pay at collection — cash, bKash or payroll deduction.{" "}
+            Pay in cash at collection.{" "}
             <Link to="/app/offer" className="underline">
               Back to today's offer
             </Link>
