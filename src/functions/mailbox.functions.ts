@@ -32,3 +32,8 @@ export const resumeCampaignFn = createServerFn({ method: "POST" })
 export const resendFailedMailFn = createServerFn({ method: "POST" })
   .validator(campaignIdInput)
   .handler(async ({ data }) => (await server()).resendFailedMail(data));
+
+/** Every sent email, one row per recipient, for the flat history. */
+export const listCampaignEmailsFn = createServerFn({ method: "GET" }).handler(async () =>
+  (await server()).listCampaignEmails(),
+);

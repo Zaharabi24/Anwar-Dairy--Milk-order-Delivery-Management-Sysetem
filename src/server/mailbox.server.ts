@@ -17,6 +17,7 @@ import { campaignEmail } from "./mail/campaign-mail.server";
 import { AppError } from "@/lib/app-error";
 import type { ComposeInput, PreviewInput } from "@/lib/mailbox.schemas";
 import type {
+  CampaignEmail,
   CampaignRecipient,
   CampaignSummary,
   MailboxAudience,
@@ -213,6 +214,55 @@ export async function listCampaignRecipients(input: {
 
   return rows.map((r) => ({
     id: String(r["id"]),
+    employeeId: (r["employee_id"] as string) ?? null,
+    employeeName: (r["employee_name"] as string) ?? "",
+    employeeRef: (r["employee_ref"] as string) ?? "",
+    toAddress: (r["to_address"] as string) ?? "",
+    department: (r["department"] as string) ?? "",
+    designation: (r["designation"] as string) ?? "",
+    businessUnit: (r["business_unit"] as string) ?? "",
+    location: (r["location"] as string) ?? "",
+    status: r["status"] as CampaignRecipient["status"],
+    error: (r["error"] as string) ?? null,
+    sentAt: iso(r["sent_at"]),
+  }));
+}
+
+/**
+ * Every email the Mailbox has sent, one row per recipient, newest first.
+ *
+ * One query rather than a list of sends and a dialog per send: the question asked here is "did
+ * this reach this person", and answering it used to mean knowing which bulk send to open first.
+ * The campaign's subject and date ride along on each row so the flat list still says what the
+ * message was.
+ *
+ * Capped, because a handful of sends to the whole directory is already thousands of rows and the
+ * screen filters what it is given.
+ */
+export async function listCampaignEmails(): Promise<CampaignEmail[]> {
+  await requirePermission("mailbox.send");
+
+  // Same as opening the history: a good moment to put back anything a restart interrupted.
+  await resumePendingCampaigns().catch((error: unknown) =>
+    console.error("[mail] resuming campaigns failed", error),
+  );
+
+  const sql = await getDb();
+  const rows = await sql<Row[]>`
+    select r.id, r.campaign_id, r.employee_id, r.employee_name, r.employee_ref, r.to_address,
+           r.department, r.designation, r.business_unit, r.location, r.status, r.error, r.sent_at,
+           c.subject, c.sent_by, c.created_at
+    from mail_campaign_recipients r
+    join mail_campaigns c on c.id = r.campaign_id
+    order by c.created_at desc, c.id desc, r.employee_name, r.id
+    limit 5000`;
+
+  return rows.map((r) => ({
+    id: String(r["id"]),
+    campaignId: String(r["campaign_id"]),
+    subject: (r["subject"] as string) ?? "",
+    sentBy: (r["sent_by"] as string) || "—",
+    createdAt: iso(r["created_at"])!,
     employeeId: (r["employee_id"] as string) ?? null,
     employeeName: (r["employee_name"] as string) ?? "",
     employeeRef: (r["employee_ref"] as string) ?? "",

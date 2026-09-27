@@ -22,14 +22,11 @@ import { FILTER_SEARCH } from "@/components/ui/control-styles";
 import { useAppData } from "@/context/app-data";
 import {
   countAllRecipientsFn,
-  listCampaignRecipientsFn,
-  listCampaignsFn,
+  listCampaignEmailsFn,
   previewCampaignFn,
   resendFailedMailFn,
-  resumeCampaignFn,
   sendCampaignFn,
 } from "@/functions/mailbox.functions";
-import { listPublishedBatchNumbersFn } from "@/functions/records.functions";
 import {
   EMPTY_PERIOD,
   periodLabel,
@@ -47,13 +44,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { dateShort, timeShort } from "@/lib/format";
-import type {
-  CampaignRecipient,
-  CampaignStatus,
-  CampaignSummary,
-  MailboxAudience,
-  RecipientStatus,
-} from "@/lib/mailbox-types";
+import type { CampaignEmail, MailboxAudience, RecipientStatus } from "@/lib/mailbox-types";
 import type { Employee } from "@/lib/types";
 
 export const Route = createFileRoute("/app/admin/mailbox")({
@@ -79,35 +70,33 @@ export const Route = createFileRoute("/app/admin/mailbox")({
   loader: async () => {
     try {
       return {
-        campaigns: await listCampaignsFn(),
+        emails: await listCampaignEmailsFn(),
         allRecipients: await countAllRecipientsFn(),
-        batches: await listPublishedBatchNumbersFn(),
       };
     } catch {
       return {
-        campaigns: [] as CampaignSummary[],
+        emails: [] as CampaignEmail[],
         allRecipients: { total: 0 },
-        batches: [] as string[],
       };
     }
   },
   component: Mailbox,
 });
 
-const STATUS_LABEL: Record<CampaignStatus, string> = {
-  sending: "Sending",
-  sent: "All sent",
-  partial: "Partly sent",
-  failed: "Send failed",
-  no_recipients: "No recipients",
-};
+/** How many rows the history draws at once. A directory-wide send is a few hundred on its own. */
+const HISTORY_PAGE = 300;
 
-const STATUS_TONE: Record<CampaignStatus, string> = {
+/** The statuses that mean the message left the building. */
+const DELIVERED = new Set<RecipientStatus>(["sent", "captured", "logged"]);
+
+const RECIPIENT_TONE: Record<RecipientStatus, string> = {
+  queued: "bg-secondary text-muted-foreground",
   sending: "bg-secondary text-muted-foreground",
   sent: "bg-primary/10 text-primary-deep",
-  partial: "bg-accent/15 text-accent-foreground",
+  captured: "bg-accent/15 text-accent-foreground",
   failed: "bg-destructive/10 text-destructive",
-  no_recipients: "bg-secondary text-muted-foreground",
+  logged: "bg-secondary text-muted-foreground",
+  skipped: "bg-secondary text-muted-foreground",
 };
 
 const RECIPIENT_LABEL: Record<RecipientStatus, string> = {
@@ -140,7 +129,7 @@ function Mailbox() {
           <Compose allRecipients={initial.allRecipients.total} />
         </TabsContent>
         <TabsContent value="history" className="mt-6">
-          <History initial={initial.campaigns} batches={initial.batches} />
+          <History initial={initial.emails} />
         </TabsContent>
       </Tabs>
     </div>
@@ -726,67 +715,71 @@ function ConfirmDialog({
 // ---------------------------------------------------------------------------
 // History
 
-function History({ initial, batches }: { initial: CampaignSummary[]; batches: string[] }) {
-  const [campaigns, setCampaigns] = useState(initial);
-  // Refreshed with the history, so a batch published while the Mailbox is open reaches the Batch
-  // No. dropdown without waiting for a navigation.
-  const [batchNumbers, setBatchNumbers] = useState(batches);
-  const [open, setOpen] = useState<CampaignSummary | null>(null);
-  const [recipients, setRecipients] = useState<CampaignRecipient[] | null>(null);
+/**
+ * Every email the Mailbox has sent, one row per person.
+ *
+ * It was a list of sends: one row for a message to three hundred people, with the individuals
+ * behind a Recipients dialog. That answers "what have we sent" and turns "did this reach her" into
+ * a hunt — open a send, scan it, close it, open the next. The unit here is the email that arrived,
+ * or didn't, because that is what somebody comes to this screen holding a name to check.
+ *
+ * Two filters, which are the two questions asked of an email: when, and did it get there. Batch
+ * No. was here and has gone — a composed email has no batch of its own, so it could only be
+ * matched against whatever the subject happened to mention.
+ */
+function History({ initial }: { initial: CampaignEmail[] }) {
+  const [emails, setEmails] = useState(initial);
+  const [open, setOpen] = useState<CampaignEmail | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [period, setPeriod] = useState<PeriodFilter>(EMPTY_PERIOD);
-  const [batchNo, setBatchNo] = useState("all");
   const [status, setStatus] = useState("all");
+  const [query, setQuery] = useState("");
 
-  const years = useMemo(() => yearsIn(campaigns.map((c) => c.createdAt)), [campaigns]);
+  const years = useMemo(() => yearsIn(emails.map((e) => e.createdAt)), [emails]);
 
-  // Filtered here rather than in a query: the history is the last two hundred messages, already
-  // loaded, so narrowing it is a matter of reading what is on the client.
-  const shown = useMemo(
-    () =>
-      campaigns
-        .filter((c) => periodMatches(period, c.createdAt))
-        .filter((c) => (status === "all" ? true : c.status === status))
-        .filter((c) => {
-          if (batchNo === "all") return true;
-          // A composed email has no batch of its own -- it is written by hand, not raised by a
-          // publish -- so what ties one to a batch is the batch it talks about. Matched against
-          // the subject and the body, which is where a batch number is written.
-          const needle = batchNo.toLowerCase();
-          return c.subject.toLowerCase().includes(needle) || c.body.toLowerCase().includes(needle);
-        }),
-    [campaigns, period, status, batchNo],
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return emails
+      .filter((e) => periodMatches(period, e.createdAt))
+      .filter((e) => (status === "all" ? true : e.status === status))
+      .filter((e) =>
+        !q
+          ? true
+          : e.employeeName.toLowerCase().includes(q) ||
+            e.employeeRef.toLowerCase().includes(q) ||
+            e.toAddress.toLowerCase().includes(q) ||
+            e.subject.toLowerCase().includes(q),
+      );
+  }, [emails, period, status, query]);
+
+  const delivered = shown.filter((e) => DELIVERED.has(e.status)).length;
+  const failed = shown.filter((e) => e.status === "failed").length;
+  const filtered = shown.length !== emails.length;
+
+  // The sends behind the failures on screen, so one button can put them all back on the queue.
+  // Retrying is still per send, which is what the queue understands; nobody has to know which
+  // sends those were.
+  const failedCampaigns = useMemo(
+    () => [...new Set(shown.filter((e) => e.status === "failed").map((e) => e.campaignId))],
+    [shown],
   );
 
-  const totalSent = shown.reduce((n, c) => n + c.sentCount, 0);
-  const totalFailed = shown.reduce((n, c) => n + c.failedCount, 0);
-  const filtered = shown.length !== campaigns.length;
-
   async function reload() {
-    const [list, published] = await Promise.all([listCampaignsFn(), listPublishedBatchNumbersFn()]);
-    setCampaigns(list);
-    setBatchNumbers(published);
+    setEmails(await listCampaignEmailsFn());
   }
 
-  async function openCampaign(c: CampaignSummary) {
-    setOpen(c);
-    setRecipients(null);
-    try {
-      setRecipients(await listCampaignRecipientsFn({ data: { campaignId: c.id } }));
-    } catch {
-      toast.error("Couldn't load the recipients.");
-    }
-  }
-
-  async function retryFailed(c: CampaignSummary) {
+  async function retryFailed() {
     setBusy(true);
     try {
-      const r = await resendFailedMailFn({ data: { campaignId: c.id } });
+      const results = await Promise.all(
+        failedCampaigns.map((campaignId) => resendFailedMailFn({ data: { campaignId } })),
+      );
+      const queued = results.reduce((n, r) => n + r.queued, 0);
       toast.success(
-        r.queued > 0
-          ? `${r.queued} failed message${r.queued === 1 ? "" : "s"} back on the queue.`
-          : "Nothing failed on this send.",
+        queued > 0
+          ? `${queued} failed message${queued === 1 ? "" : "s"} back on the queue.`
+          : "Those were already dealt with.",
       );
       await reload();
     } catch {
@@ -796,50 +789,15 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
     }
   }
 
-  async function resume(c: CampaignSummary) {
-    setBusy(true);
-    try {
-      const r = await resumeCampaignFn({ data: { campaignId: c.id } });
-      toast.success(
-        r.queued > 0 ? `${r.queued} message(s) back on the queue.` : "Nothing left to send.",
-      );
-      await reload();
-    } catch {
-      toast.error("Couldn't resume the send.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-3">
-        <StatCard label="Emails composed" value={shown.length} />
-        <StatCard label="Total sent" value={totalSent} emphasis />
-        <StatCard label="Total failed" value={totalFailed} />
+        <StatCard label="Emails shown" value={shown.length} />
+        <StatCard label="Delivered" value={delivered} emphasis />
+        <StatCard label="Failed" value={failed} />
       </div>
 
       <FilterBar columns={4}>
-        {/* Batch No. first and set to All, so the history opens showing everything. */}
-        <Field
-          label="Batch No."
-          htmlFor="mailbox-batch"
-          hint="Emails that name the batch in their subject or message."
-        >
-          <Select value={batchNo} onValueChange={setBatchNo}>
-            <SelectTrigger id="mailbox-batch">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All batches</SelectItem>
-              {batchNumbers.map((b) => (
-                <SelectItem key={b} value={b}>
-                  {b}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
         <PeriodFilterFields value={period} onChange={setPeriod} years={years} idPrefix="mailbox" />
         <Field label="Delivery status" htmlFor="mailbox-status">
           <Select value={status} onValueChange={setStatus}>
@@ -848,34 +806,51 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Any status</SelectItem>
-              {(Object.keys(STATUS_LABEL) as CampaignStatus[]).map((k) => (
+              {(Object.keys(RECIPIENT_LABEL) as RecipientStatus[]).map((k) => (
                 <SelectItem key={k} value={k}>
-                  {STATUS_LABEL[k]}
+                  {RECIPIENT_LABEL[k]}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
-        <div className="flex items-end sm:col-span-2 lg:col-span-4">
+        <Field label="Search" htmlFor="mailbox-search">
+          <Input
+            id="mailbox-search"
+            placeholder="Name, Employee ID, email or subject"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </Field>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:col-span-2 lg:col-span-4">
           <p className="text-xs text-muted-foreground">
             {periodLabel(period)}
-            {batchNo === "all" ? "" : ` · ${batchNo}`}
-            {status === "all" ? "" : ` · ${STATUS_LABEL[status as CampaignStatus]}`}
-            {" · "}
-            {shown.length} of {campaigns.length} email{campaigns.length === 1 ? "" : "s"}
+            {status === "all" ? "" : ` · ${RECIPIENT_LABEL[status as RecipientStatus]}`} ·{" "}
+            {shown.length} of {emails.length} email{emails.length === 1 ? "" : "s"}
           </p>
           {filtered ? (
             <Button
               variant="outline"
               size="sm"
-              className="ml-3"
               onClick={() => {
                 setPeriod(EMPTY_PERIOD);
-                setBatchNo("all");
                 setStatus("all");
+                setQuery("");
               }}
             >
               Clear filters
+            </Button>
+          ) : null}
+          {failed > 0 ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="ml-auto"
+              disabled={busy}
+              onClick={() => void retryFailed()}
+            >
+              {busy ? "Queueing…" : `Resend ${failed} failed`}
             </Button>
           ) : null}
         </div>
@@ -885,89 +860,66 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
         {shown.length === 0 ? (
           <div className="p-6">
             <EmptyState
-              title={campaigns.length === 0 ? "Nothing sent yet" : "No emails match"}
+              title={emails.length === 0 ? "Nothing sent yet" : "No emails match"}
               hint={
-                campaigns.length === 0
-                  ? "Emails you send from the Compose tab are recorded here, with who received them."
-                  : "Try a wider date filter, or set Batch No. back to All."
+                emails.length === 0
+                  ? "Emails you send from the Compose tab are recorded here, one row per person."
+                  : "Try a wider date filter, or set the status back to Any."
               }
             />
           </div>
         ) : (
-          <table className="w-full min-w-[1000px] text-sm">
+          <table className="w-full min-w-[1080px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
-                {/* "Sent by" and "Actions" had no headings. The sender was a grey sub-line
-                    under the date, and the buttons sat under a blank cell, so two of the six
-                    columns were things a reader had to work out from their contents. */}
-                <Th>Sent</Th>
-                <Th>Sent by</Th>
+                <Th>Employee</Th>
+                <Th>Employee ID</Th>
+                <Th>Email</Th>
+                <Th>Business unit</Th>
                 <Th>Subject</Th>
-                <Th>Audience</Th>
-                <Th>Recipients</Th>
+                <Th>Sent</Th>
                 <Th>Delivery status</Th>
                 <Th>Actions</Th>
               </tr>
             </thead>
             <tbody>
-              {shown.map((c, i) => (
+              {shown.slice(0, HISTORY_PAGE).map((e, i) => (
                 <motion.tr
-                  key={c.id}
+                  key={e.id}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.18, delay: Math.min(i * 0.02, 0.2) }}
+                  transition={{ duration: 0.18, delay: Math.min(i * 0.006, 0.2) }}
                   className="border-b border-border/60 last:border-0"
                 >
+                  <Td className="font-medium">{e.employeeName || "—"}</Td>
+                  <Td>{e.employeeRef || "—"}</Td>
+                  <Td>{e.toAddress || "—"}</Td>
+                  <Td>{e.businessUnit || "—"}</Td>
+                  <Td className="max-w-xs">
+                    <span className="block truncate">{e.subject}</span>
+                  </Td>
                   <Td>
-                    {dateShort(c.createdAt)}
+                    {dateShort(e.sentAt ?? e.createdAt)}
                     <span className="block text-xs text-muted-foreground">
-                      {timeShort(c.createdAt)}
+                      {timeShort(e.sentAt ?? e.createdAt)} · {e.sentBy}
                     </span>
                   </Td>
-                  <Td>{c.sentBy}</Td>
-                  <Td className="max-w-xs">
-                    <span className="block truncate font-medium">{c.subject}</span>
-                  </Td>
-                  <Td>{c.audience === "all" ? "All employees" : "Selected"}</Td>
-                  <Td>{c.recipients}</Td>
                   <Td>
                     <span
-                      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${STATUS_TONE[c.status]}`}
+                      className={`inline-block whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-medium ${RECIPIENT_TONE[e.status]}`}
                     >
-                      {STATUS_LABEL[c.status]}
+                      {RECIPIENT_LABEL[e.status]}
                     </span>
-                    <span className="mt-1 block text-xs text-muted-foreground">
-                      {c.sentCount} sent
-                      {c.failedCount ? `, ${c.failedCount} failed` : ""}
-                      {c.pendingCount ? `, ${c.pendingCount} to go` : ""}
-                    </span>
+                    {e.error ? (
+                      <span className="mt-1 block max-w-[16rem] text-xs text-muted-foreground">
+                        {e.error}
+                      </span>
+                    ) : null}
                   </Td>
                   <Td>
-                    <div className="flex gap-2">
-                      <Button variant="outline" size="sm" onClick={() => void openCampaign(c)}>
-                        Recipients
-                      </Button>
-                      {c.pendingCount ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void resume(c)}
-                        >
-                          Send the rest
-                        </Button>
-                      ) : null}
-                      {c.failedCount ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void retryFailed(c)}
-                        >
-                          Resend {c.failedCount} failed
-                        </Button>
-                      ) : null}
-                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setOpen(e)}>
+                      Read
+                    </Button>
                   </Td>
                 </motion.tr>
               ))}
@@ -976,52 +928,40 @@ function History({ initial, batches }: { initial: CampaignSummary[]; batches: st
         )}
       </div>
 
+      {shown.length > HISTORY_PAGE ? (
+        <p className="text-xs text-muted-foreground">
+          Showing the first {HISTORY_PAGE} of {shown.length}. Narrow the date or the search to reach
+          the rest.
+        </p>
+      ) : null}
+
+      {/* The message as that person received it, opened from their own row rather than from the
+          send it belonged to. */}
       <Dialog open={!!open} onOpenChange={(v) => !v && setOpen(null)}>
-        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="truncate">{open?.subject}</DialogTitle>
           </DialogHeader>
           {open ? (
-            <div className="space-y-4">
-              <div className="whitespace-pre-wrap rounded-lg border border-border bg-secondary/40 p-4 text-sm">
-                {open.body}
-              </div>
-              {recipients === null ? (
-                <p className="text-sm text-muted-foreground">Loading recipients…</p>
-              ) : (
-                <div className="overflow-x-auto rounded-lg border border-border">
-                  <table className="w-full min-w-[760px] text-sm">
-                    <thead className="border-b border-border text-left text-muted-foreground">
-                      <tr>
-                        <Th>Employee</Th>
-                        <Th>Employee ID</Th>
-                        <Th>Business unit</Th>
-                        <Th>Email</Th>
-                        <Th>Status</Th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recipients.map((r) => (
-                        <tr key={r.id} className="border-b border-border/60 last:border-0">
-                          <Td className="font-medium">{r.employeeName || "—"}</Td>
-                          <Td>{r.employeeRef || "—"}</Td>
-                          <Td>{r.businessUnit || "—"}</Td>
-                          <Td>{r.toAddress || "—"}</Td>
-                          <Td>
-                            {RECIPIENT_LABEL[r.status]}
-                            {r.error ? (
-                              <span className="mt-1 block max-w-[18rem] text-xs text-muted-foreground">
-                                {r.error}
-                              </span>
-                            ) : null}
-                          </Td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">To</dt>
+              <dd>
+                {open.employeeName || "—"}
+                {open.toAddress ? ` · ${open.toAddress}` : ""}
+              </dd>
+              <dt className="text-muted-foreground">Employee ID</dt>
+              <dd>{open.employeeRef || "—"}</dd>
+              <dt className="text-muted-foreground">Sent</dt>
+              <dd>
+                {dateShort(open.sentAt ?? open.createdAt)},{" "}
+                {timeShort(open.sentAt ?? open.createdAt)} by {open.sentBy}
+              </dd>
+              <dt className="text-muted-foreground">Status</dt>
+              <dd>
+                {RECIPIENT_LABEL[open.status]}
+                {open.error ? ` — ${open.error}` : ""}
+              </dd>
+            </dl>
           ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setOpen(null)}>

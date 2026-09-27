@@ -56,3 +56,19 @@ export interface SendResult {
   /** Whether the queue is backed by Redis and so survives a restart. */
   durable: boolean;
 }
+
+/**
+ * One email to one person, as the history lists it.
+ *
+ * The history used to be a list of sends -- one row for a message to three hundred people, with
+ * the individuals behind a dialog. This is the other way round: the unit is the email that
+ * arrived, or didn't, because that is what somebody is looking for when they come here. The
+ * campaign it belonged to travels with it so the row can still say what was sent and when.
+ */
+export interface CampaignEmail extends CampaignRecipient {
+  campaignId: string;
+  subject: string;
+  sentBy: string;
+  /** When the send was composed, which is the date the history is ordered and filtered on. */
+  createdAt: string;
+}
