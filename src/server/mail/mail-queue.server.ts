@@ -49,17 +49,66 @@ let queue: Queue<JobData> | undefined;
 let worker: Worker<JobData> | undefined;
 let announced = false;
 
+/**
+ * How long a queue write may take before the message is sent in this process instead.
+ *
+ * `maxRetriesPerRequest: null` is what BullMQ's worker needs -- it blocks on Redis waiting for
+ * work, and a retry ceiling would end it -- but it also means a *write* never gives up. With
+ * REDIS_URL pointing at a Redis that isn't there, ioredis buffers the command and waits, so
+ * `addBulk` never returns and never throws. Publishing a batch then leaves every row sitting at
+ * 'queued' with no attempt against it, and the send looks like it has begun and simply stopped.
+ * That is what this ceiling is for.
+ */
+const ENQUEUE_TIMEOUT_MS = 5_000;
+
+/** Set when a queue write fails, so the next send goes in-process instead of waiting again. */
+let queueUnreachable = false;
+
 function connect(): Redis {
   connection ??= new IORedis(redisUrl(), {
     // BullMQ blocks on Redis while waiting for work, so a retry ceiling would end the worker.
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
   });
+  // Without a listener ioredis raises an unhandled 'error' on a dead connection, and the noise
+  // buries the one line that matters. Recovery flips the flag back: a queue that comes up is
+  // preferred again, and nothing has to be restarted for that to happen.
+  connection.on("error", () => {
+    queueUnreachable = true;
+  });
+  connection.on("ready", () => {
+    if (queueUnreachable) console.info("[mail] queue reachable again — back on the durable queue");
+    queueUnreachable = false;
+  });
   return connection;
 }
 
+/**
+ * Hands the work to the queue, and says whether it got there.
+ *
+ * Returning false rather than throwing is the point: the caller's answer to a queue it cannot
+ * reach is to send the messages itself, which is a fallback, not an error.
+ */
+async function offer(work: () => Promise<unknown>): Promise<boolean> {
+  try {
+    await Promise.race([
+      work(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("queue write timed out")), ENQUEUE_TIMEOUT_MS),
+      ),
+    ]);
+    queueUnreachable = false;
+    return true;
+  } catch (error) {
+    queueUnreachable = true;
+    console.error("[mail] queue unreachable, sending in-process instead", error);
+    return false;
+  }
+}
+
 function getQueue(): Queue<JobData> | null {
-  if (!isQueueEnabled()) return null;
+  // A queue known to be down is the same as no queue at all, as far as choosing an engine goes.
+  if (!isQueueEnabled() || queueUnreachable) return null;
   queue ??= new Queue<JobData>(QUEUE_NAME, {
     connection: connect(),
     defaultJobOptions: {
@@ -159,15 +208,22 @@ export async function enqueuePublication(publicationId: string): Promise<number>
     return rows.length;
   }
 
-  await q.addBulk(
-    rows.map((r) => ({
-      name: "send",
-      data: { emailId: String(r["id"]), publicationId },
-      // The row id is the job id, so re-enqueuing the same message is ignored rather than
-      // sending it twice -- which is what makes "resume" safe to call as often as you like.
-      opts: { jobId: `email-${String(r["id"])}` },
-    })),
+  const handed = await offer(() =>
+    q.addBulk(
+      rows.map((r) => ({
+        name: "send",
+        data: { emailId: String(r["id"]), publicationId },
+        // The row id is the job id, so re-enqueuing the same message is ignored rather than
+        // sending it twice -- which is what makes "resume" safe to call as often as you like.
+        opts: { jobId: `email-${String(r["id"])}` },
+      })),
+    ),
   );
+  if (!handed) {
+    void runInProcess(publicationId).catch((error) =>
+      console.error("[mail] in-process send failed", error),
+    );
+  }
   return rows.length;
 }
 
@@ -285,13 +341,20 @@ export async function enqueueCampaign(campaignId: string): Promise<number> {
     return rows.length;
   }
 
-  await q.addBulk(
-    rows.map((r) => ({
-      name: "send",
-      data: { kind: "campaign" as const, emailId: String(r["id"]), publicationId: campaignId },
-      opts: { jobId: `campaign-${String(r["id"])}` },
-    })),
+  const handed = await offer(() =>
+    q.addBulk(
+      rows.map((r) => ({
+        name: "send",
+        data: { kind: "campaign" as const, emailId: String(r["id"]), publicationId: campaignId },
+        opts: { jobId: `campaign-${String(r["id"])}` },
+      })),
+    ),
   );
+  if (!handed) {
+    void runCampaignInProcess(campaignId).catch((error) =>
+      console.error("[mail] in-process campaign send failed", error),
+    );
+  }
   return rows.length;
 }
 
@@ -378,14 +441,18 @@ async function runCampaignInProcess(campaignId: string): Promise<void> {
 async function forgetJobs(ids: string[], prefix: "email" | "campaign"): Promise<void> {
   const q = getQueue();
   if (!q) return;
-  await Promise.all(
-    ids.map(async (id) => {
-      try {
-        await q.remove(`${prefix}-${id}`);
-      } catch {
-        // Already gone, or still running. Either way there is nothing to clear.
-      }
-    }),
+  // Through `offer` like every other queue write: a resend must not be held up by a queue that
+  // isn't answering, when the whole point of the resend is to get the message moving.
+  await offer(() =>
+    Promise.all(
+      ids.map(async (id) => {
+        try {
+          await q.remove(`${prefix}-${id}`);
+        } catch {
+          // Already gone, or still running. Either way there is nothing to clear.
+        }
+      }),
+    ),
   );
 }
 
