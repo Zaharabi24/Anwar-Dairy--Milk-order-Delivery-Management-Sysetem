@@ -1,5 +1,4 @@
-import { Field, FilterRow } from "@/components/ui/field";
-import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
+import { Field, FilterBar } from "@/components/ui/field";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
@@ -24,6 +23,14 @@ import {
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
+import { PeriodFilterFields } from "@/components/period-filter";
+import {
+  EMPTY_PERIOD,
+  periodLabel,
+  periodMatches,
+  yearsIn,
+  type PeriodFilter,
+} from "@/lib/date-filter";
 import { dateShort, taka, timeShort } from "@/lib/format";
 import type { CollectionRecord, Order } from "@/lib/types";
 
@@ -49,9 +56,11 @@ type Method = CollectionRecord["method"];
 const methods: Method[] = ["Cash", "bKash", "Payroll deduction"];
 
 function CollectionsPage() {
-  const { orders, employees, collections, upsertCollection } = useAppData();
+  const { orders, employees, collections, batches, upsertCollection } = useAppData();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
+  const [batchNo, setBatchNo] = useState("all");
+  const [period, setPeriod] = useState<PeriodFilter>(EMPTY_PERIOD);
   const [active, setActive] = useState<Order | null>(null);
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState<Method>("Cash");
@@ -66,27 +75,49 @@ function CollectionsPage() {
   const collectedFor = (orderNo: string) =>
     collections.find((c) => c.orderNo === orderNo)?.amountCollected ?? 0;
 
+  /** The batches that have anything payable against them, newest first. */
+  const batchOptions = useMemo(() => {
+    const withOrders = new Set(payable.map((o) => o.batchNo));
+    return batches.filter((b) => withOrders.has(b.batchNo));
+  }, [batches, payable]);
+
+  const years = useMemo(() => yearsIn(payable.map((o) => o.createdAt)), [payable]);
+
   const rows = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return payable
-      .map((o) => ({ order: o, record: collections.find((c) => c.orderNo === o.orderNo) }))
-      .filter(({ record }) => {
-        if (filter === "all") return true;
-        const status = record?.status ?? "Unpaid";
-        return status === filter;
-      })
-      .filter(({ order }) => {
-        if (!q) return true;
-        const emp = employees.find((e) => e.id === order.employeeId);
-        return (
-          order.orderNo.toLowerCase().includes(q) || (emp?.name.toLowerCase().includes(q) ?? false)
-        );
-      });
-  }, [payable, collections, employees, filter, query]);
+    return (
+      payable
+        .map((o) => ({ order: o, record: collections.find((c) => c.orderNo === o.orderNo) }))
+        .filter(({ order }) => (batchNo === "all" ? true : order.batchNo === batchNo))
+        // Dated by the order, not by the payment: every row has an order date, where a row nobody
+        // has paid yet has no collection date at all -- and those are exactly the rows a coordinator
+        // is looking for. Filtering on the payment would hide all of them the moment a month is
+        // chosen.
+        .filter(({ order }) => periodMatches(period, order.createdAt))
+        .filter(({ record }) => {
+          if (filter === "all") return true;
+          const status = record?.status ?? "Unpaid";
+          return status === filter;
+        })
+        .filter(({ order }) => {
+          if (!q) return true;
+          const emp = employees.find((e) => e.id === order.employeeId);
+          return (
+            order.orderNo.toLowerCase().includes(q) ||
+            (emp?.name.toLowerCase().includes(q) ?? false)
+          );
+        })
+    );
+  }, [payable, collections, employees, filter, query, batchNo, period]);
 
-  const billed = payable.reduce((s, o) => s + o.amount, 0);
-  const collected = payable.reduce((s, o) => s + collectedFor(o.orderNo), 0);
+  // Totalled over what the filters matched, not over everything payable. Cards that ignore the
+  // filters answer a question nobody asked: pick a batch and "Total billed" should be that
+  // batch's, or the filters are a way of looking at the table and not at the money.
+  const billed = rows.reduce((s, r) => s + r.order.amount, 0);
+  const collected = rows.reduce((s, r) => s + collectedFor(r.order.orderNo), 0);
   const outstanding = Math.max(0, billed - collected);
+  const filtered =
+    batchNo !== "all" || period.mode !== "all" || filter !== "all" || Boolean(query.trim());
 
   function openRecord(order: Order) {
     const existing = collections.find((c) => c.orderNo === order.orderNo);
@@ -135,30 +166,90 @@ function CollectionsPage() {
         <StatCard label="Due" value={outstanding} format={taka} />
       </div>
 
-      <FilterRow className="mt-6">
-        <Input
-          className={FILTER_SEARCH}
-          placeholder="Search order or employee"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-        <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className={FILTER_CONTROL}>
-            <SelectValue placeholder="Payment status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All payments</SelectItem>
-            <SelectItem value="Paid">Paid</SelectItem>
-            <SelectItem value="Partial">Partial</SelectItem>
-            <SelectItem value="Unpaid">Unpaid</SelectItem>
-          </SelectContent>
-        </Select>
-      </FilterRow>
+      {/* A labelled grid rather than the old bare row: with a batch, a date mode and its
+          dependent field alongside the status and the search, unlabelled controls stop saying
+          what they narrow. Same component every other filtered screen uses. */}
+      <FilterBar columns={4} className="mt-6">
+        <Field label="Batch No." htmlFor="col-batch">
+          <Select value={batchNo} onValueChange={setBatchNo}>
+            <SelectTrigger id="col-batch">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All batches</SelectItem>
+              {batchOptions.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  Nothing payable yet
+                </SelectItem>
+              ) : null}
+              {batchOptions.map((b) => (
+                <SelectItem key={b.batchNo} value={b.batchNo}>
+                  {b.batchNo} · {dateShort(b.productionDate)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <PeriodFilterFields value={period} onChange={setPeriod} years={years} idPrefix="col" />
+
+        <Field label="Payment status" htmlFor="col-status">
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger id="col-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All payments</SelectItem>
+              <SelectItem value="Paid">Paid</SelectItem>
+              <SelectItem value="Partial">Partial</SelectItem>
+              <SelectItem value="Unpaid">Unpaid</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field label="Search" htmlFor="col-search">
+          <Input
+            id="col-search"
+            placeholder="Order no. or employee"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </Field>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-border pt-3 sm:col-span-2 lg:col-span-4">
+          <p className="text-xs text-muted-foreground">
+            {periodLabel(period)}
+            {batchNo === "all" ? "" : ` · ${batchNo}`} · {rows.length} of {payable.length}{" "}
+            {payable.length === 1 ? "order" : "orders"}
+          </p>
+          {filtered ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setBatchNo("all");
+                setPeriod(EMPTY_PERIOD);
+                setFilter("all");
+                setQuery("");
+              }}
+            >
+              Clear filters
+            </Button>
+          ) : null}
+        </div>
+      </FilterBar>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (
           <div className="p-6">
-            <EmptyState title="Nothing to collect" hint="Delivered orders will appear here." />
+            <EmptyState
+              title={payable.length === 0 ? "Nothing to collect" : "No collections match"}
+              hint={
+                payable.length === 0
+                  ? "Confirmed orders will appear here."
+                  : "Try a wider date filter, or set Batch No. back to All."
+              }
+            />
           </div>
         ) : (
           <table className="w-full min-w-[780px] text-sm">

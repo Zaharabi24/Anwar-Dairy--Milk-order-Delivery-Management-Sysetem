@@ -34,6 +34,8 @@ import { PageHeader, EmptyState } from "@/components/page-header";
 import { OrderStatusBadge } from "@/components/status-badge";
 import { StatCard } from "@/components/stat-card";
 import { useAppData } from "@/context/app-data";
+import { useAuth } from "@/hooks/use-auth";
+import { hasPermission } from "@/lib/permissions";
 import { dateTime, litres, taka } from "@/lib/format";
 import type { CollectionRecord, Order, OrderStatus, PaymentMethod } from "@/lib/types";
 
@@ -72,6 +74,7 @@ function OrdersPage() {
     deliveryPoints,
     collections,
     upsertCollection,
+    deleteOrder,
     activeBatch,
     updateOrder,
     cancelOrder,
@@ -90,6 +93,11 @@ function OrdersPage() {
   const [approvingCancel, setApprovingCancel] = useState<string | null>(null);
   const [rejectingCancel, setRejectingCancel] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const { user } = useAuth();
+  // Removing an order is the Super Admin's. The server refuses anyone else either way; this is so
+  // a coordinator isn't shown a button that will only tell them no.
+  const canDelete = hasPermission(user?.roles ?? [], "orders.delete");
+  const [deleting, setDeleting] = useState<Order | null>(null);
   const [paying, setPaying] = useState<Order | null>(null);
   const [payAmount, setPayAmount] = useState(0);
   const [payMethod, setPayMethod] = useState<PaymentMethod>("Cash");
@@ -339,6 +347,11 @@ function OrdersPage() {
                             Confirm request
                           </Button>
                         ) : null}
+                        {canDelete ? (
+                          <Button variant="outline" size="sm" onClick={() => setDeleting(o)}>
+                            Delete
+                          </Button>
+                        ) : null}
                         {o.status === "Cancelled" || o.status === "Delivered" ? null : (
                           <Button
                             variant="outline"
@@ -499,6 +512,60 @@ function OrdersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Deleting is not cancelling. Cancelling leaves the order on the record, keeps its number
+          and still reconciles; this removes it, for a row that should not have existed. The
+          dialog says what goes with it, because the money already collected against an order is
+          not something to discover missing afterwards. */}
+      <AlertDialog open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {deleting?.orderNo}?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div>
+                <p>
+                  This cannot be undone. The order and everything recorded against it are removed:
+                </p>
+                <ul className="mt-2 list-disc space-y-1 pl-5">
+                  <li>
+                    {litres(deleting?.litres ?? 0)} booked, {taka(deleting?.amount ?? 0)} billed
+                  </li>
+                  <li>
+                    {deleting && paymentFor(deleting.orderNo)
+                      ? `the ${taka(paymentFor(deleting.orderNo)!.amountCollected)} collected against it, and its entry in Collections`
+                      : "its entry in Collections, once there is one"}
+                  </li>
+                  <li>the delivery coupon and any cancellation request</li>
+                </ul>
+                <p className="mt-2">
+                  The batch, the employee and every other order are untouched. To stop an order
+                  without erasing it, use Adjust &rarr; Decline Order instead.
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (!deleting) return;
+                const no = deleting.orderNo;
+                void deleteOrder(no).then((removed) => {
+                  if (!removed) return;
+                  toast.success(
+                    removed["collections"]
+                      ? `${no} deleted — ${taka(removed["collected"] ?? 0)} collected and ${removed["coupons"]} coupon(s) went with it.`
+                      : `${no} deleted.`,
+                  );
+                  setDeleting(null);
+                });
+              }}
+            >
+              Delete order
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={!!approvingCancel} onOpenChange={(v) => !v && setApprovingCancel(null)}>
         <AlertDialogContent>

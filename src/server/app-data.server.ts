@@ -381,6 +381,24 @@ async function releaseDeletedId(tx: Tx, id: string, actor: string): Promise<void
   }
 }
 
+/**
+ * Clears the in-app notices that name a record being deleted.
+ *
+ * Notifications carry no foreign key -- they are a title and a body written at the time, and the
+ * order or batch they are about appears only inside that prose. So deleting the record leaves
+ * "Payment outstanding on ORD-10001" sitting in somebody's list pointing at nothing, which is the
+ * orphan this removes.
+ *
+ * Matched on the identifier, which is safe because order and batch numbers are unique tokens: a
+ * notice mentioning ORD-10001 is about ORD-10001 and nothing else. Audit entries are deliberately
+ * left alone -- they are the record of what was done, including this deletion, and are not about
+ * the order so much as about the people acting on it.
+ */
+function forgetNotices(tx: Tx, reference: string) {
+  const needle = `%${reference}%`;
+  return tx`delete from notifications where title like ${needle} or body like ${needle}`;
+}
+
 function audit(
   tx: Tx,
   entry: { actor: string; action: string; record: string; oldValue: string; newValue: string },
@@ -544,6 +562,13 @@ export async function deleteBatch({ batchNo, confirmBatchNo }: DeleteBatchInput)
         (select count(*) from batch_emails where batch_no = ${batchNo})::int as emails,
         (select count(*) from batch_publications where batch_no = ${batchNo})::int as publishes
       `) as unknown as [Record<string, number>];
+
+    // Notices naming the batch, and any naming one of its orders, before the rows go.
+    const orderNos = (await tx<Row[]>`select order_no from orders where batch_no = ${batchNo}`).map(
+      (r) => r["order_no"] as string,
+    );
+    for (const no of orderNos) await forgetNotices(tx, no);
+    await forgetNotices(tx, batchNo);
 
     await tx`delete from orders where batch_no = ${batchNo}`;
     await tx`delete from batches where batch_no = ${batchNo}`;
@@ -791,6 +816,53 @@ export async function approveOrder({ orderNo }: OrderActionInput) {
       title: `Order ${orderNo} confirmed`,
       body: `${order.litres} L confirmed by the head office coordinator.`,
     });
+  });
+}
+
+/**
+ * Deletes one order and everything hanging off it. Super Admin only.
+ *
+ * Distinct from cancelling, which is the ordinary way to stop an order: a cancelled order stays on
+ * the record, keeps its number and still reconciles. This removes it, and is for a record that
+ * should not have existed -- a duplicate, a test, a booking made against the wrong person.
+ *
+ * The collection, the delivery coupon and any cancellation request go with it by cascade, because
+ * each is about this order and means nothing without it. The batch, the employee and every other
+ * order are untouched: nothing here is keyed on anything but this order number.
+ */
+export async function deleteOrder({ orderNo }: OrderActionInput) {
+  const user = await requirePermission("orders.delete");
+  return mutate(user, async (tx) => {
+    const [order] = await tx<Row[]>`
+      select o.order_no, o.batch_no, o.employee_id, o.litres, o.amount, o.status,
+             (select count(*) from collections c where c.order_no = o.order_no)::int as collections,
+             (select coalesce(sum(c.amount_collected), 0) from collections c
+               where c.order_no = o.order_no) as collected,
+             (select count(*) from delivery_records d where d.order_no = o.order_no)::int as coupons,
+             (select count(*) from cancellation_requests r
+               where r.order_no = o.order_no)::int as requests
+      from orders o where o.order_no = ${orderNo} for update`;
+    if (!order) throw new AppError(`Order ${orderNo} doesn't exist.`);
+
+    await forgetNotices(tx, orderNo);
+    await tx`delete from orders where order_no = ${orderNo}`;
+
+    await audit(tx, {
+      actor: user.fullName,
+      action: "Deleted order",
+      record: orderNo,
+      oldValue:
+        `${order["status"] as string} · ${order["litres"]} L, ${taka(Number(order["amount"]))} · ` +
+        `${order["collections"]} collection(s) totalling ${taka(Number(order["collected"]))}, ` +
+        `${order["coupons"]} coupon(s)`,
+      newValue: "Deleted",
+    });
+    return {
+      collections: Number(order["collections"]),
+      collected: Number(order["collected"]),
+      coupons: Number(order["coupons"]),
+      requests: Number(order["requests"]),
+    };
   });
 }
 

@@ -20,6 +20,11 @@ export const deleteBatchFn = createServerFn({ method: "POST" })
   .validator(schema.deleteBatchInput)
   .handler(async ({ data }) => (await server()).deleteBatch(data));
 
+/** Super Admin only, checked in the server module. Takes the order and everything under it. */
+export const deleteOrderFn = createServerFn({ method: "POST" })
+  .validator(schema.orderActionInput)
+  .handler(async ({ data }) => (await server()).deleteOrder(data));
+
 export const createBatchFn = createServerFn({ method: "POST" })
   .validator(schema.createBatchInput)
   .handler(async ({ data }) => (await server()).createBatch(data));
