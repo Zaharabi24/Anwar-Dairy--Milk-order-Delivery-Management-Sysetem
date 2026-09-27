@@ -16,7 +16,7 @@ import { EmployeeLoginDialog, type LoginIntent } from "@/components/auth/Employe
 import { LiveBatchCard } from "@/components/landing/LiveBatchCard";
 import { publicBatchStatusFn } from "@/functions/public.functions";
 import { Button } from "@/components/ui/button";
-import { ALLOWED_EMAIL_DOMAIN, ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
+import { ROLE_HOME, ROLE_HOME_LABEL } from "@/lib/auth-constants";
 import type { AuthUser } from "@/lib/auth-types";
 
 export const Route = createFileRoute("/")({
@@ -357,7 +357,7 @@ function Landing() {
         <Stat value={1} label="Batch, fully reconciled daily" />
       </section>
 
-      <SiteFooter auth={auth} />
+      <SiteFooter />
 
       <EmployeeLoginDialog intent={loginIntent} onClose={() => setLoginIntent(null)} />
     </div>
@@ -370,131 +370,42 @@ function Landing() {
  * made a logo click look like a sign-out. Everything that isn't a link is something the system can
  * vouch for, such as the company domain, rather than contact details we don't hold on record.
  */
-function SiteFooter({ auth }: { auth: AuthUser | null }) {
+/**
+ * The footer, which is now the mark and what the product is.
+ *
+ * It used to carry four columns -- Platform, Your account, Access -- and a rule of its own at the
+ * bottom. All of it has gone in favour of this: who makes the milk, what is promised about how it
+ * is made, and how to keep it. The nav links duplicated sections a scroll away, and the account
+ * column repeated what the header already offers to whoever is signed in.
+ *
+ * The year is read from the clock rather than written in, so the line does not quietly go stale
+ * in January.
+ */
+function SiteFooter() {
   return (
     <footer className="border-t border-border bg-card">
       <div className="mx-auto max-w-6xl px-5 py-10 sm:py-14">
-        {/* Below sm the two short link columns sit side by side; the brand and the wordier
-            Access column span both. One column per block made the footer a long, empty scroll. */}
-        <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-2 sm:gap-10 md:grid-cols-[1.6fr_1fr_1fr_1.2fr]">
-          <div className="col-span-2 sm:col-span-1">
-            <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
-              {/* The tagline takes a line of its own, which is how it was written. Same size and
-                  colour as the sentence under it -- the break is the only distinction, because
-                  emphasis was not asked for. */}
-              <span className="block">Fresh From Our Farm. Whole By Nature.</span>
-              Fresh Whole Milk produced at our Gazaria dairy facility with attention to cow care,
-              feed quality, farm hygiene and careful handling.
-            </p>
-            <p className="mt-5 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              An Anwar Agro Farms system
-            </p>
-          </div>
+        <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
 
-          <FooterNav title="Platform">
-            <li>
-              <a href="#how-it-works" className={FOOTER_LINK}>
-                How it works
-              </a>
-            </li>
-            <li>
-              <a href="#for-your-team" className={FOOTER_LINK}>
-                For your team
-              </a>
-            </li>
-          </FooterNav>
+        {/* Uppercased in the stylesheet rather than typed in capitals, so a screen reader says
+            the name instead of spelling it. */}
+        <p className="mt-4 text-sm font-semibold uppercase tracking-wider text-foreground">
+          Anwar Organic
+        </p>
 
-          <FooterNav title="Your account">
-            {auth?.withoutAccount ? (
-              // No account to link to, so the column offers the two things the link does allow.
-              <>
-                <li>
-                  <Link to="/app/order/new" className={FOOTER_LINK}>
-                    Book Milk
-                  </Link>
-                </li>
-                <li>
-                  <Link to="/app/my-orders" className={FOOTER_LINK}>
-                    My orders
-                  </Link>
-                </li>
-              </>
-            ) : auth ? (
-              <>
-                <li>
-                  <Link to={ROLE_HOME[auth.activeRole]} className={FOOTER_LINK}>
-                    {ROLE_HOME_LABEL[auth.activeRole]}
-                  </Link>
-                </li>
-                {auth.roles.includes("employee") ? (
-                  <li>
-                    <Link to="/app/my-orders" className={FOOTER_LINK}>
-                      My orders
-                    </Link>
-                  </li>
-                ) : null}
-                <li>
-                  <Link to="/app/profile" className={FOOTER_LINK}>
-                    Profile
-                  </Link>
-                </li>
-              </>
-            ) : (
-              <>
-                <li>
-                  <Link to="/book" search={{ token: "" }} className={FOOTER_LINK}>
-                    Book Milk
-                  </Link>
-                </li>
-                {/* The one door left, and it is deliberately quiet. Employees have no account to
-                    sign in to, but the operators, coordinators and admins who run the platform
-                    do, and taking away the only link they can see would leave them typing the
-                    address from memory. */}
-                <li>
-                  <Link to="/login" className={FOOTER_LINK}>
-                    Staff sign in
-                  </Link>
-                </li>
-              </>
-            )}
-          </FooterNav>
-
-          <FooterNav title="Access" className="col-span-2 sm:col-span-1">
-            <li className="text-muted-foreground">
-              Company accounts only, at{" "}
-              <span className="font-medium text-foreground">@{ALLOWED_EMAIL_DOMAIN}</span>
-            </li>
-            <li className="text-muted-foreground">
-              Bookings close at the cut-off shown on each batch.
-            </li>
-          </FooterNav>
+        <div className="mt-3 max-w-xl space-y-3 text-sm leading-relaxed text-muted-foreground">
+          <p>Fresh Whole Milk from Anwar Organic Dairy Farm, Gazaria.</p>
+          <p>
+            Our commitment is to provide fresh milk through responsible farming, careful cow care
+            and hygienic handling practices.
+          </p>
+          <p>Keep refrigerated and boil thoroughly before consumption.</p>
         </div>
 
-        <div className="mt-10 flex flex-col-reverse items-center gap-3 border-t border-border pt-6 text-center text-sm text-muted-foreground sm:mt-12 sm:flex-row sm:justify-between sm:text-left">
-          <p>© {new Date().getFullYear()} Anwar Group of Industries. All rights reserved.</p>
-          <p>Anwar Agro Farms</p>
-        </div>
+        <p className="mt-10 border-t border-border pt-6 text-sm text-muted-foreground sm:mt-12">
+          © {new Date().getFullYear()} Anwar Organic | An Anwar Group Initiative
+        </p>
       </div>
     </footer>
-  );
-}
-
-const FOOTER_LINK = "text-muted-foreground transition-colors hover:text-foreground";
-
-function FooterNav({
-  title,
-  className = "",
-  children,
-}: {
-  title: string;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className={className}>
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      <ul className="mt-4 space-y-3 text-sm">{children}</ul>
-    </div>
   );
 }

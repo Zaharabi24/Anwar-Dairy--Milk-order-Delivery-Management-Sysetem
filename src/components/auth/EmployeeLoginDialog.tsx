@@ -1,4 +1,4 @@
-import { useRouter } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -136,9 +136,16 @@ export function EmployeeLoginDialog({
           </DialogFooter>
         </form>
 
+        {/* This used to say "from the link in the footer", which was true until the footer was
+            cut back to the brand and the storage advice. It is the same door, named here instead:
+            taking away the only route staff can see would leave them typing the address from
+            memory. */}
         <p className="text-xs text-muted-foreground">
-          Not on the list? A System Admin can add you to the Employee Database. Staff accounts sign
-          in from the link in the footer.
+          Not on the list? A System Admin can add you to the Employee Database. Staff accounts{" "}
+          <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
+            sign in with a password
+          </Link>
+          .
         </p>
       </DialogContent>
     </Dialog>
