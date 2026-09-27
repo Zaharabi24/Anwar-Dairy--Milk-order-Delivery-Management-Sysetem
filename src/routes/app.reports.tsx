@@ -106,15 +106,17 @@ function ReportsPage() {
   const [batchRange, setBatchRange] = useState<string>("all");
 
   const { invalid } = periodState(period);
-  const years = useMemo(() => yearsIn(batches.map((b) => b.productionDate)), [batches]);
-
   /**
-   * The batch numbers the Batch No. dropdown offers: every batch that has been published.
+   * What this report is about: every batch that has been published.
    *
-   * Read from the batches the page already holds rather than fetched, which is what makes it keep
-   * itself up to date -- publishing a batch moves it off Draft, the snapshot refreshes, and the
-   * number is in the list. A draft is left out on purpose: nobody has been told about it, so there
-   * is nothing to report on yet.
+   * A draft is milk nobody has been told about. It cannot have been ordered, because the booking
+   * link is only mailed on publish -- so counting one adds its produced and sealed litres to the
+   * totals with nothing against them. That is what made the figures look wrong: an operator
+   * drafting tomorrow's batch this afternoon added four hundred litres of production and no
+   * sales, and sell-through fell through the floor on milk that had not been offered to anybody.
+   *
+   * Read from the batches the page already holds rather than fetched, so publishing one moves it
+   * into the report as the snapshot refreshes.
    */
   const publishedBatches = useMemo(() => batches.filter((b) => b.status !== "Draft"), [batches]);
 
@@ -125,13 +127,18 @@ function ReportsPage() {
    * the ten most recent, not the ten most recent overall, which would ignore the date filter it
    * is meant to be narrowing.
    */
+  const years = useMemo(
+    () => yearsIn(publishedBatches.map((b) => b.productionDate)),
+    [publishedBatches],
+  );
+
   const selection = useMemo(() => {
     // Batch No. names one batch, so it answers on its own: the dates and the range are there to
     // find a batch, and once one has been named there is nothing left for them to narrow.
-    if (batchNo !== "all") return batches.filter((b) => b.batchNo === batchNo);
-    const matched = batches.filter((b) => periodMatches(period, b.productionDate));
+    if (batchNo !== "all") return publishedBatches.filter((b) => b.batchNo === batchNo);
+    const matched = publishedBatches.filter((b) => periodMatches(period, b.productionDate));
     return batchRange === "all" ? matched : matched.slice(0, Number(batchRange) || matched.length);
-  }, [batches, period, batchNo, batchRange]);
+  }, [publishedBatches, period, batchNo, batchRange]);
 
   const selectedBatchNos = useMemo(
     () => new Set(selection.map((batch) => batch.batchNo)),
