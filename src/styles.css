@@ -403,3 +403,84 @@
     transition-duration: 0.001ms !important;
   }
 }
+/*
+ * Printed order list (Orders page, "Print order"). The sheet is a direct child of <body>; while
+ * one is on the page, printing hides everything else, so the paper carries the list and nothing
+ * of the app around it. Black on white whatever the theme: this is paper, not a screen.
+ */
+.print-sheet {
+  display: none;
+}
+
+@page orders {
+  size: A4 landscape;
+  margin: 10mm;
+}
+
+@media print {
+  body:has(> .print-sheet) > *:not(.print-sheet) {
+    display: none !important;
+  }
+  html:has(body > .print-sheet),
+  body:has(> .print-sheet) {
+    background: white !important;
+  }
+
+  .print-sheet {
+    display: block;
+    page: orders;
+    color: black;
+    background: white;
+    font-size: 9pt;
+    line-height: 1.3;
+  }
+
+  .print-sheet-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 4mm;
+  }
+  .print-sheet-head h1 {
+    font-size: 14pt;
+    font-weight: 700;
+  }
+  .print-sheet-meta {
+    text-align: right;
+  }
+
+  .print-sheet table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .print-sheet thead {
+    display: table-header-group;
+  }
+  /* The total once, after the last row, rather than repeated at the foot of every page. */
+  .print-sheet tfoot {
+    display: table-row-group;
+  }
+  .print-sheet tr {
+    break-inside: avoid;
+  }
+  .print-sheet th,
+  .print-sheet td {
+    border: 0.5pt solid color-mix(in srgb, currentColor 40%, transparent);
+    padding: 1.5mm 2mm;
+    text-align: left;
+    vertical-align: top;
+  }
+  .print-sheet th,
+  .print-sheet tfoot td {
+    font-weight: 700;
+  }
+  .print-sheet .num {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .print-sheet .sub {
+    display: block;
+    font-size: 8pt;
+    opacity: 0.7;
+  }
+}

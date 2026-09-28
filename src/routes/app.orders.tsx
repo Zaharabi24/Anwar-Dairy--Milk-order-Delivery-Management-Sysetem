@@ -1,7 +1,9 @@
 import { Field, FilterRow } from "@/components/ui/field";
 import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
+import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,6 +39,7 @@ import { useAppData } from "@/context/app-data";
 import { useAuth } from "@/hooks/use-auth";
 import { hasPermission } from "@/lib/permissions";
 import { dateTime, litres, taka } from "@/lib/format";
+import { orderStatusLabels } from "@/lib/order-status";
 import type { CollectionRecord, Order, OrderStatus, PaymentMethod } from "@/lib/types";
 
 const paymentMethods: PaymentMethod[] = ["Cash", "bKash", "Payroll deduction"];
@@ -176,6 +179,27 @@ function OrdersPage() {
     .reduce((s, o) => s + o.litres, 0);
   const totalValue = rows.filter((o) => o.status !== "Cancelled").reduce((s, o) => s + o.amount, 0);
 
+  /**
+   * Prints the list as it is filtered on screen. The page itself stays hidden; what prints is the
+   * sheet below, which has no buttons and fits A4 landscape. The title becomes the file name when
+   * the browser saves it as a PDF.
+   */
+  function printOrders() {
+    const previous = document.title;
+    const stamp = new Date().toISOString().slice(0, 10);
+    document.title = `Orders ${activeBatch?.batchNo ?? "all"} ${stamp}`;
+    window.print();
+    document.title = previous;
+  }
+
+  const printFilters = [
+    status === "all" ? null : `Status: ${orderStatusLabels[status as OrderStatus]}`,
+    point === "all"
+      ? null
+      : `Delivery point: ${deliveryPoints.find((p) => p.id === point)?.name ?? point}`,
+    query.trim() ? `Search: "${query.trim()}"` : null,
+  ].filter((f): f is string => f !== null);
+
   return (
     <div className="mx-auto w-full max-w-6xl">
       <PageHeader
@@ -227,6 +251,13 @@ function OrdersPage() {
           </SelectContent>
         </Select>
       </FilterRow>
+
+      <div className="mt-4 flex">
+        <Button variant="outline" size="sm" disabled={rows.length === 0} onClick={printOrders}>
+          <Printer />
+          Print order
+        </Button>
+      </div>
 
       <div className="mt-4 overflow-x-auto rounded-xl border border-border bg-card">
         {rows.length === 0 ? (
@@ -375,6 +406,29 @@ function OrdersPage() {
           </table>
         )}
       </div>
+
+      <OrdersPrintSheet
+        batchNo={activeBatch?.batchNo}
+        filters={printFilters}
+        totalLitres={totalLitres}
+        totalValue={totalValue}
+        rows={rows.map((o) => {
+          const emp = employees.find((e) => e.id === o.employeeId);
+          return {
+            orderNo: o.orderNo,
+            name: emp?.name ?? o.employeeId,
+            employeeId: o.employeeId,
+            department: emp?.department || "—",
+            phone: emp?.phone || "—",
+            point: deliveryPoints.find((p) => p.id === o.deliveryPointId)?.name ?? "—",
+            litres: o.litres,
+            amount: o.amount,
+            placed: dateTime(o.createdAt),
+            status: orderStatusLabels[o.status],
+            payment: paymentStatus(o) ?? (o.status === "Cancelled" ? "—" : "Not due yet"),
+          };
+        })}
+      />
 
       <Dialog open={!!paying} onOpenChange={(v) => !v && setPaying(null)}>
         <DialogContent>
@@ -625,6 +679,107 @@ function OrdersPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+interface PrintRow {
+  orderNo: string;
+  name: string;
+  employeeId: string;
+  department: string;
+  phone: string;
+  point: string;
+  litres: number;
+  amount: number;
+  placed: string;
+  status: string;
+  payment: string;
+}
+
+/**
+ * The order list as paper. Rendered straight into <body> so the print stylesheet can hide the
+ * whole app around it (`.print-sheet` in styles.css); on screen it is never shown. Mounted only in
+ * the browser, since the portal needs `document`.
+ */
+function OrdersPrintSheet({
+  batchNo,
+  filters,
+  totalLitres,
+  totalValue,
+  rows,
+}: {
+  batchNo: string | undefined;
+  filters: string[];
+  totalLitres: number;
+  totalValue: number;
+  rows: PrintRow[];
+}) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  if (!mounted) return null;
+
+  return createPortal(
+    <div className="print-sheet">
+      <header className="print-sheet-head">
+        <div>
+          <h1>Anwar Organic — Orders</h1>
+          <p>{batchNo ? `Batch ${batchNo}` : "All orders"}</p>
+          {filters.length ? <p>{filters.join(" · ")}</p> : null}
+        </div>
+        <div className="print-sheet-meta">
+          <p>Printed {dateTime(new Date().toISOString())}</p>
+          <p>
+            {rows.length} orders · {litres(totalLitres)} · {taka(totalValue)}
+          </p>
+        </div>
+      </header>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Order</th>
+            <th>Employee</th>
+            <th>Department</th>
+            <th>Phone</th>
+            <th>Point</th>
+            <th className="num">Litres</th>
+            <th className="num">Amount</th>
+            <th>Placed</th>
+            <th>Status</th>
+            <th>Payment</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={r.orderNo}>
+              <td>{i + 1}</td>
+              <td>{r.orderNo}</td>
+              <td>
+                {r.name}
+                <span className="sub">{r.employeeId}</span>
+              </td>
+              <td>{r.department}</td>
+              <td>{r.phone}</td>
+              <td>{r.point}</td>
+              <td className="num">{litres(r.litres)}</td>
+              <td className="num">{taka(r.amount)}</td>
+              <td>{r.placed}</td>
+              <td>{r.status}</td>
+              <td>{r.payment}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colSpan={6}>Total (excluding cancelled)</td>
+            <td className="num">{litres(totalLitres)}</td>
+            <td className="num">{taka(totalValue)}</td>
+            <td colSpan={3} />
+          </tr>
+        </tfoot>
+      </table>
+    </div>,
+    document.body,
   );
 }
 
