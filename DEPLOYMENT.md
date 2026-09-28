@@ -232,7 +232,7 @@ holds no data.
 | `MAILPIT_UI_AUTH` | — | `username:password` sign-in for the Mailpit inbox. **Set it** — the inbox shows invitation and password links |
 | `MAIL_FROM` | `no-reply@anwargroup.net` | From address for SMTP |
 | `REDIS_URL` | `redis://redis:6379` | Batch mail queue — see [The batch mail queue](#the-batch-mail-queue). Unset it to send in-process instead |
-| `MAIL_RATE_PER_MINUTE` | `25` | Messages a minute, across the whole app. Microsoft 365 refuses above 30 per account |
+| `MAIL_RATE_PER_MINUTE` | `25` | Messages a minute, across the whole app. Microsoft 365 refuses above 30 per account. An on-premises Exchange often allows fewer: if the log shows `421 4.4.2 ... submission rate`, set this below the server's limit (e.g. `5`) |
 | `SEED_DEMO_DATA` | `false` | **Keep `false` in production.** Demo accounts share a known password |
 | `DEMO_PASSWORD` | `Demo@12345` | Only used with demo data |
 | `SESSION_TTL_DAYS` | `7` | Days of **inactivity** before a session lapses. Each request renews it, so someone using the app is never signed out mid-session. Leave it unset rather than blank — a blank value is ignored (with a warning in the log) and 7 is used |

@@ -54,8 +54,12 @@ export const MAIL_INTERVAL_MS = Math.ceil(60_000 / MAIL_RATE_PER_MINUTE);
  * password reset arriving mid-batch cannot push the account over the line. Setting both to the
  * same number made them two brakes in series -- the queue waited its gap, then nodemailer waited
  * again inside the send -- and the result was slower than either was asking for.
+ *
+ * A server stricter than 365 lowers the ceiling too: with MAIL_RATE_PER_MINUTE=5 for an
+ * on-premises Exchange that allows 5, a guard left at 30 would let a burst of password resets
+ * through that the server then refuses.
  */
-export const SMTP_CEILING_PER_MINUTE = 30;
+export const SMTP_CEILING_PER_MINUTE = Math.min(30, MAIL_RATE_PER_MINUTE);
 
 /** Attempts before an address is given up on. Covers a throttle that lasts several minutes. */
 export const MAX_ATTEMPTS = 5;
