@@ -188,6 +188,51 @@
   --milk-shade: oklch(0.945 0.014 92);
   --glass-edge: oklch(1 0 0 / 0.55);
   --glass-body: oklch(1 0 0 / 0.1);
+  --glass-outline: oklch(0.35 0.04 155 / 0.22);
+
+  /* The farm behind the glass, out of focus: pale sky, pasture, a dark tree line. */
+  --meadow-sky-top: oklch(0.955 0.012 200);
+  --meadow-sky-bottom: oklch(0.94 0.03 110);
+  --meadow-hill-far: oklch(0.8 0.08 128);
+  --meadow-hill-near: oklch(0.7 0.1 132);
+  --meadow-grass: oklch(0.66 0.11 136);
+  --meadow-grass-deep: oklch(0.45 0.08 148);
+
+  /* The wooden table the glass stands on. */
+  --table-top: oklch(0.8 0.055 70);
+  --table-edge: oklch(0.6 0.07 55);
+  --table-grain: oklch(0.52 0.06 50);
+
+  /* Light and shade inside the scene, the crest of the milk, and the shadow in its curve. */
+  --scene-light: oklch(1 0 0);
+  --scene-dark: oklch(0.24 0.03 60);
+  --milk-top: oklch(0.992 0.004 95);
+  --milk-deep: oklch(0.86 0.018 90);
+
+  /* The frosted card the batch sits in, and the pills laid over the scene. */
+  --glass-card-top: oklch(1 0 0 / 0.78);
+  --glass-card-bottom: oklch(1 0 0 / 0.5);
+  --glass-card-border: oklch(1 0 0 / 0.75);
+  --glass-card-shadow: oklch(0.38 0.07 156 / 0.32);
+  --glass-pill: oklch(1 0 0 / 0.72);
+}
+
+/* Evening meadow for dark mode, so the scene does not glare against a dark page. */
+.dark {
+  --table-top: oklch(0.45 0.05 60);
+  --table-edge: oklch(0.3 0.04 50);
+  --table-grain: oklch(0.25 0.03 50);
+  --glass-card-top: oklch(0.25 0.04 265 / 0.75);
+  --glass-card-bottom: oklch(0.2 0.04 265 / 0.5);
+  --glass-card-border: oklch(1 0 0 / 0.12);
+  --glass-card-shadow: oklch(0 0 0 / 0.6);
+  --glass-pill: oklch(0.2 0.04 265 / 0.7);
+  --meadow-sky-top: oklch(0.3 0.04 250);
+  --meadow-sky-bottom: oklch(0.42 0.05 60);
+  --meadow-hill-far: oklch(0.42 0.06 145);
+  --meadow-hill-near: oklch(0.36 0.07 145);
+  --meadow-grass: oklch(0.45 0.09 142);
+  --meadow-grass-deep: oklch(0.32 0.07 145);
 }
 
 /* The surface drifts sideways; one wavelength of travel, so the loop is seamless. */
@@ -209,6 +254,104 @@
   50% {
     transform: translateY(-1.5px);
   }
+}
+
+/* The milk tilts a degree or so each way around the middle of its surface, like a glass just set down. */
+@keyframes milk-slosh {
+  0%,
+  100% {
+    transform: rotate(-1.4deg) translateY(0.5px);
+  }
+  50% {
+    transform: rotate(1.4deg) translateY(-1px);
+  }
+}
+
+.scene-slosh {
+  transform-box: view-box;
+  transform-origin: 160px 256px;
+  animation: milk-slosh 4.6s ease-in-out infinite;
+}
+
+@keyframes bubble-twinkle {
+  0%,
+  100% {
+    opacity: 0.9;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.scene-bubble {
+  animation: bubble-twinkle 3.4s ease-in-out infinite;
+}
+
+/* Light sweeps across the glass, then rests off to the side before the next pass. */
+@keyframes glass-glint {
+  0% {
+    transform: translateX(0);
+  }
+  40%,
+  100% {
+    transform: translateX(210px);
+  }
+}
+
+.scene-glint {
+  animation: glass-glint 7s ease-in-out infinite;
+}
+
+/* Out-of-focus specks of light float a little and brighten and dim, as through a lens. */
+@keyframes bokeh-drift {
+  0%,
+  100% {
+    transform: translate(0, 0);
+    opacity: 0.25;
+  }
+  50% {
+    transform: translate(10px, -8px);
+    opacity: 0.6;
+  }
+}
+
+.scene-bokeh {
+  animation: bokeh-drift 9s ease-in-out infinite;
+}
+
+/* Frosted glass: the hero shows through, blurred, under a soft white sheen. */
+@utility glass-card {
+  background: linear-gradient(145deg, var(--glass-card-top), var(--glass-card-bottom));
+  border: 1px solid var(--glass-card-border);
+  box-shadow:
+    inset 0 1px 0 0 var(--glass-card-border),
+    0 40px 80px -36px var(--glass-card-shadow),
+    0 16px 32px -20px var(--glass-card-shadow);
+  backdrop-filter: blur(22px) saturate(1.4);
+  -webkit-backdrop-filter: blur(22px) saturate(1.4);
+}
+
+@utility glass-pill {
+  background: var(--glass-pill);
+  border: 1px solid var(--glass-card-border);
+  box-shadow: 0 6px 16px -10px var(--glass-card-shadow);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
+}
+
+/* The soft colour washes behind the hero drift slowly, so the page feels alive without moving much. */
+@keyframes blob-float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(24px, -18px) scale(1.08);
+  }
+}
+
+@utility hero-blob {
+  animation: blob-float 16s ease-in-out infinite;
 }
 
 /* The count lifts into place when it changes, so a new number is noticed. */
@@ -249,7 +392,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee-track {
+  .marquee-track,
+  .hero-blob {
     animation: none;
   }
   *,
