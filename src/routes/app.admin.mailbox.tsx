@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Bold, Check, Loader2, Mail, Users } from "lucide-react";
+import { AlertTriangle, Check, Loader2, Mail, Paperclip, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { MailEditor } from "@/components/mail-editor";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import { dateShort, timeShort } from "@/lib/format";
 import type { CampaignEmail, MailboxAudience, RecipientStatus } from "@/lib/mailbox-types";
+import { isBlockedFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "@/lib/mailbox.schemas";
 import type { Employee } from "@/lib/types";
 
 export const Route = createFileRoute("/app/admin/mailbox")({
@@ -143,49 +144,37 @@ function Compose({ allRecipients }: { allRecipients: number }) {
   const { employees } = useAppData();
   const [audience, setAudience] = useState<MailboxAudience>("selected");
   const [subject, setSubject] = useState("");
+  // The editor's HTML, or "" when nothing is written. The server cleans it before it is kept.
   const [body, setBody] = useState("");
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Remounting the editor is how it is emptied after a send.
+  const [editorKey, setEditorKey] = useState(0);
+  const [files, setFiles] = useState<File[]>([]);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const filesBytes = files.reduce((sum, f) => sum + f.size, 0);
 
   /**
-   * Bold the selection, or unbold it if it is already bold.
-   *
-   * The markers are written into the text rather than held as formatting state, so what is stored,
-   * what the preview renders and what the history shows are all the one string. That is also why
-   * unbolding has to look both ways: the marks may sit inside the selection, if the whole
-   * `**word**` was selected, or just outside it, if only the word was.
-   *
-   * With nothing selected it opens an empty pair and puts the caret between them, which is what
-   * pressing Bold before typing is asking for.
+   * Adds files, turning away the ones that could never be sent: a kind mail servers block, one too
+   * many, or more than the size limit all together. The server checks all of this again.
    */
-  function toggleBold() {
-    const el = bodyRef.current;
-    if (!el) return;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const before = body.slice(0, start);
-    const selected = body.slice(start, end);
-    const after = body.slice(end);
-
-    const restore = (from: number, to: number) => {
-      // After React has written the new value back into the box.
-      requestAnimationFrame(() => {
-        el.focus();
-        el.setSelectionRange(from, to);
-      });
-    };
-
-    if (selected.length >= 4 && selected.startsWith("**") && selected.endsWith("**")) {
-      setBody(before + selected.slice(2, -2) + after);
-      restore(start, end - 4);
-      return;
+  function addFiles(incoming: File[]) {
+    let next = [...files];
+    let bytes = filesBytes;
+    for (const file of incoming) {
+      if (isBlockedFile(file.name)) {
+        toast.error(`${file.name} can't be attached: mail servers block that kind of file.`);
+      } else if (next.length >= MAX_ATTACHMENTS) {
+        toast.error(`Attach at most ${MAX_ATTACHMENTS} files.`);
+        break;
+      } else if (bytes + file.size > MAX_ATTACHMENT_BYTES) {
+        toast.error(
+          `${file.name} would take the attachments over ${megabytes(MAX_ATTACHMENT_BYTES)}.`,
+        );
+      } else if (!next.some((f) => f.name === file.name && f.size === file.size)) {
+        next = [...next, file];
+        bytes += file.size;
+      }
     }
-    if (before.endsWith("**") && after.startsWith("**")) {
-      setBody(before.slice(0, -2) + selected + after.slice(2));
-      restore(start - 2, end - 2);
-      return;
-    }
-    setBody(`${before}**${selected}**${after}`);
-    restore(start + 2, end + 2);
+    setFiles(next);
   }
   const [query, setQuery] = useState("");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
@@ -216,7 +205,7 @@ function Compose({ allRecipients }: { allRecipients: number }) {
   }, [reachable, query]);
 
   const recipientCount = audience === "all" ? allRecipients : chosen.size;
-  const canSend = subject.trim().length > 0 && body.trim().length > 0 && recipientCount > 0;
+  const canSend = subject.trim().length > 0 && body.length > 0 && recipientCount > 0;
 
   function toggle(id: string) {
     setChosen((prev) => {
@@ -230,7 +219,12 @@ function Compose({ allRecipients }: { allRecipients: number }) {
   const openPreview = useCallback(async () => {
     try {
       const { html } = await previewCampaignFn({
-        data: { subject: subject.trim() || "(no subject)", body, sampleName: "Employee name" },
+        data: {
+          subject: subject.trim() || "(no subject)",
+          body,
+          bodyFormat: "html",
+          sampleName: "Employee name",
+        },
       });
       setPreviewHtml(html);
     } catch {
@@ -244,7 +238,15 @@ function Compose({ allRecipients }: { allRecipients: number }) {
       const result = await sendCampaignFn({
         data: {
           subject: subject.trim(),
-          body: body.trim(),
+          body,
+          bodyFormat: "html",
+          attachments: await Promise.all(
+            files.map(async (file) => ({
+              filename: file.name,
+              contentType: file.type || "application/octet-stream",
+              data: await toBase64(file),
+            })),
+          ),
           audience,
           employeeIds: audience === "selected" ? [...chosen] : [],
         },
@@ -254,6 +256,8 @@ function Compose({ allRecipients }: { allRecipients: number }) {
       setSent({ recipients: result.recipients, durable: result.durable });
       setSubject("");
       setBody("");
+      setEditorKey((k) => k + 1);
+      setFiles([]);
       setChosen(new Set());
       setAudience("selected");
       toast.success(`Queued for ${result.recipients} recipients.`);
@@ -302,53 +306,66 @@ function Compose({ allRecipients }: { allRecipients: number }) {
             label="Message"
             htmlFor="mail-body"
             required
-            hint="Leave a blank line between paragraphs. Sent on the official Anwar Organic template, addressed to each person by name."
+            hint="Format it like any email: bold, italic, underline, lists and links. Sent on the official Anwar Organic template, addressed to each person by name."
           >
-            <div className="space-y-2">
-              {/* A toolbar of one. The box stays a plain textarea -- what is typed is what is
-                  stored, and what the history shows -- and the button only writes the markers, so
-                  there is no editor state to keep in step with the text. */}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={toggleBold}
-                  title="Bold (Ctrl+B)"
-                >
-                  <Bold className="size-4" aria-hidden="true" />
-                  Bold
-                </Button>
-                <p className="text-xs text-muted-foreground">
-                  Select words and press Bold, or wrap them in{" "}
-                  <code className="rounded bg-secondary px-1 py-0.5">**two asterisks**</code>.
-                </p>
-              </div>
-              <Textarea
-                id="mail-body"
-                // Field attaches this to whatever single child it is given, and that is now the
-                // wrapper holding the toolbar, not the control. Named here so the hint stays tied
-                // to the box a screen reader lands in.
-                aria-describedby="mail-body-description"
-                ref={bodyRef}
-                rows={12}
-                value={body}
-                maxLength={20_000}
-                placeholder={
-                  "Write your message here.\n\nLeave a blank line to start a new paragraph."
-                }
-                onChange={(e) => setBody(e.target.value)}
-                onKeyDown={(e) => {
-                  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "b") {
-                    e.preventDefault();
-                    toggleBold();
-                  }
+            <MailEditor
+              key={editorKey}
+              id="mail-body"
+              // Field attaches this to whatever single child it is given, which is the editor's
+              // wrapper, not the box itself. Named here so the hint stays tied to the box a
+              // screen reader lands in.
+              describedBy="mail-body-description"
+              placeholder="Write your message here."
+              onChange={setBody}
+              onDropFiles={addFiles}
+            />
+          </Field>
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" size="sm" onClick={() => fileInput.current?.click()}>
+                <Paperclip className="size-4" />
+                Attach files
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Up to {MAX_ATTACHMENTS} files, {megabytes(MAX_ATTACHMENT_BYTES)} in all. Every
+                recipient gets them. You can also drop files on the message.
+              </p>
+              <input
+                ref={fileInput}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => {
+                  addFiles([...(e.target.files ?? [])]);
+                  e.target.value = "";
                 }}
               />
             </div>
-          </Field>
+            {files.length ? (
+              <ul className="flex flex-wrap gap-2">
+                {files.map((file) => (
+                  <li
+                    key={`${file.name}-${file.size}`}
+                    className="flex items-center gap-2 rounded-md border border-border bg-secondary px-2 py-1 text-xs"
+                  >
+                    <Paperclip className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    <span className="max-w-56 truncate font-medium">{file.name}</span>
+                    <span className="text-muted-foreground">{megabytes(file.size)}</span>
+                    <button
+                      type="button"
+                      className="rounded text-muted-foreground hover:text-foreground"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => setFiles(files.filter((f) => f !== file))}
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
           <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" onClick={() => void openPreview()} disabled={!body.trim()}>
+            <Button variant="outline" onClick={() => void openPreview()} disabled={!body}>
               <Mail className="size-4" />
               Preview
             </Button>
@@ -466,11 +483,18 @@ function Compose({ allRecipients }: { allRecipients: number }) {
           </div>
           <ul className="space-y-2 text-sm">
             <Ready done={subject.trim().length > 0}>Subject written</Ready>
-            <Ready done={body.trim().length > 0}>Message written</Ready>
+            <Ready done={body.length > 0}>Message written</Ready>
             <Ready done={recipientCount > 0}>
               {audience === "all" ? "Everyone in the directory" : "Recipients chosen"}
             </Ready>
           </ul>
+          {files.length ? (
+            <p className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Paperclip className="size-4" aria-hidden="true" />
+              {files.length} {files.length === 1 ? "attachment" : "attachments"} ·{" "}
+              {megabytes(filesBytes)}
+            </p>
+          ) : null}
           <Button className="w-full" disabled={!canSend} onClick={() => setConfirming(true)}>
             Send email
           </Button>
@@ -491,6 +515,7 @@ function Compose({ allRecipients }: { allRecipients: number }) {
         onConfirmWord={setConfirmWord}
         sending={sending}
         recipients={audience === "selected" ? reachable.filter((e) => chosen.has(e.id)) : []}
+        attachments={files.map((f) => f.name)}
         onCancel={() => {
           setConfirming(false);
           setConfirmWord("");
@@ -499,6 +524,23 @@ function Compose({ allRecipients }: { allRecipients: number }) {
       />
     </div>
   );
+}
+
+/** A size the way people say it: "240 KB", "1.4 MB". */
+function megabytes(bytes: number): string {
+  return bytes < 1024 * 1024
+    ? `${Math.max(1, Math.round(bytes / 1024))} KB`
+    : `${(bytes / (1024 * 1024)).toFixed(1).replace(/\.0$/, "")} MB`;
+}
+
+/** A file's contents as base64, for the JSON the server function takes. */
+function toBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] ?? "");
+    reader.onerror = () => reject(reader.error ?? new Error(`Couldn't read ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
 }
 
 function AudienceCard({
@@ -620,6 +662,7 @@ function ConfirmDialog({
   onConfirmWord,
   sending,
   recipients,
+  attachments,
   onCancel,
   onSend,
 }: {
@@ -631,6 +674,7 @@ function ConfirmDialog({
   onConfirmWord: (v: string) => void;
   sending: boolean;
   recipients: Employee[];
+  attachments: string[];
   onCancel: () => void;
   onSend: () => void;
 }) {
@@ -652,6 +696,12 @@ function ConfirmDialog({
           <div className="rounded-lg border border-border p-3">
             <p className="text-xs text-muted-foreground">Subject</p>
             <p className="mt-0.5 font-medium">{subject}</p>
+            {attachments.length ? (
+              <p className="mt-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+                <Paperclip className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+                {attachments.join(", ")}
+              </p>
+            ) : null}
           </div>
 
           {toAll ? (

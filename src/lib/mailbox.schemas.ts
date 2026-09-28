@@ -14,12 +14,60 @@ const body = z
   .string()
   .trim()
   .min(1, "Write a message.")
-  // Long enough for a real notice, short enough that nobody pastes a document into an email.
-  .max(20_000, "That message is too long for an email.");
+  // Long enough for a real notice, short enough that nobody pastes a document into an email. The
+  // formatting editor's markup counts towards it, which is why it is more than the words need.
+  .max(100_000, "That message is too long for an email.");
+
+/** "html" is the formatting editor; "text" is how messages were written before it. */
+const bodyFormat = z.enum(["text", "html"]);
+
+/**
+ * Files a message may carry, all together. Every recipient gets every file, and mail servers
+ * refuse large messages outright -- Exchange's default is 10 MB, and base64 makes a file a third
+ * bigger on the wire -- so this stays well inside that.
+ */
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_ATTACHMENTS = 10;
+
+/** Kinds of file mail servers refuse or quarantine, because they run when opened. */
+export const BLOCKED_EXTENSIONS = [
+  "exe",
+  "bat",
+  "cmd",
+  "com",
+  "msi",
+  "scr",
+  "pif",
+  "vbs",
+  "vbe",
+  "js",
+  "jse",
+  "wsf",
+  "wsh",
+  "ps1",
+  "jar",
+  "lnk",
+  "reg",
+  "hta",
+  "cpl",
+  "dll",
+];
+
+export const isBlockedFile = (name: string) =>
+  BLOCKED_EXTENSIONS.includes(name.split(".").pop()?.toLowerCase() ?? "");
+
+const attachment = z.object({
+  filename: z.string().trim().min(1).max(200),
+  contentType: z.string().trim().max(200),
+  /** The file itself, base64. Size and kind are checked again on the server after decoding. */
+  data: z.string().max(Math.ceil((MAX_ATTACHMENT_BYTES * 4) / 3) + 16),
+});
 
 export const composeInput = z.object({
   subject,
   body,
+  bodyFormat,
+  attachments: z.array(attachment).max(MAX_ATTACHMENTS, `Attach at most ${MAX_ATTACHMENTS} files.`),
   audience: z.enum(["all", "selected"]),
   /**
    * Only read when the audience is "selected", and treated as a filter over the directory rather
@@ -33,7 +81,8 @@ export type ComposeInput = z.infer<typeof composeInput>;
 
 export const previewInput = z.object({
   subject: z.string().trim().max(200),
-  body: z.string().max(20_000),
+  body: z.string().max(100_000),
+  bodyFormat,
   /** Whose name the preview is addressed to, so it reads the way a recipient will see it. */
   sampleName: z.string().trim().max(120),
 });

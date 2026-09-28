@@ -17,7 +17,7 @@ import type { MailDelivery } from "@/lib/auth-types";
 
 // HTML email can't read CSS variables, so the brand colour lives here. This is the same green as
 // --primary in styles.css, so a button in an email matches a button in the app.
-const BRAND = "#336D4B";
+export const BRAND = "#336D4B";
 const BG = "#F1F5F9";
 const INK = "#0F172A";
 
@@ -37,11 +37,19 @@ export const escapeHtml = (value: unknown) =>
     (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!,
   );
 
+/** A file sent with a message, as opposed to the inline logo the layout adds itself. */
+export interface MailAttachment {
+  filename: string;
+  contentType: string;
+  content: Buffer;
+}
+
 export interface MailMessage {
   to: string;
   subject: string;
   template: string;
   html: string;
+  attachments?: MailAttachment[];
 }
 
 export type MailTransportKind = "graph" | "smtp" | "capture" | "none";
@@ -104,6 +112,12 @@ async function getGraphToken(): Promise<string> {
 async function sendViaGraph(msg: MailMessage) {
   const token = await getGraphToken();
   const graphLogo = msg.html.includes(`cid:${LOGO_CID}`) ? logoAttachment() : null;
+  const files = (msg.attachments ?? []).map((file) => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: file.filename,
+    contentType: file.contentType,
+    contentBytes: file.content.toString("base64"),
+  }));
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(env("MS_SENDER_MAILBOX") ?? "")}/sendMail`,
     {
@@ -114,18 +128,24 @@ async function sendViaGraph(msg: MailMessage) {
           subject: msg.subject,
           body: { contentType: "HTML", content: msg.html },
           toRecipients: [{ emailAddress: { address: msg.to } }],
-          // Graph takes the same inline image as base64 with the content id the html refers to.
-          ...(graphLogo
+          // Graph takes the same inline image as base64 with the content id the html refers to,
+          // alongside any files the message carries.
+          ...(graphLogo || files.length
             ? {
                 attachments: [
-                  {
-                    "@odata.type": "#microsoft.graph.fileAttachment",
-                    name: graphLogo.filename,
-                    contentType: "image/png",
-                    contentId: graphLogo.cid,
-                    isInline: true,
-                    contentBytes: graphLogo.content.toString("base64"),
-                  },
+                  ...(graphLogo
+                    ? [
+                        {
+                          "@odata.type": "#microsoft.graph.fileAttachment",
+                          name: graphLogo.filename,
+                          contentType: "image/png",
+                          contentId: graphLogo.cid,
+                          isInline: true,
+                          contentBytes: graphLogo.content.toString("base64"),
+                        },
+                      ]
+                    : []),
+                  ...files,
                 ],
               }
             : {}),
@@ -338,8 +358,16 @@ async function sendViaSmtp(msg: MailMessage) {
         to: msg.to,
         subject: msg.subject,
         html: msg.html,
-        // Inline, so it shows in the header rather than as something to download.
-        ...(logo ? { attachments: [{ ...logo, contentDisposition: "inline" as const }] } : {}),
+        // The logo inline, so it shows in the header rather than as something to download; any
+        // files the message carries after it, as ordinary attachments.
+        attachments: [
+          ...(logo ? [{ ...logo, contentDisposition: "inline" as const }] : []),
+          ...(msg.attachments ?? []).map((file) => ({
+            filename: file.filename,
+            contentType: file.contentType,
+            content: file.content,
+          })),
+        ],
       });
       if (info.rejected?.length)
         throw new Error(`SMTP server rejected ${info.rejected.join(", ")}: ${info.response}`);

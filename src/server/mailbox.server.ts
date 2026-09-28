@@ -14,8 +14,15 @@ import {
   resumePendingCampaigns,
 } from "./mail/mail-queue.server";
 import { campaignEmail } from "./mail/campaign-mail.server";
+import { cleanMailHtml, hasMailText } from "./mail/rich-text.server";
+import { mailTransport } from "./auth/mail.server";
 import { AppError } from "@/lib/app-error";
-import type { ComposeInput, PreviewInput } from "@/lib/mailbox.schemas";
+import {
+  isBlockedFile,
+  MAX_ATTACHMENT_BYTES,
+  type ComposeInput,
+  type PreviewInput,
+} from "@/lib/mailbox.schemas";
 import type {
   CampaignEmail,
   CampaignRecipient,
@@ -52,9 +59,53 @@ export async function previewCampaign(input: PreviewInput): Promise<{ html: stri
     to: "preview@anwargroup.net",
     name: input.sampleName || "Employee name",
     subject: input.subject,
-    body: input.body,
+    body: input.bodyFormat === "html" ? cleanMailHtml(input.body) : input.body,
+    bodyFormat: input.bodyFormat,
   });
   return { html: message.html };
+}
+
+/**
+ * Microsoft Graph's sendMail takes the whole message in one request of at most 4 MB, and base64
+ * makes a file a third bigger, so through Graph the files have to be smaller than through SMTP.
+ */
+const GRAPH_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+
+/** A file name as a mail client should show it: no folders, no control characters. */
+const cleanFilename = (name: string) =>
+  [...name.replace(/^.*[\\/]/, "")]
+    .map((c) =>
+      c.charCodeAt(0) < 32 || c.charCodeAt(0) === 127 || '"<>|?*:'.includes(c) ? "_" : c,
+    )
+    .join("")
+    .trim()
+    .slice(0, 200) || "attachment";
+
+/** Decodes and checks the files a message carries. Nothing the browser said is taken on trust. */
+function readAttachments(input: ComposeInput["attachments"]) {
+  const files = input.map((file) => {
+    const filename = cleanFilename(file.filename);
+    if (isBlockedFile(filename)) {
+      throw new AppError(`${filename} can't be attached: mail servers block that kind of file.`);
+    }
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(file.data)) {
+      throw new AppError(`${filename} didn't arrive intact. Attach it again.`);
+    }
+    const content = Buffer.from(file.data, "base64");
+    const contentType = /^[\w.+-]+\/[\w.+-]+$/.test(file.contentType)
+      ? file.contentType
+      : "application/octet-stream";
+    return { filename, contentType, content };
+  });
+
+  const total = files.reduce((sum, f) => sum + f.content.length, 0);
+  const limit = mailTransport().kind === "graph" ? GRAPH_ATTACHMENT_BYTES : MAX_ATTACHMENT_BYTES;
+  if (total > limit) {
+    throw new AppError(
+      `The attachments come to ${(total / 1048576).toFixed(1)} MB; the limit is ${limit / 1048576} MB.`,
+    );
+  }
+  return files;
 }
 
 /** How many people "everyone" currently means, so the composer can say so before anything is sent. */
@@ -80,9 +131,13 @@ export async function sendCampaign(input: ComposeInput): Promise<SendResult> {
   const sql = await getDb();
 
   const subject = input.subject.trim();
-  const body = input.body.trim();
+  // What is stored is what the server kept of the editor's markup, never the markup itself.
+  const body = input.bodyFormat === "html" ? cleanMailHtml(input.body) : input.body.trim();
   if (!subject) throw new AppError("The email needs a subject.");
-  if (!body) throw new AppError("The email needs a message.");
+  if (!(input.bodyFormat === "html" ? hasMailText(body) : body)) {
+    throw new AppError("The email needs a message.");
+  }
+  const attachments = readAttachments(input.attachments);
 
   const audience: MailboxAudience = input.audience;
   if (audience === "selected" && input.employeeIds.length === 0) {
@@ -130,10 +185,19 @@ export async function sendCampaign(input: ComposeInput): Promise<SendResult> {
     }
 
     const [campaign] = (await tx<Row[]>`
-      insert into mail_campaigns (subject, body, audience, recipients, sent_by, sent_by_id)
-      values (${subject}, ${body}, ${audience}, ${people.length}, ${user.fullName},
-              ${user.employeeId})
+      insert into mail_campaigns (subject, body, body_format, audience, recipients, sent_by,
+                                  sent_by_id)
+      values (${subject}, ${body}, ${input.bodyFormat}, ${audience}, ${people.length},
+              ${user.fullName}, ${user.employeeId})
       returning id`) as unknown as [{ id: string }];
+
+    for (const file of attachments) {
+      await tx`
+        insert into mail_campaign_attachments
+          (campaign_id, filename, content_type, size_bytes, content)
+        values (${campaign.id}, ${file.filename}, ${file.contentType}, ${file.content.length},
+                ${file.content})`;
+    }
 
     await tx`insert into mail_campaign_recipients ${tx(
       people.map((p) => ({
@@ -153,7 +217,8 @@ export async function sendCampaign(input: ComposeInput): Promise<SendResult> {
     await tx`
       insert into audit_logs (actor, action, record, old_value, new_value)
       values (${user.fullName}, ${audience === "all" ? "Emailed all employees" : "Emailed selected employees"},
-              ${`Mailbox #${campaign.id}`}, ${subject}, ${`${people.length} recipients`})`;
+              ${`Mailbox #${campaign.id}`}, ${subject},
+              ${`${people.length} recipients${attachments.length ? `, ${attachments.length} attachment(s)` : ""}`})`;
 
     return campaign.id;
   });

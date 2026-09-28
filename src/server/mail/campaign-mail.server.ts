@@ -5,8 +5,18 @@
 // paced queue as the batch mail.
 import type { Sql } from "../db/client.server";
 import { getDb } from "../db/client.server";
-import { escapeHtml, layout, sendMailDetailed, type MailMessage } from "../auth/mail.server";
+import {
+  escapeHtml,
+  layout,
+  sendMailDetailed,
+  type MailAttachment,
+  type MailMessage,
+} from "../auth/mail.server";
 import { isRateLimited } from "./rate.server";
+import { renderMailHtml } from "./rich-text.server";
+
+/** How a message was written: plain text with `**bold**`, or the formatting editor. */
+export type BodyFormat = "text" | "html";
 
 type Row = Record<string, string | number | boolean | Date | null>;
 
@@ -53,7 +63,12 @@ export function campaignEmail(input: {
   name: string;
   subject: string;
   body: string;
+  /** "html" bodies were cleaned on the way in (cleanMailHtml) and are only styled here. */
+  bodyFormat: BodyFormat;
+  attachments?: MailAttachment[];
 }): MailMessage {
+  const body =
+    input.bodyFormat === "html" ? renderMailHtml(input.body) : renderCampaignBody(input.body);
   return {
     to: input.to,
     subject: input.subject,
@@ -61,9 +76,42 @@ export function campaignEmail(input: {
     html: layout(
       input.subject,
       `<p>Dear ${escapeHtml(input.name || "Colleague")},</p>
-       ${renderCampaignBody(input.body)}`,
+       ${body}`,
     ),
+    ...(input.attachments?.length ? { attachments: input.attachments } : {}),
   };
+}
+
+/**
+ * The files attached to a campaign, read once and kept while its copies go out.
+ *
+ * A send to the whole directory is a few hundred copies of the same few megabytes; reading them
+ * from the database for every copy would move the attachment across the wire hundreds of times
+ * for nothing. Only the last few campaigns are held, and each for a limited time, so a finished
+ * send does not keep its files in memory.
+ */
+const attachmentCache = new Map<string, { at: number; files: MailAttachment[] }>();
+const ATTACHMENT_CACHE_MS = 30 * 60_000;
+
+async function campaignAttachments(sql: Sql, campaignId: string): Promise<MailAttachment[]> {
+  const cached = attachmentCache.get(campaignId);
+  if (cached && Date.now() - cached.at < ATTACHMENT_CACHE_MS) return cached.files;
+
+  const rows = (await sql<Row[]>`
+    select filename, content_type, content from mail_campaign_attachments
+    where campaign_id = ${campaignId}
+    order by id`) as unknown as { filename: string; content_type: string; content: Buffer }[];
+  const files = rows.map((r) => ({
+    filename: r.filename,
+    contentType: r.content_type,
+    content: Buffer.from(r.content),
+  }));
+
+  attachmentCache.set(campaignId, { at: Date.now(), files });
+  while (attachmentCache.size > 3) {
+    attachmentCache.delete(attachmentCache.keys().next().value!);
+  }
+  return files;
 }
 
 export type CampaignSendOutcome =
@@ -82,7 +130,8 @@ export async function sendCampaignEmail(recipientId: string): Promise<CampaignSe
   const sql: Sql = await getDb();
 
   const [row] = (await sql<Row[]>`
-    select r.id, r.status, r.employee_name, r.to_address, c.subject, c.body
+    select r.id, r.status, r.employee_name, r.to_address, r.campaign_id, c.subject, c.body,
+           c.body_format
     from mail_campaign_recipients r
     join mail_campaigns c on c.id = r.campaign_id
     where r.id = ${recipientId}`) as unknown as [Row | undefined];
@@ -103,12 +152,15 @@ export async function sendCampaignEmail(recipientId: string): Promise<CampaignSe
   }
 
   try {
+    const attachments = await campaignAttachments(sql, String(row["campaign_id"]));
     const { delivery, error } = await sendMailDetailed(
       campaignEmail({
         to: address,
         name: (row["employee_name"] as string) || "Colleague",
         subject: row["subject"] as string,
         body: row["body"] as string,
+        bodyFormat: (row["body_format"] as BodyFormat) ?? "text",
+        attachments,
       }),
     );
     if (delivery !== "failed") {
