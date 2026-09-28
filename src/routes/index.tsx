@@ -1,15 +1,22 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, useInView, animate, useReducedMotion } from "framer-motion";
 import logoUrl from "@/assets/anwar-organic-logo.png";
+import farmImageUrl from "@/assets/Farm Image.png";
 import { useEffect, useRef, useState } from "react";
 import {
-  Activity,
-  BadgeCheck,
+  Check,
   Factory,
-  Send,
-  ShoppingBasket,
-  Truck,
+  HeartPulse,
+  Leaf,
+  Milk,
   PackageCheck,
+  Send,
+  ShieldCheck,
+  ShoppingBasket,
+  Tractor,
+  Truck,
+  Wheat,
+  type LucideIcon,
 } from "lucide-react";
 import { AccountMenu } from "@/components/auth/AccountMenu";
 import { EmployeeLoginDialog, type LoginIntent } from "@/components/auth/EmployeeLoginDialog";
@@ -22,17 +29,17 @@ import type { AuthUser } from "@/lib/auth-types";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Anwar Organic — Daily farm milk for the Anwar Agro team" },
+      { title: "Anwar Organic | Fresh Whole Milk" },
       {
         name: "description",
         content:
-          "Book your litres from today's fresh milk batch before the cut-off, pick your delivery point, and collect the same day.",
+          "Fresh Whole Milk from Anwar Organic Dairy Farm, Gazaria. Reserve your litres from today's fresh batch in under a minute.",
       },
-      { property: "og:title", content: "Anwar Organic — Daily farm milk for the Anwar Agro team" },
+      { property: "og:title", content: "Anwar Organic | Fresh Whole Milk" },
       {
         property: "og:description",
         content:
-          "One daily batch, live stock, and a booking that takes under a minute. An Anwar Agro Farms system.",
+          "Fresh Whole Milk from Anwar Organic Dairy Farm, Gazaria. An Anwar Group Initiative.",
       },
     ],
   }),
@@ -126,7 +133,10 @@ function BatchWidget() {
   return <LiveBatchCard batch={batch} />;
 }
 
-const stages = [
+type Stage = { icon: LucideIcon; title: string; copy: string };
+
+// How the system runs a day's batch, from the dairy unit to collection.
+const systemStages: Stage[] = [
   {
     icon: Factory,
     title: "Factory",
@@ -150,78 +160,129 @@ const stages = [
   },
 ];
 
-function HowItWorks() {
+// How the milk itself is produced at the farm.
+const farmStages: Stage[] = [
+  { icon: HeartPulse, title: "Cow Care", copy: "Good milk starts with good care." },
+  { icon: Wheat, title: "Nutrition", copy: "Quality focused feed management." },
+  { icon: Milk, title: "Milking", copy: "Hygienic milk collection process." },
+  { icon: Leaf, title: "Freshness", copy: "Maintaining natural milk quality." },
+  { icon: Truck, title: "Delivery", copy: "Fresh batch reaches you." },
+];
+
+// Both step sections share one design; only the id, heading, steps and backdrop differ.
+function StepsSection({
+  id,
+  eyebrow,
+  title,
+  stages,
+  tinted = false,
+}: {
+  id: string;
+  eyebrow: string;
+  title: string;
+  stages: Stage[];
+  tinted?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.4 });
   const reduce = useReducedMotion();
 
   return (
     <section
-      id="how-it-works"
+      id={id}
       ref={ref}
-      className="mx-auto max-w-6xl scroll-mt-20 px-5 py-12 sm:scroll-mt-0 sm:py-20"
+      className={`scroll-mt-20 sm:scroll-mt-0 ${tinted ? "border-y border-border bg-secondary/60" : ""}`}
     >
-      <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">One batch a day, start to finish</h2>
-      <div className="relative mt-8 sm:mt-14">
-        <div className="absolute left-0 right-0 top-6 hidden h-px bg-border md:block" />
-        <motion.div
-          className="absolute top-[1.15rem] hidden size-3 rounded-full bg-accent md:block"
-          initial={{ left: "0%" }}
-          animate={inView ? { left: "97%" } : {}}
-          transition={{ duration: reduce ? 0 : 3.2, ease: "easeInOut" }}
-        />
-        <ol className="grid gap-3 sm:gap-8 md:grid-cols-5">
-          {stages.map((s, i) => (
-            <motion.li
-              key={s.title}
-              // Below sm each step is a card, so five steps read as five things rather than
-              // fifteen stacked blocks. From sm up the card styling is removed entirely.
-              className="rounded-xl border border-border bg-card p-4 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0"
-              initial={{ opacity: 0, y: 12 }}
-              animate={inView ? { opacity: 1, y: 0 } : {}}
-              transition={{ delay: reduce ? 0 : i * 0.6, duration: 0.4 }}
-            >
-              <div className="flex items-center gap-3 sm:block">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background text-primary sm:size-12 sm:bg-card">
-                  <s.icon className="size-5" />
+      <div className="mx-auto max-w-6xl px-5 py-12 sm:py-20">
+        <SectionHeading eyebrow={eyebrow} title={title} />
+        <div className="relative mt-8 sm:mt-14">
+          <div className="absolute left-0 right-0 top-6 hidden h-px bg-border md:block" />
+          <motion.div
+            className="absolute top-[1.15rem] hidden size-3 rounded-full bg-accent md:block"
+            initial={{ left: "0%" }}
+            animate={inView ? { left: "97%" } : {}}
+            transition={{ duration: reduce ? 0 : 3.2, ease: "easeInOut" }}
+          />
+          <ol className="grid gap-3 sm:gap-8 md:grid-cols-5">
+            {stages.map((s, i) => (
+              <motion.li
+                key={s.title}
+                // Below sm each step is a card, so five steps read as five things rather than
+                // fifteen stacked blocks. From sm up the card styling is removed entirely.
+                className="rounded-xl border border-border bg-card p-4 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0"
+                initial={{ opacity: 0, y: 12 }}
+                animate={inView ? { opacity: 1, y: 0 } : {}}
+                transition={{ delay: reduce ? 0 : i * 0.6, duration: 0.4 }}
+              >
+                <div className="flex items-center gap-3 sm:block">
+                  <div className="relative flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-background text-primary shadow-sm ring-4 ring-primary/5 transition-transform duration-300 hover:-translate-y-1 hover:shadow-md sm:size-12 sm:bg-card">
+                    <s.icon className="size-5" />
+                    {/* The step number rides on the icon, as the HTML page numbers its steps. */}
+                    <span className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+                      {i + 1}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-semibold sm:mt-4 sm:text-lg">{s.title}</h3>
                 </div>
-                <h3 className="text-base font-semibold sm:mt-4 sm:text-lg">{s.title}</h3>
-              </div>
-              <p className="mt-2 text-sm text-muted-foreground sm:mt-1">{s.copy}</p>
-            </motion.li>
-          ))}
-        </ol>
+                <p className="mt-2 text-sm text-muted-foreground sm:mt-1">{s.copy}</p>
+              </motion.li>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
   );
 }
 
-const reasonCards = [
+// A small label over each section heading, so the page reads as a set of chapters.
+function SectionHeading({
+  eyebrow,
+  title,
+  lead,
+}: {
+  eyebrow: string;
+  title: string;
+  lead?: string;
+}) {
+  return (
+    <div className="max-w-xl">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">{eyebrow}</p>
+      <h2 className="mt-2 text-3xl font-bold sm:text-4xl">{title}</h2>
+      {lead ? <p className="mt-3 text-lg leading-relaxed text-muted-foreground">{lead}</p> : null}
+    </div>
+  );
+}
+
+const trustCards = [
   {
-    icon: ShoppingBasket,
-    title: "Order Online Easily",
-    copy: "Book your litres from the link in your email, before the cut-off. Nothing to sign up for.",
+    icon: Tractor,
+    title: "From Our Farm",
+    copy: "Fresh Whole Milk produced at Anwar Organic Dairy Farm, Gazaria.",
   },
   {
-    icon: Activity,
-    title: "Real-Time Order Updates",
-    copy: "Watch the litres remaining fall as the batch fills, and your order change the moment it is confirmed.",
+    icon: Milk,
+    title: "Fresh Whole Milk",
+    copy: "Fresh whole milk collected from our dairy farm while maintaining natural freshness and quality.",
   },
   {
-    icon: BadgeCheck,
-    title: "Digital Order Confirmation",
-    copy: "Your order number and collection point, on your phone. Nothing to print or carry.",
+    icon: HeartPulse,
+    title: "Healthy Cow Care",
+    copy: "Responsible care practices for our dairy cows.",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Quality Handling",
+    copy: "Careful hygiene practices from milking to delivery.",
   },
 ];
 
 function Capabilities() {
   // The track slides by exactly half its width, so the strip has to be two identical halves or
-  // the loop jumps. A half has to be at least as wide as the screen too, or it runs out mid-view
-  // and leaves a gap at the seam -- which the old four-card strip did, at 1388px, on any ordinary
-  // laptop. Three equal 19rem cards come to 966px, so the half repeats them three times and
-  // covers 2916px. The animation is timed against that width, so the cards move at the speed they
-  // always did rather than at whatever the new distance would have made it.
-  const half = [...reasonCards, ...reasonCards, ...reasonCards];
+  // the loop jumps, and a half has to be at least as wide as the screen or it leaves a gap at the
+  // seam. Four equal 19rem cards repeated twice make a half of eight cards (162rem, 2592px).
+  // The stylesheet times the animation for a 182.25rem half, so the duration is shortened here in
+  // proportion (88s x 162/182.25 = 78s) to keep the cards moving at the same speed as before.
+  const half = [...trustCards, ...trustCards];
   const strip = [...half, ...half];
   return (
     <section
@@ -229,26 +290,65 @@ function Capabilities() {
       className="scroll-mt-20 overflow-hidden border-y border-border bg-card py-12 sm:scroll-mt-0 sm:py-20"
     >
       <div className="mx-auto max-w-6xl px-5">
-        <h2 className="max-w-xl text-3xl font-bold sm:text-4xl">Why Order with Anwar Organic?</h2>
+        <SectionHeading
+          eyebrow="Our promise"
+          title="Milk You Can Trust Starts At The Farm"
+          lead="Freshness begins long before milk reaches your home."
+        />
       </div>
-      <div className="group mt-8 overflow-hidden sm:mt-10">
-        <div className="marquee-track flex w-max gap-5 px-5 group-hover:[animation-play-state:paused]">
+      {/* The strip fades in and out at the edges instead of being cut off by the screen. */}
+      <div
+        className="group mt-8 overflow-hidden sm:mt-10"
+        style={{
+          maskImage: "linear-gradient(to right, transparent, black 6%, black 94%, transparent)",
+          WebkitMaskImage:
+            "linear-gradient(to right, transparent, black 6%, black 94%, transparent)",
+        }}
+      >
+        <div
+          className="marquee-track flex w-max gap-5 px-5 group-hover:[animation-play-state:paused]"
+          style={{ animationDuration: "78s" }}
+        >
           {strip.map((c, i) => (
-            // One card, three times over. The first used to be singled out as the wide one --
-            // a 26rem box with a larger icon and a heading two steps up -- which read as a
-            // difference in importance where there is none: three reasons of equal weight. Now
-            // every card is the same width, icon, heading and body, so the eye can compare them
-            // instead of ranking them. A 19rem card is wider than a phone, so it comes down
-            // below sm.
+            // Every card is the same width, icon, heading and body, so the four read as equals.
+            // A 19rem card is wider than a phone, so it comes down below sm.
             <article
               key={i}
-              className="flex w-[15rem] shrink-0 flex-col rounded-xl border border-border bg-background p-5 sm:w-[19rem] sm:p-6"
+              className="flex w-[15rem] shrink-0 flex-col rounded-xl border border-border bg-background p-5 transition-shadow duration-300 hover:-translate-y-1 hover:border-primary/30 hover:shadow-lg sm:w-[19rem] sm:p-6"
             >
-              <c.icon className="size-6 text-primary" aria-hidden="true" />
+              <span className="flex size-11 items-center justify-center rounded-full bg-secondary text-primary">
+                <c.icon className="size-5" aria-hidden="true" />
+              </span>
               <h3 className="mt-4 text-lg font-semibold leading-snug">{c.title}</h3>
               <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{c.copy}</p>
             </article>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/** The farm itself: a few words on the left, photographs of the sheds and the herd on the right. */
+function FarmShowcase() {
+  return (
+    <section id="our-farm" className="scroll-mt-20 sm:scroll-mt-0">
+      <div className="mx-auto grid max-w-6xl items-center gap-8 px-5 py-12 sm:py-20 md:grid-cols-2 md:gap-14">
+        <SectionHeading
+          eyebrow="Our farm"
+          title="Inside Anwar Organic Dairy Farm"
+          lead="Located in Gazaria, Anwar Organic Dairy Farm represents our commitment towards responsible farming, careful milk handling and delivering fresh whole milk to families."
+        />
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-lg">
+          <img
+            src={farmImageUrl}
+            alt="Anwar Organic Dairy Farm, Gazaria: the cow sheds, a cow with her calf, and cows resting on their mats"
+            className="h-auto w-full transition-transform duration-700 hover:scale-[1.03]"
+            width={1448}
+            height={1086}
+            loading="lazy"
+            decoding="async"
+          />
         </div>
       </div>
     </section>
@@ -261,25 +361,35 @@ function Stat({
   prefix,
   label,
 }: {
-  value: number;
+  value: number | string;
   suffix?: string;
   prefix?: string;
   label: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.6 });
-  const v = useCountUp(value, inView);
+  // Numbers count up; words (a place, a promise) are shown as they are.
+  const isNumber = typeof value === "number";
+  const v = useCountUp(isNumber ? value : 0, inView && isNumber);
   return (
     <div ref={ref}>
       <p className="font-display text-3xl font-extrabold sm:text-4xl">
-        {prefix}
-        {Math.round(v)}
-        {suffix}
+        {isNumber ? (
+          <>
+            {prefix}
+            {Math.round(v)}
+            {suffix}
+          </>
+        ) : (
+          value
+        )}
       </p>
-      <p className="mt-2 text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-sm opacity-80">{label}</p>
     </div>
   );
 }
+
+const heroTags = ["Fresh Daily Batch", "Fresh Whole Milk", "Unpasteurized"];
 
 function Landing() {
   const { auth } = Route.useRouteContext();
@@ -289,72 +399,124 @@ function Landing() {
     <div className="min-h-screen bg-background text-foreground">
       <Nav auth={auth} onLogin={onLogin} />
 
-      <section className="mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[55fr_45fr] md:py-24">
-        <div>
-          <h1 className="text-4xl font-extrabold leading-[1.05] sm:text-6xl">
-            Today's milk, booked in under a minute.
-          </h1>
-          {/* Two sentences rather than one, so it reads at max-w-xl: at the narrower measure the
-              heading used it would fall to six short lines and stop being a standfirst. */}
-          <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
-            With Anwar Organic, the journey begins at our own Gazaria dairy facility. From the care
-            of our cows and management of their feed to hygienic milking and careful handling, we
-            focus on the fundamentals that matter when producing fresh milk.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            {auth?.withoutAccount ? (
-              // Booking is the point of the visit, so it leads; the batch is still one click away
-              // for anyone who wants to look before they order.
-              <>
-                <Button asChild size="lg">
-                  <Link to="/app/order/new">Book Milk</Link>
-                </Button>
-                <Button asChild size="lg" variant="outline">
-                  <a href="#how-it-works">See today's batch</a>
-                </Button>
-              </>
-            ) : auth ? (
-              <>
-                <Button asChild size="lg">
-                  <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
-                </Button>
-                {auth.roles.includes("employee") ? (
-                  <Button asChild size="lg" variant="outline">
-                    <Link to="/app/my-orders">My orders</Link>
+      <div className="relative overflow-hidden bg-gradient-to-b from-secondary/70 via-background to-background">
+        {/* Soft washes of the brand colours drift behind the hero, and show through the frosted
+            batch card, so it is not a flat page. */}
+        <div
+          aria-hidden="true"
+          className="hero-blob pointer-events-none absolute -left-32 -top-32 size-[30rem] rounded-full bg-primary/15 blur-3xl"
+        />
+        <div
+          aria-hidden="true"
+          className="hero-blob pointer-events-none absolute -bottom-40 right-0 size-[28rem] rounded-full bg-accent/25 blur-3xl [animation-delay:-6s]"
+        />
+        <div
+          aria-hidden="true"
+          className="hero-blob pointer-events-none absolute right-1/4 top-10 size-72 rounded-full bg-primary/10 blur-3xl [animation-delay:-11s] [animation-duration:22s]"
+        />
+        <section className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[50fr_50fr] md:py-24 lg:grid-cols-[46fr_54fr]">
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
+            <p className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary shadow-sm">
+              <Leaf className="size-3.5" aria-hidden="true" />
+              An Anwar Group Initiative
+            </p>
+            <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] sm:text-6xl">
+              Today&apos;s Milk, <br className="hidden sm:block" />
+              <span className="bg-gradient-to-r from-primary to-primary-deep bg-clip-text text-transparent">
+                Booked in Under a Minute.
+              </span>
+            </h1>
+            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
+              Fresh Whole Milk from{" "}
+              <strong className="font-semibold">Anwar Organic Dairy Farm, Gazaria</strong> — where
+              responsible cow care, quality nutrition and careful farm practices come together.
+            </p>
+            <ul className="mt-6 flex flex-wrap gap-2">
+              {heroTags.map((t) => (
+                <li
+                  key={t}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-4 py-1.5 text-sm font-semibold shadow-sm backdrop-blur transition-transform duration-300 hover:-translate-y-0.5"
+                >
+                  <Check className="size-3.5 text-primary" aria-hidden="true" />
+                  {t}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-8 flex flex-wrap gap-3">
+              {auth?.withoutAccount ? (
+                // Booking is the point of the visit, so it leads; the batch is still one click away
+                // for anyone who wants to look before they order.
+                <>
+                  <Button asChild size="lg">
+                    <Link to="/app/order/new">Book Milk</Link>
                   </Button>
-                ) : (
                   <Button asChild size="lg" variant="outline">
-                    <a href="#how-it-works">How it works</a>
+                    <a href="#how-it-works">See today&apos;s batch</a>
                   </Button>
-                )}
-              </>
-            ) : (
-              <>
-                {/* Both lead into the app, so both ask who is asking. The dialog opens over the
+                </>
+              ) : auth ? (
+                <>
+                  <Button asChild size="lg">
+                    <Link to={ROLE_HOME[auth.activeRole]}>{ROLE_HOME_LABEL[auth.activeRole]}</Link>
+                  </Button>
+                  {auth.roles.includes("employee") ? (
+                    <Button asChild size="lg" variant="outline">
+                      <Link to="/app/my-orders">My orders</Link>
+                    </Button>
+                  ) : (
+                    <Button asChild size="lg" variant="outline">
+                      <a href="#how-it-works">How it works</a>
+                    </Button>
+                  )}
+                </>
+              ) : (
+                <>
+                  {/* Both lead into the app, so both ask who is asking. The dialog opens over the
                     page and takes them on to what they clicked, rather than sending them off to
                     a sign-in page and back. */}
-                <Button size="lg" onClick={() => onLogin("book")}>
-                  Book Milk
-                </Button>
-                <Button size="lg" variant="outline" onClick={() => onLogin("batch")}>
-                  See today&apos;s batch
-                </Button>
-              </>
-            )}
+                  <Button size="lg" onClick={() => onLogin("book")}>
+                    Book Milk
+                  </Button>
+                  <Button size="lg" variant="outline" onClick={() => onLogin("batch")}>
+                    See today&apos;s batch
+                  </Button>
+                </>
+              )}
+            </div>
           </div>
-        </div>
-        <BatchWidget />
-      </section>
+          {/* Top-aligned with the headline rather than centred: the offset is the height of the
+              "An Anwar Group Initiative" pill and the gap under it. */}
+          <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-6 duration-1000 md:mt-[3.5rem] md:self-start">
+            <BatchWidget />
+          </div>
+        </section>
+      </div>
 
-      <HowItWorks />
       <Capabilities />
+      <StepsSection
+        id="farm-to-home"
+        eyebrow="At the farm"
+        title="From Farm To Your Home"
+        stages={farmStages}
+        tinted
+      />
+      <StepsSection
+        id="how-it-works"
+        eyebrow="How it works"
+        title="One batch a day, start to finish"
+        stages={systemStages}
+      />
+      <FarmShowcase />
 
-      {/* Two per row on a phone: one stat per row left four tall, near-empty bands. */}
-      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-8 px-5 py-12 sm:grid-cols-2 sm:gap-10 sm:py-20 lg:grid-cols-4">
-        <Stat value={60} prefix="<" suffix="s" label="Average booking time" />
-        <Stat value={0} label="Overbooking incidents" />
-        <Stat value={100} suffix="%" label="Of changes audited" />
-        <Stat value={1} label="Batch, fully reconciled daily" />
+      {/* A band of brand green, as on the HTML page. Two per row on a phone: one stat per row
+          left four tall, near-empty bands. */}
+      <section className="bg-gradient-to-br from-primary to-primary-deep text-primary-foreground">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-x-6 gap-y-8 px-5 py-12 text-center sm:gap-10 sm:py-16 lg:grid-cols-4">
+          <Stat value="Gazaria" label="Anwar Organic Dairy Farm" />
+          <Stat value={100} suffix="%" label="Fresh Whole Milk" />
+          <Stat value="Daily" label="Fresh Batch" />
+          <Stat value="Every Drop" label="Handled With Care" />
+        </div>
       </section>
 
       <SiteFooter />
@@ -365,25 +527,13 @@ function Landing() {
 }
 
 /**
- * The site footer. The link columns point only at pages that exist, and the account column follows
- * the session the way the header does -- offering Sign in to someone who already has one is what
- * made a logo click look like a sign-out. Everything that isn't a link is something the system can
- * vouch for, such as the company domain, rather than contact details we don't hold on record.
- */
-/**
- * The footer, which is now the mark and what the product is.
- *
- * It used to carry four columns -- Platform, Your account, Access -- and a rule of its own at the
- * bottom. All of it has gone in favour of this: who makes the milk, what is promised about how it
- * is made, and how to keep it. The nav links duplicated sections a scroll away, and the account
- * column repeated what the header already offers to whoever is signed in.
- *
- * The year is read from the clock rather than written in, so the line does not quietly go stale
- * in January.
+ * The footer: the mark, who makes the milk, what is promised about how it is made, and how to
+ * keep it. The year is read from the clock rather than written in, so the line does not quietly
+ * go stale in January.
  */
 function SiteFooter() {
   return (
-    <footer className="border-t border-border bg-card">
+    <footer className="bg-card">
       <div className="mx-auto max-w-6xl px-5 py-10 sm:py-14">
         <img src={logoUrl} alt="Anwar Organic" className="h-16 w-auto" width={66} height={64} />
 

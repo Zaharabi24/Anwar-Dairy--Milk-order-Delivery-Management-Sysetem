@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local database backups: real employee data, never commit
+DB Backup/
+*.dump
