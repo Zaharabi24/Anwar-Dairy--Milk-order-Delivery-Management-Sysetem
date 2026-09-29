@@ -98,9 +98,16 @@ const EMAIL_TONE: Record<EmailStatus, string> = {
 
 function PublishRecords() {
   const records = Route.useLoaderData();
-  const totalRecipients = records.reduce((n, r) => n + r.recipients, 0);
-  const totalSent = records.reduce((n, r) => n + r.sentCount, 0);
-  const totalFailed = records.reduce((n, r) => n + r.failedCount, 0);
+  // "all" totals every batch; a batch number narrows the figures and the list to that batch.
+  const [batch, setBatch] = useState("all");
+  const batchNos = useMemo(() => [...new Set(records.map((r) => r.batchNo))], [records]);
+  const shown = useMemo(
+    () => (batch === "all" ? records : records.filter((r) => r.batchNo === batch)),
+    [records, batch],
+  );
+  const totalRecipients = shown.reduce((n, r) => n + r.recipients, 0);
+  const totalSent = shown.reduce((n, r) => n + r.sentCount, 0);
+  const totalFailed = shown.reduce((n, r) => n + r.failedCount, 0);
 
   return (
     <div className="mx-auto w-full max-w-6xl">
@@ -110,7 +117,10 @@ function PublishRecords() {
       />
 
       <div className="grid gap-4 sm:grid-cols-4">
-        <StatCard label="Batches published" value={records.length} />
+        <StatCard
+          label={batch === "all" ? "Batches published" : `Publishes of ${batch}`}
+          value={shown.length}
+        />
         <StatCard label="Emails Sent Out" value={totalRecipients} />
         <StatCard label="Delivered" value={totalSent} emphasis />
         <StatCard label="Failed" value={totalFailed} />
@@ -125,7 +135,7 @@ function PublishRecords() {
           <TabsTrigger value="delivery">Email delivery</TabsTrigger>
         </TabsList>
         <TabsContent value="batches" className="mt-6">
-          <Batches records={records} />
+          <Batches records={shown} batchNos={batchNos} batch={batch} onBatch={setBatch} />
         </TabsContent>
         <TabsContent value="delivery" className="mt-6">
           <Delivery records={records} />
@@ -138,7 +148,19 @@ function PublishRecords() {
 // ---------------------------------------------------------------------------
 // Batches
 
-function Batches({ records }: { records: PublishRecord[] }) {
+function Batches({
+  records,
+  batchNos,
+  batch,
+  onBatch,
+}: {
+  /** Already narrowed to the chosen batch, if one is chosen. */
+  records: PublishRecord[];
+  /** Every batch that has been published, for the Batch filter. */
+  batchNos: string[];
+  batch: string;
+  onBatch: (batch: string) => void;
+}) {
   const router = useRouter();
   const { user } = useAuth();
   const { deleteBatch } = useAppData();
@@ -193,6 +215,19 @@ function Batches({ records }: { records: PublishRecord[] }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+        <Select value={batch} onValueChange={onBatch}>
+          <SelectTrigger className={FILTER_CONTROL} aria-label="Batch">
+            <SelectValue placeholder="Batch" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All batches</SelectItem>
+            {batchNos.map((b) => (
+              <SelectItem key={b} value={b}>
+                {b}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <Select value={status} onValueChange={setStatus}>
           <SelectTrigger className={FILTER_CONTROL}>
             <SelectValue placeholder="Send status" />

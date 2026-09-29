@@ -72,3 +72,36 @@ export interface CampaignEmail extends CampaignRecipient {
   /** When the send was composed, which is the date the history is ordered and filtered on. */
   createdAt: string;
 }
+
+/** A message saved in the Mailbox to finish later, or to be the wording of the batch email. */
+export interface MailDraft {
+  id: string;
+  subject: string;
+  /** The editor's HTML, as the server kept it. */
+  body: string;
+  /** Whether publishing a batch sends this instead of the standard booking email. */
+  useForBatches: boolean;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * One message that went out to employees, as the Sent mail list shows it: the message, not the
+ * people. A Mailbox send, or the booking email of one batch publication.
+ */
+export interface SentMail {
+  kind: "mailbox" | "batch";
+  id: string;
+  subject: string;
+  /** For a batch email: the batch it announced. */
+  batchNo: string | null;
+  /** For a batch email: whether it used a Mailbox draft rather than the standard wording. */
+  fromDraft: boolean;
+  recipients: number;
+  sentCount: number;
+  failedCount: number;
+  sentBy: string;
+  createdAt: string;
+}

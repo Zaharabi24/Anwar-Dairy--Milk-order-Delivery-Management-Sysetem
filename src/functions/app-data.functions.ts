@@ -37,6 +37,11 @@ export const approveOrderFn = createServerFn({ method: "POST" })
   .validator(schema.orderActionInput)
   .handler(async ({ data }) => (await server()).approveOrder(data));
 
+/** Hands a confirmed, fully paid order over. */
+export const deliverOrderFn = createServerFn({ method: "POST" })
+  .validator(schema.orderActionInput)
+  .handler(async ({ data }) => (await server()).deliverOrder(data));
+
 export const cancelOrderFn = createServerFn({ method: "POST" })
   .validator(schema.orderReasonInput)
   .handler(async ({ data }) => (await server()).cancelOrder(data));

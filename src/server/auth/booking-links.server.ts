@@ -98,13 +98,23 @@ export async function recordPublication(
   // exists to place an order, and after the cutoff there is no order to place.
   const expiresAt = new Date(batch.booking_cutoff);
 
+  // The Mailbox draft chosen for batch emails, if there is one, is copied onto the publication:
+  // what this batch says stays fixed even if the draft is edited or deleted while it goes out.
+  const [draft] = await tx<Row[]>`
+    select id, subject, body from mail_drafts
+    where use_for_batches and btrim(subject) <> '' and btrim(body) <> ''
+    limit 1`;
+
   const [publication] = (await tx<Row[]>`
     insert into batch_publications
       (batch_no, published_by, published_by_id, booking_cutoff, delivery_date, delivery_window,
-       rate_per_litre, saleable_litres, collection_points, recipients)
+       rate_per_litre, saleable_litres, collection_points, recipients,
+       mail_subject, mail_body, mail_draft_id)
     values (${batchNo}, ${publishedBy.name}, ${publishedBy.employeeId}, ${batch.booking_cutoff},
             ${batch.delivery_date}, ${batch.delivery_window}, ${Number(batch.rate_per_litre)},
-            ${batch.saleable_litres}, ${collectionPoint}, ${employees.length})
+            ${batch.saleable_litres}, ${collectionPoint}, ${employees.length},
+            ${(draft?.["subject"] as string) ?? null}, ${(draft?.["body"] as string) ?? null},
+            ${(draft?.["id"] as string) ?? null})
     returning id`) as unknown as [{ id: string }];
 
   if (!employees.length) {

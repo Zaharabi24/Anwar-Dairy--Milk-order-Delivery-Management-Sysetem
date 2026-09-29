@@ -1,7 +1,15 @@
 // Server functions for the System Admin's mailbox. Each one checks `mailbox.send` inside the
 // server module, so the permission is enforced on the call and not just on the menu.
 import { createServerFn } from "@tanstack/react-start";
-import { campaignIdInput, composeInput, previewInput } from "@/lib/mailbox.schemas";
+import {
+  batchDraftInput,
+  campaignIdInput,
+  composeInput,
+  draftIdInput,
+  draftInput,
+  previewInput,
+  sentMailInput,
+} from "@/lib/mailbox.schemas";
 
 const server = () => import("@/server/mailbox.server");
 
@@ -37,3 +45,33 @@ export const resendFailedMailFn = createServerFn({ method: "POST" })
 export const listCampaignEmailsFn = createServerFn({ method: "GET" }).handler(async () =>
   (await server()).listCampaignEmails(),
 );
+
+export const listDraftsFn = createServerFn({ method: "GET" }).handler(async () =>
+  (await server()).listDrafts(),
+);
+
+export const saveDraftFn = createServerFn({ method: "POST" })
+  .validator(draftInput)
+  .handler(async ({ data }) => (await server()).saveDraft(data));
+
+export const deleteDraftFn = createServerFn({ method: "POST" })
+  .validator(draftIdInput)
+  .handler(async ({ data }) => (await server()).deleteDraft(data));
+
+/** Which draft publishing a batch sends, or null for the standard booking email. */
+export const setBatchDraftFn = createServerFn({ method: "POST" })
+  .validator(batchDraftInput)
+  .handler(async ({ data }) => (await server()).setBatchDraft(data));
+
+export const previewDraftAsBatchFn = createServerFn({ method: "POST" })
+  .validator(draftInput)
+  .handler(async ({ data }) => (await server()).previewDraftAsBatch(data));
+
+/** The messages sent to employees, one row per message: Mailbox sends and batch emails. */
+export const listSentMailFn = createServerFn({ method: "GET" }).handler(async () =>
+  (await server()).listSentMail(),
+);
+
+export const previewSentMailFn = createServerFn({ method: "POST" })
+  .validator(sentMailInput)
+  .handler(async ({ data }) => (await server()).previewSentMail(data));

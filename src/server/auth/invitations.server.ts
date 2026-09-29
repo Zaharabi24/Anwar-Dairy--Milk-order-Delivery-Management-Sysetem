@@ -715,6 +715,10 @@ export async function acceptInvitation(
 
   const { notify, ...result } = outcome;
   if (notify) await sendMail(notify.mail);
+  // Joined while a batch is open: they get its booking email now rather than at the next one.
+  if (result.ok) {
+    void import("../mail/mail-queue.server").then((m) => m.mailLatecomersInBackground());
+  }
   return result;
 }
 

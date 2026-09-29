@@ -2,7 +2,20 @@ import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, Check, Loader2, Mail, Paperclip, Users, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Eye,
+  FileText,
+  Loader2,
+  Mail,
+  Paperclip,
+  Pencil,
+  Plus,
+  Trash2,
+  Users,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,10 +35,17 @@ import { FILTER_SEARCH } from "@/components/ui/control-styles";
 import { useAppData } from "@/context/app-data";
 import {
   countAllRecipientsFn,
+  deleteDraftFn,
   listCampaignEmailsFn,
+  listDraftsFn,
+  listSentMailFn,
   previewCampaignFn,
+  previewDraftAsBatchFn,
+  previewSentMailFn,
   resendFailedMailFn,
+  saveDraftFn,
   sendCampaignFn,
+  setBatchDraftFn,
 } from "@/functions/mailbox.functions";
 import {
   EMPTY_PERIOD,
@@ -44,7 +64,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { dateShort, timeShort } from "@/lib/format";
-import type { CampaignEmail, MailboxAudience, RecipientStatus } from "@/lib/mailbox-types";
+import type {
+  CampaignEmail,
+  MailboxAudience,
+  MailDraft,
+  RecipientStatus,
+  SentMail,
+} from "@/lib/mailbox-types";
 import { isBlockedFile, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS } from "@/lib/mailbox.schemas";
 import type { Employee } from "@/lib/types";
 
@@ -73,11 +99,15 @@ export const Route = createFileRoute("/app/admin/mailbox")({
       return {
         emails: await listCampaignEmailsFn(),
         allRecipients: await countAllRecipientsFn(),
+        sent: await listSentMailFn(),
+        drafts: await listDraftsFn(),
       };
     } catch {
       return {
         emails: [] as CampaignEmail[],
         allRecipients: { total: 0 },
+        sent: [] as SentMail[],
+        drafts: [] as MailDraft[],
       };
     }
   },
@@ -125,12 +155,20 @@ function Mailbox() {
         <TabsList>
           <TabsTrigger value="compose">Compose</TabsTrigger>
           <TabsTrigger value="history">Email history</TabsTrigger>
+          <TabsTrigger value="sent">Sent mail</TabsTrigger>
+          <TabsTrigger value="drafts">Drafts</TabsTrigger>
         </TabsList>
         <TabsContent value="compose" className="mt-6">
           <Compose allRecipients={initial.allRecipients.total} />
         </TabsContent>
         <TabsContent value="history" className="mt-6">
           <History initial={initial.emails} />
+        </TabsContent>
+        <TabsContent value="sent" className="mt-6">
+          <SentMailList initial={initial.sent} />
+        </TabsContent>
+        <TabsContent value="drafts" className="mt-6">
+          <Drafts initial={initial.drafts} />
         </TabsContent>
       </Tabs>
     </div>
@@ -1029,4 +1067,510 @@ function Th({ children }: { children: React.ReactNode }) {
 }
 function Td({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <td className={`px-4 py-3 align-top ${className}`}>{children}</td>;
+}
+
+// ---------------------------------------------------------------------------
+// Sent mail
+
+/**
+ * The messages that went out to employees, one row per message rather than per person: every
+ * Mailbox send and every batch booking email. Email history answers "did it reach her"; this
+ * answers "what did we send", and each row opens the message as it was received.
+ */
+function SentMailList({ initial }: { initial: SentMail[] }) {
+  const [rows, setRows] = useState(initial);
+  const [kind, setKind] = useState("all");
+  const [query, setQuery] = useState("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [opening, setOpening] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const shown = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return rows
+      .filter((r) => (kind === "all" ? true : r.kind === kind))
+      .filter((r) =>
+        !q
+          ? true
+          : r.subject.toLowerCase().includes(q) ||
+            (r.batchNo ?? "").toLowerCase().includes(q) ||
+            r.sentBy.toLowerCase().includes(q),
+      );
+  }, [rows, kind, query]);
+
+  async function reload() {
+    setRefreshing(true);
+    try {
+      setRows(await listSentMailFn());
+    } catch {
+      toast.error("Couldn't refresh the list.");
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  async function open(row: SentMail) {
+    setOpening(`${row.kind}:${row.id}`);
+    try {
+      const { html } = await previewSentMailFn({ data: { kind: row.kind, id: row.id } });
+      setPreviewHtml(html);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't open that message.");
+    } finally {
+      setOpening(null);
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="Messages shown" value={shown.length} />
+        <StatCard
+          label="Delivered copies"
+          value={shown.reduce((n, r) => n + r.sentCount, 0)}
+          emphasis
+        />
+        <StatCard label="Failed copies" value={shown.reduce((n, r) => n + r.failedCount, 0)} />
+      </div>
+
+      <FilterBar columns={4}>
+        <Field label="Type" htmlFor="sent-kind">
+          <Select value={kind} onValueChange={setKind}>
+            <SelectTrigger id="sent-kind">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All messages</SelectItem>
+              <SelectItem value="mailbox">Mailbox messages</SelectItem>
+              <SelectItem value="batch">Batch booking emails</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Search" htmlFor="sent-search">
+          <Input
+            id="sent-search"
+            placeholder="Subject, batch no. or sender"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </Field>
+        <div className="flex items-end">
+          <Button variant="outline" disabled={refreshing} onClick={() => void reload()}>
+            {refreshing ? "Refreshing…" : "Refresh"}
+          </Button>
+        </div>
+      </FilterBar>
+
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        {shown.length === 0 ? (
+          <div className="p-6">
+            <EmptyState
+              title={rows.length === 0 ? "Nothing sent yet" : "No messages match"}
+              hint={
+                rows.length === 0
+                  ? "Messages sent from Compose, and the email of every published batch, are listed here."
+                  : "Try another type, or clear the search."
+              }
+            />
+          </div>
+        ) : (
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="border-b border-border text-left text-muted-foreground">
+              <tr>
+                <Th>Subject</Th>
+                <Th>Type</Th>
+                <Th>Recipients</Th>
+                <Th>Delivered</Th>
+                <Th>Failed</Th>
+                <Th>Sent</Th>
+                <Th>Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((r) => (
+                <tr key={`${r.kind}:${r.id}`} className="border-b border-border/60 last:border-0">
+                  <Td className="max-w-sm font-medium">
+                    <span className="block truncate">{r.subject || "(no subject)"}</span>
+                  </Td>
+                  <Td>
+                    {r.kind === "mailbox" ? "Mailbox" : `Batch ${r.batchNo ?? ""}`}
+                    {r.kind === "batch" ? (
+                      <span className="block text-xs text-muted-foreground">
+                        {r.fromDraft ? "From a draft" : "Standard wording"}
+                      </span>
+                    ) : null}
+                  </Td>
+                  <Td>{r.recipients}</Td>
+                  <Td>{r.sentCount}</Td>
+                  <Td>{r.failedCount}</Td>
+                  <Td>
+                    {dateShort(r.createdAt)}
+                    <span className="block text-xs text-muted-foreground">
+                      {timeShort(r.createdAt)} · {r.sentBy}
+                    </span>
+                  </Td>
+                  <Td>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={opening !== null}
+                      onClick={() => void open(r)}
+                    >
+                      {opening === `${r.kind}:${r.id}` ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <Eye className="size-4" />
+                      )}
+                      View
+                    </Button>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <PreviewDialog html={previewHtml} onClose={() => setPreviewHtml(null)} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Drafts
+
+/**
+ * Messages saved to finish later, and the choice of which one publishing a batch sends.
+ *
+ * The chosen draft replaces only the wording of the batch email: the batch details and each
+ * person's own Book Milk button are always added below it, because without them the email
+ * couldn't be booked from. The wording is copied onto a batch when it is published, so editing a
+ * draft afterwards never changes what an earlier batch said.
+ */
+function Drafts({ initial }: { initial: MailDraft[] }) {
+  const [drafts, setDrafts] = useState(initial);
+  const [editing, setEditing] = useState<MailDraft | "new" | null>(null);
+  const [deleting, setDeleting] = useState<MailDraft | null>(null);
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const forBatches = drafts.find((d) => d.useForBatches) ?? null;
+  const usable = (d: MailDraft) => d.subject.trim().length > 0 && d.body.length > 0;
+
+  async function reload() {
+    setDrafts(await listDraftsFn());
+  }
+
+  async function chooseForBatches(id: string | null) {
+    setBusy(true);
+    try {
+      await setBatchDraftFn({ data: { id } });
+      await reload();
+      toast.success(
+        id
+          ? "Batch emails will use this draft from the next publish."
+          : "Batch emails are back to the standard wording.",
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't change that.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(draft: MailDraft) {
+    setBusy(true);
+    try {
+      await deleteDraftFn({ data: { id: draft.id } });
+      await reload();
+      setDeleting(null);
+      toast.success("Draft deleted.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't delete that draft.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function previewAsBatch(draft: MailDraft) {
+    try {
+      const { html } = await previewDraftAsBatchFn({
+        data: { subject: draft.subject, body: draft.body },
+      });
+      setPreviewHtml(html);
+    } catch {
+      toast.error("Couldn't build the preview.");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-6">
+        <div>
+          <h2 className="font-display text-lg font-bold">Batch booking email</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            The email everyone gets when a batch is published. Choose a draft to use its subject and
+            message; the batch details and each person&apos;s own Book Milk button are always added
+            below it.
+          </p>
+        </div>
+        <Field label="Wording used" htmlFor="batch-draft">
+          <Select
+            value={forBatches?.id ?? "standard"}
+            disabled={busy}
+            onValueChange={(v) => void chooseForBatches(v === "standard" ? null : v)}
+          >
+            <SelectTrigger id="batch-draft" className="max-w-xl">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="standard">Standard booking email</SelectItem>
+              {drafts.filter(usable).map((d) => (
+                <SelectItem key={d.id} value={d.id}>
+                  {d.subject}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <p className="text-xs text-muted-foreground">
+          Applies from the next batch published. Batches already published keep what they said.
+        </p>
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="font-display text-lg font-bold">
+          Drafts <span className="text-muted-foreground">({drafts.length})</span>
+        </h2>
+        <Button onClick={() => setEditing("new")}>
+          <Plus className="size-4" />
+          New draft
+        </Button>
+      </div>
+
+      {drafts.length === 0 ? (
+        <EmptyState
+          title="No drafts yet"
+          hint="Write one with New draft. A draft can be finished later, or chosen as the batch booking email."
+        />
+      ) : (
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[820px] text-sm">
+            <thead className="border-b border-border text-left text-muted-foreground">
+              <tr>
+                <Th>Subject</Th>
+                <Th>Last changed</Th>
+                <Th>Batch emails</Th>
+                <Th>Actions</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {drafts.map((d) => (
+                <tr key={d.id} className="border-b border-border/60 last:border-0">
+                  <Td className="max-w-sm font-medium">
+                    <span className="flex items-center gap-2">
+                      <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <span className="truncate">{d.subject || "(no subject)"}</span>
+                    </span>
+                    {!usable(d) ? (
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        Needs a subject and a message before it can be used for batches.
+                      </span>
+                    ) : null}
+                  </Td>
+                  <Td>
+                    {dateShort(d.updatedAt)}
+                    <span className="block text-xs text-muted-foreground">
+                      {timeShort(d.updatedAt)} · {d.updatedBy}
+                    </span>
+                  </Td>
+                  <Td>
+                    {d.useForBatches ? (
+                      <span className="inline-block whitespace-nowrap rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary-deep">
+                        In use
+                      </span>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy || !usable(d)}
+                        onClick={() => void chooseForBatches(d.id)}
+                      >
+                        Use for batches
+                      </Button>
+                    )}
+                  </Td>
+                  <Td>
+                    <div className="flex flex-wrap gap-2">
+                      <Button variant="outline" size="sm" onClick={() => setEditing(d)}>
+                        <Pencil className="size-4" />
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!usable(d)}
+                        onClick={() => void previewAsBatch(d)}
+                      >
+                        <Eye className="size-4" />
+                        Preview
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Delete ${d.subject || "draft"}`}
+                        onClick={() => setDeleting(d)}
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
+                    </div>
+                  </Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <DraftEditor
+        draft={editing}
+        onClose={() => setEditing(null)}
+        onPreview={(html) => setPreviewHtml(html)}
+        onSaved={async () => {
+          setEditing(null);
+          await reload();
+        }}
+      />
+
+      <Dialog open={!!deleting} onOpenChange={(v) => !v && setDeleting(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete this draft?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            &ldquo;{deleting?.subject || "(no subject)"}&rdquo; is removed for good.
+            {deleting?.useForBatches
+              ? " It is the batch booking email, so batches go back to the standard wording."
+              : ""}{" "}
+            Batches already published with it keep what they said.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => setDeleting(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={busy}
+              onClick={() => deleting && void remove(deleting)}
+            >
+              Delete draft
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <PreviewDialog html={previewHtml} onClose={() => setPreviewHtml(null)} />
+    </div>
+  );
+}
+
+/** Writing a new draft, or changing a saved one. */
+function DraftEditor({
+  draft,
+  onClose,
+  onPreview,
+  onSaved,
+}: {
+  draft: MailDraft | "new" | null;
+  onClose: () => void;
+  onPreview: (html: string) => void;
+  onSaved: () => Promise<void>;
+}) {
+  const existing = draft && draft !== "new" ? draft : null;
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editorKey, setEditorKey] = useState(0);
+
+  // A fresh editor for each draft opened, seeded with what that draft holds.
+  const [openedFor, setOpenedFor] = useState<MailDraft | "new" | null>(null);
+  if (draft !== openedFor) {
+    setOpenedFor(draft);
+    setSubject(existing?.subject ?? "");
+    setBody(existing?.body ?? "");
+    setEditorKey((k) => k + 1);
+  }
+
+  async function save() {
+    setSaving(true);
+    try {
+      await saveDraftFn({ data: { id: existing?.id, subject: subject.trim(), body } });
+      toast.success(existing ? "Draft saved." : "Draft created.");
+      await onSaved();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Couldn't save the draft.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function preview() {
+    try {
+      const { html } = await previewDraftAsBatchFn({ data: { subject, body } });
+      onPreview(html);
+    } catch {
+      toast.error("Couldn't build the preview.");
+    }
+  }
+
+  return (
+    <Dialog open={!!draft} onOpenChange={(v) => !v && !saving && onClose()}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{existing ? "Edit draft" : "New draft"}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Field label="Subject" htmlFor="draft-subject">
+            <Input
+              id="draft-subject"
+              value={subject}
+              maxLength={200}
+              placeholder="e.g. Fresh milk is open for booking today"
+              onChange={(e) => setSubject(e.target.value)}
+            />
+          </Field>
+          <Field
+            label="Message"
+            htmlFor="draft-body"
+            hint="Used as a batch email, it opens with “Dear <name>,” and the batch details and Book Milk button follow it."
+          >
+            <MailEditor
+              key={editorKey}
+              id="draft-body"
+              describedBy="draft-body-description"
+              placeholder="Write your message here."
+              initialHtml={existing?.body}
+              onChange={setBody}
+            />
+          </Field>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button
+            variant="outline"
+            disabled={saving || !subject.trim() || !body}
+            onClick={() => void preview()}
+          >
+            <Eye className="size-4" />
+            Preview as batch email
+          </Button>
+          <Button variant="outline" disabled={saving} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={saving || (!subject.trim() && !body)} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save draft"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 }

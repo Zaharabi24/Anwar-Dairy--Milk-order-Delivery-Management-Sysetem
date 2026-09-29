@@ -76,6 +76,7 @@ export const employees: Employee[] = seedNames.map(([name, department, site], i)
   phone: `+88017${(10000000 + i * 371937).toString().slice(0, 8)}`,
   department,
   site,
+  floorNo: "",
   active: i !== 15 && i !== 20,
 }));
 

@@ -92,3 +92,30 @@ export type PreviewInput = z.infer<typeof previewInput>;
 export const campaignIdInput = z.object({
   campaignId: z.string().trim().min(1).max(40),
 });
+
+/**
+ * A draft being saved. Subject and message may be half-written -- that is what a draft is -- so
+ * only the lengths are held to what a sent message allows. No `id` means a new draft.
+ */
+export const draftInput = z.object({
+  id: z.string().trim().min(1).max(40).optional(),
+  subject: z.string().trim().max(200, "Keep the subject under 200 characters."),
+  body: z.string().max(100_000, "That message is too long for an email."),
+});
+
+export type DraftInput = z.infer<typeof draftInput>;
+
+export const draftIdInput = z.object({
+  id: z.string().trim().min(1).max(40),
+});
+
+/** Which draft batch emails use. Null goes back to the standard booking email. */
+export const batchDraftInput = z.object({
+  id: z.string().trim().min(1).max(40).nullable(),
+});
+
+/** One entry of the Sent mail list: a Mailbox message or a batch booking email. */
+export const sentMailInput = z.object({
+  kind: z.enum(["mailbox", "batch"]),
+  id: z.string().trim().min(1).max(40),
+});

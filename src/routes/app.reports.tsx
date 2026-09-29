@@ -167,7 +167,13 @@ function ReportsPage() {
       .filter((o) => o.status !== "Cancelled")
       .filter((o) => (no ? o.orderNo.toLowerCase().includes(no) : true))
       .filter((o) => (id ? o.employeeId.toLowerCase().includes(id) : true))
-      .filter((o) => (name ? (nameById.get(o.employeeId) ?? "").includes(name) : true));
+      .filter((o) =>
+        name
+          ? (o.guest ? o.guest.name.toLowerCase() : (nameById.get(o.employeeId) ?? "")).includes(
+              name,
+            )
+          : true,
+      );
   }, [orders, selectedBatchNos, orderNo, employeeId, employeeName, nameById]);
 
   /** Whether the orders on screen are a subset of the batches', which changes how to read them. */

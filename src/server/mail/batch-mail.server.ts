@@ -15,6 +15,7 @@ import {
   type MailMessage,
 } from "../auth/mail.server";
 import { MAIL_INTERVAL_MS, MAIL_RATE_PER_MINUTE, MAX_ATTEMPTS } from "./rate.server";
+import { renderMailHtml } from "./rich-text.server";
 
 export { MAIL_INTERVAL_MS, MAIL_RATE_PER_MINUTE, MAX_ATTEMPTS };
 
@@ -62,6 +63,12 @@ export function bookingEmail(input: {
   batch: BatchForMail;
   collectionPoint: string;
   link: string;
+  /**
+   * The Mailbox draft this batch was published with: its subject, and its body as cleanMailHtml
+   * kept it. It replaces the standard wording only; the batch details and the person's own Book
+   * Milk button still follow, because without them nobody could book from the email.
+   */
+  draft?: { subject: string; body: string } | null;
 }): MailMessage {
   const { batch } = input;
   const rate = Number(batch.rate_per_litre);
@@ -72,15 +79,21 @@ export function bookingEmail(input: {
        <td style="padding:6px 0;color:#0F172A;font-weight:600;">${escapeHtml(value)}</td>
      </tr>`;
 
+  const draft = input.draft;
+
   return {
     to: input.to,
-    subject: `Today's milk is open for booking — ${batch.batch_no}`,
+    subject: draft ? draft.subject : `Today's milk is open for booking — ${batch.batch_no}`,
     template: "batch_published",
     html: layout(
-      "Today's batch is open",
+      draft ? draft.subject : "Today's batch is open",
       `<p>Dear ${escapeHtml(input.name)},</p>
-       <p>A new batch of fresh whole milk has been published. Book the litres you want before
-       bookings close.</p>
+       ${
+         draft
+           ? renderMailHtml(draft.body)
+           : `<p>A new batch of fresh whole milk has been published. Book the litres you want before
+       bookings close.</p>`
+       }
        <table role="presentation" cellpadding="0" cellspacing="0" border="0"
          style="margin:8px 0 4px;font-size:15px;">
          ${row("Batch", batch.batch_no)}
@@ -154,7 +167,7 @@ export async function sendQueuedEmail(emailId: string): Promise<SendOutcome> {
            coalesce(b.delivery_window, p.delivery_window) as delivery_window,
            coalesce(b.rate_per_litre, p.rate_per_litre) as rate_per_litre,
            coalesce(b.saleable_litres, p.saleable_litres) as saleable_litres,
-           b.note
+           b.note, p.mail_subject, p.mail_body
     from batch_emails e
     join batch_publications p on p.id = e.publication_id
     left join batches b on b.batch_no = p.batch_no
@@ -204,6 +217,9 @@ export async function sendQueuedEmail(emailId: string): Promise<SendOutcome> {
         batch,
         collectionPoint: (row["collection_points"] as string) || "To be confirmed",
         link: `${appUrl()}/book?token=${token}`,
+        draft: row["mail_subject"]
+          ? { subject: row["mail_subject"] as string, body: (row["mail_body"] as string) ?? "" }
+          : null,
       }),
     );
 

@@ -104,7 +104,9 @@ function CollectionsPage() {
           const emp = employees.find((e) => e.id === order.employeeId);
           return (
             order.orderNo.toLowerCase().includes(q) ||
-            (emp?.name.toLowerCase().includes(q) ?? false)
+            (emp?.name.toLowerCase().includes(q) ?? false) ||
+            (order.guest?.name.toLowerCase().includes(q) ?? false) ||
+            (order.guest?.phone.includes(q) ?? false)
           );
         })
     );
@@ -280,8 +282,10 @@ function CollectionsPage() {
                   >
                     <Td className="font-medium">{order.orderNo}</Td>
                     <Td>
-                      {emp?.name ?? order.employeeId}
-                      <span className="block text-xs text-muted-foreground">{emp?.department}</span>
+                      {order.guest ? order.guest.name : (emp?.name ?? order.employeeId)}
+                      <span className="block text-xs text-muted-foreground">
+                        {order.guest ? `Guest · ${order.guest.phone}` : emp?.department}
+                      </span>
                     </Td>
                     <Td>{taka(order.amount)}</Td>
                     <Td>{taka(record?.amountCollected ?? 0)}</Td>

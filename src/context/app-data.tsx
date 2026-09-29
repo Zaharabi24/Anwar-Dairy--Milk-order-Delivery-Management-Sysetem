@@ -13,6 +13,7 @@ import {
   addDeliveryRecordFn,
   approveCancellationFn,
   approveOrderFn,
+  deliverOrderFn,
   cancelOrderFn,
   confirmOrderFn,
   createBatchFn,
@@ -112,6 +113,8 @@ interface AppData {
   addBatch: (batch: NewBatch) => Promise<DailyMilkBatch | null>;
   confirmOrder: (input: NewOrder) => Promise<Order | null>;
   approveOrder: (orderNo: string) => void;
+  /** Confirmed and paid in full becomes Delivered. Resolves true once it has. */
+  deliverOrder: (orderNo: string) => Promise<boolean>;
   cancelOrder: (orderNo: string, reason: string) => void;
   cancellationRequests: CancellationRequest[];
   cancellationRequestFor: (orderNo: string) => CancellationRequest | undefined;
@@ -229,6 +232,7 @@ export function AppDataProvider({
         department: "",
         designation: "",
         site: "Head Office",
+        floorNo: "",
         businessUnitCode: null,
         active: false,
       },
@@ -278,6 +282,7 @@ export function AppDataProvider({
       confirmOrder: (input: NewOrder) => run(() => confirmOrderFn({ data: input }), null),
       approveOrder: (orderNo: string) =>
         void run(() => approveOrderFn({ data: { orderNo } }), undefined),
+      deliverOrder: (orderNo: string) => run(() => deliverOrderFn({ data: { orderNo } }), false),
       cancelOrder: (orderNo: string, reason: string) =>
         void run(() => cancelOrderFn({ data: { orderNo, reason } }), undefined),
       requestCancellation: (orderNo: string) =>

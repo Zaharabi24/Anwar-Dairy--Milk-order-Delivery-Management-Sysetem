@@ -227,6 +227,88 @@ export async function enqueuePublication(publicationId: string): Promise<number>
   return rows.length;
 }
 
+/** Held while late recipients are added, so two runs at once can't write to somebody twice. */
+const LATECOMERS_LOCK = 7_210_431;
+
+/**
+ * Sends the booking email of every batch still open to people who weren't on the list when it
+ * was published.
+ *
+ * A batch is announced once, at publish, to whoever is in the Employee Database at that moment.
+ * Somebody added a minute later -- by the Super Admin, by accepting an invitation, by signing up,
+ * or by being switched back on -- would otherwise never hear about a batch they can still book.
+ * This adds them to the batch's latest publication under the same rules the publish used (active,
+ * not deleted, able to book, one address one email, the chosen people only for a batch announced
+ * to chosen people), and queues their message. Anyone the batch already wrote to, by id or by
+ * address, is left alone, so it is safe to call as often as you like.
+ *
+ * Returns how many messages were queued.
+ */
+export async function mailLatecomers(): Promise<number> {
+  const sql = await getDb();
+  const added = await sql.begin(async (tx) => {
+    await tx`select pg_advisory_xact_lock(${LATECOMERS_LOCK})`;
+    return tx<Row[]>`
+      with open_publications as (
+        select distinct on (p.batch_no) p.id, p.batch_no, b.audience, b.booking_cutoff
+        from batch_publications p
+        join batches b on b.batch_no = p.batch_no
+        where b.status = 'Active' and b.booking_cutoff > now()
+        order by p.batch_no, p.published_at desc, p.id desc
+      ),
+      latecomers as (
+        select distinct on (o.id, lower(e.company_email))
+               o.id as publication_id, o.batch_no, o.booking_cutoff,
+               e.id, e.name, e.company_email, e.department, e.designation, e.phone, e.site
+        from open_publications o
+        join employees e on e.active and e.deleted_at is null and btrim(e.company_email) <> ''
+        where exists (select 1 from user_roles r
+                      where r.employee_id = e.id and r.role = 'employee' and r.revoked_at is null)
+          and (o.audience <> 'selected'
+               or exists (select 1 from batch_recipients br
+                          where br.batch_no = o.batch_no and br.employee_id = e.id))
+          and not exists (select 1 from batch_emails x
+                          where x.batch_no = o.batch_no
+                            and (x.employee_id = e.id
+                                 or lower(btrim(x.to_address)) = lower(btrim(e.company_email))))
+        order by o.id, lower(e.company_email), (e.account_status is not null) desc, e.id
+      ),
+      inserted as (
+        insert into batch_emails
+          (publication_id, batch_no, employee_id, employee_name, employee_ref, to_address,
+           department, designation, phone, location, link_expires_at, status)
+        select publication_id, batch_no, id, coalesce(nullif(name, ''), 'Colleague'), id,
+               btrim(company_email), coalesce(department, ''), coalesce(designation, ''),
+               coalesce(phone, ''), coalesce(site, ''), booking_cutoff, 'queued'
+        from latecomers
+        returning publication_id
+      ),
+      counted as (
+        select publication_id, count(*)::int as n from inserted group by publication_id
+      )
+      update batch_publications p
+      set recipients = p.recipients + c.n, status = 'sending', completed_at = null
+      from counted c
+      where p.id = c.publication_id
+      returning p.id, c.n`;
+  });
+
+  let queued = 0;
+  for (const row of added) {
+    queued += Number(row["n"]);
+    await enqueuePublication(String(row["id"]));
+  }
+  if (queued) console.info(`[mail] ${queued} booking email(s) queued for people added late`);
+  return queued;
+}
+
+/** Runs the late-recipient catch-up without holding up the caller or failing it. */
+export function mailLatecomersInBackground(): void {
+  void mailLatecomers().catch((error: unknown) =>
+    console.error("[mail] sending open batches to new people failed", error),
+  );
+}
+
 /**
  * Puts back anything a publication still owes, and returns how much is outstanding.
  *

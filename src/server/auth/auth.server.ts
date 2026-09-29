@@ -388,7 +388,7 @@ export async function createAccount(
   // Hashing is deliberately slow, so it happens before the transaction opens.
   const passwordHash = await hashPassword(b.password);
 
-  return sql.begin(async (tx): Promise<AuthResult<{ profile: AuthUser }>> => {
+  const result = await sql.begin(async (tx): Promise<AuthResult<{ profile: AuthUser }>> => {
     const [taken] = await tx<Row[]>`
       select id, account_status from employees
       where lower(id) = lower(${empId}) or lower(company_email) = ${email}
@@ -452,6 +452,11 @@ export async function createAccount(
       },
     };
   });
+  // Signed up while a batch is open: they get its booking email now rather than at the next one.
+  if (result.ok) {
+    void import("../mail/mail-queue.server").then((m) => m.mailLatecomersInBackground());
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -1048,9 +1053,6 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
          */
         case "grant_role": {
           if (!input.role) return fail("Choose a role.");
-          if (!hasStaffRole) {
-            return fail("This person isn't on the employee team. Send them an invitation instead.");
-          }
           if (roles.includes(input.role)) {
             return fail(`${emp.name as string} already holds ${roleLabel(input.role)}.`);
           }
@@ -1062,10 +1064,16 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
           await tx`insert into user_roles (employee_id, role, granted_by)
                    values (${emp.id}, ${input.role}, ${actor.employeeId})
                    on conflict (employee_id, role) where revoked_at is null do nothing`;
+          // A first staff role for someone who only had the employee role. Their session is an
+          // employee-portal one, which only ever sees the employee role, so it is ended: the next
+          // sign-in at /login opens a staff session with every role they now hold.
+          if (!hasStaffRole) await revokeAllSessions(tx, emp.id);
           await log("staff_role_granted", { role: input.role, now: [...roles, input.role] });
           return {
             ok: true,
-            message: `${emp.name as string} now also holds ${roleLabel(input.role)}.`,
+            message: hasStaffRole
+              ? `${emp.name as string} now also holds ${roleLabel(input.role)}.`
+              : `${emp.name as string} now holds ${roleLabel(input.role)}. They'll use it from their next sign-in.`,
           };
         }
 
@@ -1078,17 +1086,20 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
           if (!canManageAccount(actor.roles, [input.role])) {
             return fail(`You can't remove ${roleLabel(input.role)}.`);
           }
-          // Revoking the only staff role would leave an account that can sign in to the staff
-          // portal and reach nothing. That is Remove employee access, which also settles what
-          // happens to the account itself, so it is sent there rather than half-done here.
-          if (roles.filter(isStaffRole).length <= 1) {
+          // Revoking the only staff role from someone who is also an employee just returns them to
+          // being one: their staff sessions end and the next sign-in is an employee session.
+          // Without the employee role the account would be left reaching nothing. That is Remove
+          // employee access, which also settles the account itself, so it is sent there instead.
+          const lastStaffRole = roles.filter(isStaffRole).length <= 1;
+          if (lastStaffRole && !roles.includes("employee")) {
             return fail(
-              `${roleLabel(input.role)} is ${emp.name as string}'s only staff role. Use Remove employee access instead.`,
+              `${roleLabel(input.role)} is ${emp.name as string}'s only role. Use Remove employee access instead.`,
             );
           }
           await tx`
             update user_roles set revoked_at = now(), revoked_by = ${actor.employeeId}
             where employee_id = ${emp.id} and role = ${input.role} and revoked_at is null`;
+          if (lastStaffRole) await revokeAllSessions(tx, emp.id, "staff");
           await log("staff_role_revoked", {
             role: input.role,
             now: roles.filter((r) => r !== input.role),
@@ -1160,6 +1171,10 @@ export async function accountAction(input: AccountActionInput): Promise<AuthResu
   );
 
   const { mail, ...result } = outcome;
+  // Reactivated while a batch is open: they get its booking email now rather than never.
+  if (result.ok && input.action === "reactivate") {
+    void import("../mail/mail-queue.server").then((m) => m.mailLatecomersInBackground());
+  }
   if (!mail || !result.ok) return result;
   const sent = await sendMailDetailed(mail);
   const what = mail.template === "password_reset" ? "Password reset link" : "Password setup link";

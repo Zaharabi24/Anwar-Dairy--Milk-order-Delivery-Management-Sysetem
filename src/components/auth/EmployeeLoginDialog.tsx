@@ -136,12 +136,19 @@ export function EmployeeLoginDialog({
           </DialogFooter>
         </form>
 
-        {/* This used to say "from the link in the footer", which was true until the footer was
-            cut back to the brand and the storage advice. It is the same door, named here instead:
-            taking away the only route staff can see would leave them typing the address from
-            memory. */}
+        {/* Somebody not yet on the list registers themselves rather than waiting for a System
+            Admin. Staff still have their own door, named here so it isn't typed from memory. */}
+        <div className="rounded-lg border border-border bg-secondary/50 p-3 text-sm">
+          <p className="font-medium">Not on the employee list yet?</p>
+          <p className="mt-1 text-muted-foreground">
+            Register yourself with your company email and Employee ID. It takes a minute.
+          </p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link to="/register">Register as an employee</Link>
+          </Button>
+        </div>
         <p className="text-xs text-muted-foreground">
-          Not on the list? A System Admin can add you to the Employee Database. Staff accounts{" "}
+          Staff accounts{" "}
           <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
             sign in with a password
           </Link>

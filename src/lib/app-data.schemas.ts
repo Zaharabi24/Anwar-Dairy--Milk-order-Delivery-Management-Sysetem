@@ -117,6 +117,8 @@ export const saveEmployeeInput = z.object({
     department: z.string().trim().max(120),
     designation: z.string().trim().max(120),
     site: z.string().trim().max(120),
+    /** Optional: "" is stored as no floor. */
+    floorNo: z.string().trim().max(20).optional().default(""),
     /** A business_units code, or "" for none. Checked against the table by the foreign key. */
     businessUnitCode: z.string().trim().max(20),
     active: z.boolean(),

@@ -55,6 +55,7 @@ const blank: Employee = {
   department: "",
   designation: "",
   site: "Head Office",
+  floorNo: "",
   businessUnitCode: null,
   active: true,
 };
@@ -120,7 +121,8 @@ function EmployeeDatabasePage() {
           e.companyEmail.toLowerCase().includes(q) ||
           e.department.toLowerCase().includes(q) ||
           e.designation.toLowerCase().includes(q) ||
-          e.phone.toLowerCase().includes(q),
+          e.phone.toLowerCase().includes(q) ||
+          e.floorNo.toLowerCase().includes(q),
       );
   }, [employees, query, unit, department, location, status]);
 
@@ -308,6 +310,7 @@ function EmployeeDatabasePage() {
                 <Th>Department</Th>
                 <Th>Contact</Th>
                 <Th>Location</Th>
+                <Th>Floor</Th>
                 <Th>Active</Th>
                 <Th> </Th>
               </tr>
@@ -350,6 +353,7 @@ function EmployeeDatabasePage() {
                     <span className="block text-xs text-muted-foreground">{e.phone || "—"}</span>
                   </Td>
                   <Td>{e.site || "—"}</Td>
+                  <Td>{e.floorNo || "—"}</Td>
                   <Td>
                     <Switch checked={e.active} onCheckedChange={() => toggleActive(e)} />
                   </Td>
@@ -499,6 +503,14 @@ function EmployeeDatabasePage() {
                     list="location-options"
                     value={draft.site}
                     onChange={(e) => setDraft({ ...draft, site: e.target.value })}
+                  />
+                </Field>
+                <Field label="Floor">
+                  <Input
+                    value={draft.floorNo}
+                    maxLength={20}
+                    placeholder="e.g. 3 or Ground (optional)"
+                    onChange={(e) => setDraft({ ...draft, floorNo: e.target.value })}
                   />
                 </Field>
                 <Field label="Business Unit">

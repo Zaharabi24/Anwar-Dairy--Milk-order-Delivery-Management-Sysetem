@@ -4,7 +4,7 @@
 import { getDb, type Tx } from "./db/client.server";
 import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
 import { recordPublication } from "./auth/booking-links.server";
-import { enqueuePublication } from "./mail/mail-queue.server";
+import { enqueuePublication, mailLatecomersInBackground } from "./mail/mail-queue.server";
 import { AppError } from "@/lib/app-error";
 import { startOfDay } from "@/lib/dates";
 import { isRoleValue, ROLE_LABEL } from "@/lib/auth-constants";
@@ -74,6 +74,7 @@ const toEmployee = (r: Row): Employee => ({
   department: r.department,
   designation: r.designation ?? "",
   site: r.site,
+  floorNo: r.floor_no ?? "",
   businessUnitCode: r.business_unit_code ?? null,
   active: r.active,
 });
@@ -108,7 +109,17 @@ const toBatch = (r: Row): DailyMilkBatch => ({
 
 const toOrder = (r: Row): Order => ({
   orderNo: r.order_no,
-  employeeId: r.employee_id,
+  employeeId: r.employee_id ?? "",
+  ...(r.employee_id == null
+    ? {
+        guest: {
+          name: r.guest_name ?? "",
+          phone: r.guest_phone ?? "",
+          email: r.guest_email ?? "",
+          address: r.guest_address ?? "",
+        },
+      }
+    : {}),
   batchNo: r.batch_no,
   litres: r.litres,
   rate: Number(r.rate),
@@ -368,6 +379,7 @@ async function releaseDeletedId(tx: Tx, id: string, actor: string): Promise<void
         department = '',
         designation = '',
         site = '',
+        floor_no = null,
         business_unit_code = null,
         date_of_birth = null,
         deleted_by = coalesce(deleted_by, ${actor}),
@@ -415,9 +427,12 @@ function notify(
     audience: AppNotification["audience"];
     title: string;
     body: string;
-    recipient?: string;
+    recipient?: string | null;
   },
 ) {
+  // A guest order has no employee to tell. Without this the row would have no recipient, which
+  // is what an announcement to every employee looks like.
+  if ("recipient" in n && !n.recipient) return Promise.resolve([]);
   return tx`
     insert into notifications (kind, audience, title, body, recipient_employee_id)
     values (${n.kind}, ${n.audience}, ${n.title}, ${n.body}, ${n.recipient ?? null})`;
@@ -757,30 +772,59 @@ export async function confirmOrder(input: ConfirmOrderInput) {
 }
 
 /**
- * Confirming an order request, which is now the whole of it.
+ * Confirming an order request: Pending becomes Confirmed.
  *
- * Fulfillment used to be a screen of its own: the coordinator confirmed the request here, then
- * went there to mark the order packed, then delivered, and the handover coupon was written when
- * they did. That screen has gone, so confirming has to carry what it carried -- otherwise an order
- * would stop at Confirmed, no coupon would ever be written, and the delivered litres a batch
- * records when it closes would always be zero.
- *
- * So one act settles the order. The status goes to its final state, the handover is recorded as a
- * delivery coupon, and the amount becomes due in Collections, which it already did for anything
- * past Pending. The employee is told once, about a confirmed order, rather than three times about
- * steps they have no part in.
+ * An order moves in three steps, each one the coordinator's: confirm the request, record the
+ * payment, then hand the milk over. Confirming makes the amount due in Collections (anything past
+ * Pending is payable); delivering is a separate act, `deliverOrder`, offered once it is paid.
  */
 export async function approveOrder({ orderNo }: OrderActionInput) {
   const user = await requirePermission("orders.manage");
   return mutate(user, async (tx) => {
     const order = await lockOrder(tx, orderNo);
     if (order.status !== "Pending") return;
+    await tx`update orders set status = 'Confirmed', updated_at = now() where order_no = ${orderNo}`;
+    await audit(tx, {
+      actor: user.fullName,
+      action: "Confirmed order request",
+      record: orderNo,
+      oldValue: "Pending",
+      newValue: "Confirmed",
+    });
+    await notify(tx, {
+      kind: "OrderConfirmed",
+      audience: "Employee",
+      recipient: order.employee_id,
+      title: `Order ${orderNo} confirmed`,
+      body: `${order.litres} L confirmed by the head office coordinator. Pay at collection.`,
+    });
+  });
+}
+
+/**
+ * Handing a paid order over: Confirmed becomes Delivered, and the handover is recorded as a
+ * delivery coupon. Refused until the order is paid in full, so milk can't leave unpaid.
+ */
+export async function deliverOrder({ orderNo }: OrderActionInput) {
+  const user = await requirePermission("orders.manage");
+  return mutate(user, async (tx): Promise<boolean> => {
+    const order = await lockOrder(tx, orderNo);
+    if (order.status === "Delivered") return true;
+    if (order.status !== "Confirmed") {
+      throw new AppError(`${orderNo} has to be confirmed before it can be delivered.`);
+    }
+    const [payment] = await tx<Row[]>`
+      select status from collections where order_no = ${orderNo}`;
+    if (payment?.["status"] !== "Paid") {
+      throw new AppError(`${orderNo} has to be paid in full before it can be delivered.`);
+    }
     await tx`update orders set status = 'Delivered', updated_at = now() where order_no = ${orderNo}`;
 
     // The person and the point as they stand now, copied onto the coupon: a coupon is a record of
     // a handover, so it has to keep saying who collected what even if the directory changes later.
     const [detail] = await tx<Row[]>`
-      select e.name as employee_name, e.phone, p.name as point_name, p.address
+      select coalesce(e.name, o.guest_name) as employee_name,
+             coalesce(e.phone, o.guest_phone) as phone, p.name as point_name, p.address
       from orders o
       left join employees e on e.id = o.employee_id
       left join delivery_points p on p.id = o.delivery_point_id
@@ -799,23 +843,26 @@ export async function approveOrder({ orderNo }: OrderActionInput) {
              ${(detail?.["point_name"] as string) || "—"},
              ${(detail?.["address"] as string) || ""},
              ${order.litres}, ${(detail?.["employee_name"] as string) || (order.employee_id as string)},
-             'Confirmed by the head office coordinator'
+             ${`Delivered by ${user.fullName}`}
       where not exists (select 1 from delivery_records where order_no = ${orderNo})`;
 
     await audit(tx, {
       actor: user.fullName,
-      action: "Confirmed order request",
+      action: "Delivered order",
       record: orderNo,
-      oldValue: "Pending",
+      oldValue: "Confirmed",
       newValue: "Delivered",
     });
+    // No "delivered" notification kind exists (the column's check lists them), so this goes out
+    // as the confirmation kind with its own title.
     await notify(tx, {
       kind: "OrderConfirmed",
       audience: "Employee",
       recipient: order.employee_id,
-      title: `Order ${orderNo} confirmed`,
-      body: `${order.litres} L confirmed by the head office coordinator.`,
+      title: `Order ${orderNo} delivered`,
+      body: `${order.litres} L handed over. Thank you.`,
     });
+    return true;
   });
 }
 
@@ -1109,7 +1156,7 @@ export async function markNotificationsRead() {
 
 export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
   const user = await requirePermission("roster.manage");
-  return mutate(user, async (tx): Promise<Employee> => {
+  const outcome = await mutate(user, async (tx): Promise<Employee> => {
     if (!employee.name.trim()) throw new AppError("The employee needs a name.");
 
     // Two people in the directory genuinely share one address, so a repeat is not by itself an
@@ -1168,10 +1215,11 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
       }
       const [row] = await tx<Row[]>`
         insert into employees (id, name, company_email, phone, department, designation, site,
-                               business_unit_code, active)
+                               floor_no, business_unit_code, active)
         values (${newId}, ${employee.name}, ${employee.companyEmail}, ${employee.phone},
                 ${employee.department}, ${employee.designation}, ${employee.site},
-                ${employee.businessUnitCode || null}, ${employee.active})
+                ${employee.floorNo || null}, ${employee.businessUnitCode || null},
+                ${employee.active})
         returning *`;
       // Being in the directory is what makes someone bookable: it is this role that lets the link
       // mailed on publish open a booking session and place an order in their name. It grants no
@@ -1230,7 +1278,7 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
       update employees set
         name = ${employee.name}, company_email = ${employee.companyEmail}, phone = ${employee.phone},
         department = ${employee.department}, designation = ${employee.designation},
-        site = ${employee.site},
+        site = ${employee.site}, floor_no = ${employee.floorNo || null},
         business_unit_code = ${employee.businessUnitCode || null}, active = ${employee.active},
         updated_at = now()
       where id = ${rowId}
@@ -1245,6 +1293,9 @@ export async function saveEmployee({ employee, isNew }: SaveEmployeeInput) {
     });
     return toEmployee(row);
   });
+  // Someone added, or given an address, while a batch is open gets its booking email now.
+  mailLatecomersInBackground();
+  return outcome;
 }
 
 /**
@@ -1341,6 +1392,7 @@ export async function deleteEmployee({ id }: EmployeeIdInput) {
           department = '',
           designation = '',
           site = '',
+          floor_no = null,
           business_unit_code = null,
           date_of_birth = null,
           deleted_at = now(),
@@ -1367,7 +1419,7 @@ export async function deleteEmployee({ id }: EmployeeIdInput) {
 
 export async function setEmployeeActive({ id, active }: EmployeeActiveInput) {
   const user = await requirePermission("roster.manage");
-  return mutate(user, async (tx) => {
+  const outcome = await mutate(user, async (tx) => {
     const [employee] = await tx<Row[]>`select active from employees where id = ${id} for update`;
     if (!employee) throw new AppError(`Employee ${id} doesn't exist.`);
     if (employee.active === active) return;
@@ -1380,6 +1432,9 @@ export async function setEmployeeActive({ id, active }: EmployeeActiveInput) {
       newValue: active ? "Active" : "Inactive",
     });
   });
+  // Switched on while a batch is open: they get its booking email now rather than never.
+  if (active) mailLatecomersInBackground();
+  return outcome;
 }
 
 // ---------------------------------------------------------------------------

@@ -235,6 +235,34 @@ function StepsSection({
 }
 
 // A small label over each section heading, so the page reads as a set of chapters.
+/**
+ * The way in for people outside the organisation's system: no company email, no Employee ID, so
+ * no account and no emailed link. The order form they reach asks for their own details instead.
+ */
+function ExternalOrderSection() {
+  return (
+    <section id="external-order" className="scroll-mt-20 sm:scroll-mt-0">
+      <div className="mx-auto max-w-6xl px-5 py-12 sm:py-20">
+        <div className="flex flex-col gap-6 rounded-2xl border border-border bg-card p-6 shadow-sm sm:p-10 md:flex-row md:items-center md:justify-between">
+          <div className="max-w-xl">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+              Don&apos;t have an organization email or Employee ID?
+            </p>
+            <h2 className="mt-2 text-3xl font-bold sm:text-4xl">Non-Management Order</h2>
+            <p className="mt-3 text-lg leading-relaxed text-muted-foreground">
+              For customers who are not part of the organization system, use the external order
+              option below.
+            </p>
+          </div>
+          <Button asChild size="lg" className="shrink-0">
+            <Link to="/guest-order">Order Now</Link>
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function SectionHeading({
   eyebrow,
   title,
@@ -500,6 +528,7 @@ function Landing() {
         stages={farmStages}
         tinted
       />
+      <ExternalOrderSection />
       <StepsSection
         id="how-it-works"
         eyebrow="How it works"

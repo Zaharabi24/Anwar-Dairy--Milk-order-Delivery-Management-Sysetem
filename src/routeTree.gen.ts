@@ -14,10 +14,13 @@ import { Route as AcceptInviteRouteImport } from './routes/accept-invite'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as BookRouteImport } from './routes/book'
 import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
+import { Route as GuestOrderRouteImport } from './routes/guest-order'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegisterRouteImport } from './routes/register'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SetPasswordRouteImport } from './routes/set-password'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as VerifyRegistrationRouteImport } from './routes/verify-registration'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppCollectionsRouteImport } from './routes/app.collections'
 import { Route as AppCouponsRouteImport } from './routes/app.coupons'
@@ -72,9 +75,19 @@ const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const GuestOrderRoute = GuestOrderRouteImport.update({
+  id: '/guest-order',
+  path: '/guest-order',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ResetPasswordRoute = ResetPasswordRouteImport.update({
@@ -90,6 +103,11 @@ const SetPasswordRoute = SetPasswordRouteImport.update({
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyRegistrationRoute = VerifyRegistrationRouteImport.update({
+  id: '/verify-registration',
+  path: '/verify-registration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -241,10 +259,13 @@ export interface FileRoutesByFullPath {
   '/app': typeof AppRouteWithChildren
   '/book': typeof BookRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/guest-order': typeof GuestOrderRoute
   '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/signup': typeof SignupRoute
+  '/verify-registration': typeof VerifyRegistrationRoute
   '/app/collections': typeof AppCollectionsRoute
   '/app/coupons': typeof AppCouponsRoute
   '/app/my-orders': typeof AppMyOrdersRoute
@@ -279,10 +300,13 @@ export interface FileRoutesByTo {
   '/accept-invite': typeof AcceptInviteRoute
   '/book': typeof BookRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/guest-order': typeof GuestOrderRoute
   '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/signup': typeof SignupRoute
+  '/verify-registration': typeof VerifyRegistrationRoute
   '/app/collections': typeof AppCollectionsRoute
   '/app/coupons': typeof AppCouponsRoute
   '/app/my-orders': typeof AppMyOrdersRoute
@@ -319,10 +343,13 @@ export interface FileRoutesById {
   '/app': typeof AppRouteWithChildren
   '/book': typeof BookRoute
   '/forgot-password': typeof ForgotPasswordRoute
+  '/guest-order': typeof GuestOrderRoute
   '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
   '/reset-password': typeof ResetPasswordRoute
   '/set-password': typeof SetPasswordRoute
   '/signup': typeof SignupRoute
+  '/verify-registration': typeof VerifyRegistrationRoute
   '/app/collections': typeof AppCollectionsRoute
   '/app/coupons': typeof AppCouponsRoute
   '/app/my-orders': typeof AppMyOrdersRoute
@@ -360,10 +387,13 @@ export interface FileRouteTypes {
     | '/app'
     | '/book'
     | '/forgot-password'
+    | '/guest-order'
     | '/login'
+    | '/register'
     | '/reset-password'
     | '/set-password'
     | '/signup'
+    | '/verify-registration'
     | '/app/collections'
     | '/app/coupons'
     | '/app/my-orders'
@@ -398,10 +428,13 @@ export interface FileRouteTypes {
     | '/accept-invite'
     | '/book'
     | '/forgot-password'
+    | '/guest-order'
     | '/login'
+    | '/register'
     | '/reset-password'
     | '/set-password'
     | '/signup'
+    | '/verify-registration'
     | '/app/collections'
     | '/app/coupons'
     | '/app/my-orders'
@@ -437,10 +470,13 @@ export interface FileRouteTypes {
     | '/app'
     | '/book'
     | '/forgot-password'
+    | '/guest-order'
     | '/login'
+    | '/register'
     | '/reset-password'
     | '/set-password'
     | '/signup'
+    | '/verify-registration'
     | '/app/collections'
     | '/app/coupons'
     | '/app/my-orders'
@@ -477,10 +513,13 @@ export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   BookRoute: typeof BookRoute
   ForgotPasswordRoute: typeof ForgotPasswordRoute
+  GuestOrderRoute: typeof GuestOrderRoute
   LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   SetPasswordRoute: typeof SetPasswordRoute
   SignupRoute: typeof SignupRoute
+  VerifyRegistrationRoute: typeof VerifyRegistrationRoute
   StaffAdminRoute: typeof StaffAdminRoute
   StaffForgotPasswordRoute: typeof StaffForgotPasswordRoute
 }
@@ -522,11 +561,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/guest-order': {
+      id: '/guest-order'
+      path: '/guest-order'
+      fullPath: '/guest-order'
+      preLoaderRoute: typeof GuestOrderRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/reset-password': {
@@ -548,6 +601,13 @@ declare module '@tanstack/react-router' {
       path: '/signup'
       fullPath: '/signup'
       preLoaderRoute: typeof SignupRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-registration': {
+      id: '/verify-registration'
+      path: '/verify-registration'
+      fullPath: '/verify-registration'
+      preLoaderRoute: typeof VerifyRegistrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -815,10 +875,13 @@ const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   BookRoute: BookRoute,
   ForgotPasswordRoute: ForgotPasswordRoute,
+  GuestOrderRoute: GuestOrderRoute,
   LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   SetPasswordRoute: SetPasswordRoute,
   SignupRoute: SignupRoute,
+  VerifyRegistrationRoute: VerifyRegistrationRoute,
   StaffAdminRoute: StaffAdminRoute,
   StaffForgotPasswordRoute: StaffForgotPasswordRoute,
 }

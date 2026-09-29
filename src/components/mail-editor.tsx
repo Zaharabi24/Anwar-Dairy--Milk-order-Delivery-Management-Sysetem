@@ -43,11 +43,17 @@ export function MailEditor({
   describedBy,
   onChange,
   onDropFiles,
+  initialHtml,
 }: {
   id: string;
   placeholder: string;
   describedBy?: string;
   onChange: (html: string) => void;
+  /**
+   * What the box opens with, e.g. a saved draft. Only read on mount; it is markup the server
+   * already cleaned (cleanMailHtml), and it is cleaned again when saved or sent.
+   */
+  initialHtml?: string | undefined;
   /** Files dropped on the box become attachments instead of pictures pasted into the text. */
   onDropFiles?: (files: File[]) => void;
 }) {
@@ -64,6 +70,8 @@ export function MailEditor({
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("");
   const savedRange = useRef<Range | null>(null);
+  // Read once, on mount: after that the box is the source of truth, not the prop.
+  const initial = useRef(initialHtml);
 
   const selectionInBox = () => {
     const sel = document.getSelection();
@@ -96,7 +104,10 @@ export function MailEditor({
   }, [onChange]);
 
   useEffect(() => {
-    if (box.current && !box.current.innerHTML) box.current.innerHTML = EMPTY;
+    if (box.current && !box.current.innerHTML) {
+      box.current.innerHTML = initial.current || EMPTY;
+      if (initial.current) setEmpty(false);
+    }
     // New lines as <p> rather than <div>, and bold as <b> rather than <span style>: closer to
     // what the server keeps, so the box and the sent email look the same.
     document.execCommand("defaultParagraphSeparator", false, "p");

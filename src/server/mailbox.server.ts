@@ -13,7 +13,9 @@ import {
   resendFailedCampaign,
   resumePendingCampaigns,
 } from "./mail/mail-queue.server";
-import { campaignEmail } from "./mail/campaign-mail.server";
+import { campaignEmail, type BodyFormat } from "./mail/campaign-mail.server";
+import { bookingEmail } from "./mail/batch-mail.server";
+import { appUrl } from "./auth/session.server";
 import { cleanMailHtml, hasMailText } from "./mail/rich-text.server";
 import { mailTransport } from "./auth/mail.server";
 import { AppError } from "@/lib/app-error";
@@ -21,6 +23,7 @@ import {
   isBlockedFile,
   MAX_ATTACHMENT_BYTES,
   type ComposeInput,
+  type DraftInput,
   type PreviewInput,
 } from "@/lib/mailbox.schemas";
 import type {
@@ -28,7 +31,9 @@ import type {
   CampaignRecipient,
   CampaignSummary,
   MailboxAudience,
+  MailDraft,
   SendResult,
+  SentMail,
 } from "@/lib/mailbox-types";
 
 type Row = Record<string, string | number | boolean | Date | null>;
@@ -354,4 +359,217 @@ export async function resendFailedMail(input: { campaignId: string }) {
   await requirePermission("mailbox.send");
   const queued = await resendFailedCampaign(input.campaignId);
   return { queued, durable: isQueueEnabled() };
+}
+
+// ---------------------------------------------------------------------------
+// Drafts
+
+const toDraft = (r: Row): MailDraft => ({
+  id: String(r["id"]),
+  subject: (r["subject"] as string) ?? "",
+  body: (r["body"] as string) ?? "",
+  useForBatches: Boolean(r["use_for_batches"]),
+  createdBy: (r["created_by"] as string) || "—",
+  updatedBy: (r["updated_by"] as string) || "—",
+  createdAt: iso(r["created_at"])!,
+  updatedAt: iso(r["updated_at"])!,
+});
+
+/** Every saved draft, the one used for batch emails first, then the most recently changed. */
+export async function listDrafts(): Promise<MailDraft[]> {
+  await requirePermission("mailbox.send");
+  const sql = await getDb();
+  const rows = await sql<Row[]>`
+    select id, subject, body, use_for_batches, created_by, updated_by, created_at, updated_at
+    from mail_drafts
+    order by use_for_batches desc, updated_at desc, id desc
+    limit 500`;
+  return rows.map(toDraft);
+}
+
+/**
+ * Creates or updates a draft. The body is cleaned exactly as a sent message's is, so a draft
+ * that later becomes the batch email carries nothing a sent message couldn't.
+ */
+export async function saveDraft(input: DraftInput): Promise<MailDraft> {
+  const user = await requirePermission("mailbox.send");
+  const sql = await getDb();
+  const subject = input.subject.trim();
+  const cleaned = cleanMailHtml(input.body);
+  const body = hasMailText(cleaned) ? cleaned : "";
+  if (!subject && !body) throw new AppError("Write a subject or a message before saving.");
+
+  if (input.id) {
+    const [row] = await sql<Row[]>`
+      select use_for_batches from mail_drafts where id = ${input.id}`;
+    if (!row) throw new AppError("That draft no longer exists.");
+    // The batch email can't be left without words, or publishing would send a blank message.
+    if (row["use_for_batches"] && (!subject || !body)) {
+      throw new AppError(
+        "This draft is used for batch emails, so it needs both a subject and a message.",
+      );
+    }
+    const [updated] = await sql<Row[]>`
+      update mail_drafts
+      set subject = ${subject}, body = ${body}, updated_by = ${user.fullName}, updated_at = now()
+      where id = ${input.id}
+      returning *`;
+    return toDraft(updated!);
+  }
+
+  const [created] = await sql<Row[]>`
+    insert into mail_drafts (subject, body, created_by, created_by_id, updated_by)
+    values (${subject}, ${body}, ${user.fullName}, ${user.employeeId}, ${user.fullName})
+    returning *`;
+  return toDraft(created!);
+}
+
+/** Deletes a draft. Batches already published with it keep their own copy of the wording. */
+export async function deleteDraft(input: { id: string }): Promise<{ ok: true }> {
+  await requirePermission("mailbox.send");
+  const sql = await getDb();
+  await sql`delete from mail_drafts where id = ${input.id}`;
+  return { ok: true };
+}
+
+/**
+ * Chooses the draft batch emails use from the next publish on, or (null) goes back to the
+ * standard booking email. Batches already published are not affected.
+ */
+export async function setBatchDraft(input: { id: string | null }): Promise<{ ok: true }> {
+  await requirePermission("mailbox.send");
+  const sql = await getDb();
+  await sql.begin(async (tx) => {
+    if (input.id) {
+      const [row] = await tx<Row[]>`
+        select subject, body from mail_drafts where id = ${input.id} for update`;
+      if (!row) throw new AppError("That draft no longer exists.");
+      if (!(row["subject"] as string).trim() || !(row["body"] as string).trim()) {
+        throw new AppError("Give the draft a subject and a message before using it for batches.");
+      }
+    }
+    // Cleared first: the unique index allows only one draft marked at a time.
+    await tx`update mail_drafts set use_for_batches = false where use_for_batches`;
+    if (input.id) {
+      await tx`update mail_drafts set use_for_batches = true where id = ${input.id}`;
+    }
+  });
+  return { ok: true };
+}
+
+/** An example batch, for showing what a batch email will look like before one is published. */
+function sampleBatch() {
+  const cutoff = new Date(Date.now() + 6 * 3_600_000);
+  return {
+    batch_no: "SAMPLE-BATCH",
+    rate_per_litre: 92,
+    saleable_litres: 500,
+    booking_cutoff: cutoff,
+    delivery_date: new Date(cutoff.getTime() + 24 * 3_600_000),
+    delivery_window: "4:00 PM – 6:30 PM",
+    note: null,
+  };
+}
+
+/** A draft as the batch email it would become, with example batch details. */
+export async function previewDraftAsBatch(input: DraftInput): Promise<{ html: string }> {
+  await requirePermission("mailbox.send");
+  const message = bookingEmail({
+    to: "preview@anwargroup.net",
+    name: "Employee name",
+    batch: sampleBatch(),
+    collectionPoint: "Collection point",
+    link: `${appUrl()}/book`,
+    draft: { subject: input.subject.trim() || "(no subject)", body: cleanMailHtml(input.body) },
+  });
+  return { html: message.html };
+}
+
+// ---------------------------------------------------------------------------
+// Sent mail: the messages, not the people
+
+/**
+ * Every message that went out to employees, newest first: each Mailbox send, and the booking
+ * email of each batch publication. Nothing new is stored for this -- both were always recorded.
+ */
+export async function listSentMail(): Promise<SentMail[]> {
+  await requirePermission("mailbox.send");
+  const sql = await getDb();
+  const standard = "Today's milk is open for booking — ";
+  const rows = await sql<Row[]>`
+    select * from (
+      select 'mailbox' as kind, c.id, c.subject, null::text as batch_no, false as from_draft,
+             c.recipients, c.sent_count, c.failed_count, c.sent_by, c.created_at
+      from mail_campaigns c
+      union all
+      select 'batch' as kind, p.id, coalesce(p.mail_subject, ${standard} || p.batch_no),
+             p.batch_no, p.mail_subject is not null,
+             p.recipients, p.sent_count, p.failed_count, p.published_by, p.published_at
+      from batch_publications p
+    ) sent
+    order by created_at desc, id desc
+    limit 500`;
+  return rows.map((r) => ({
+    kind: r["kind"] as SentMail["kind"],
+    id: String(r["id"]),
+    subject: (r["subject"] as string) ?? "",
+    batchNo: (r["batch_no"] as string) ?? null,
+    fromDraft: Boolean(r["from_draft"]),
+    recipients: Number(r["recipients"]),
+    sentCount: Number(r["sent_count"]),
+    failedCount: Number(r["failed_count"]),
+    sentBy: (r["sent_by"] as string) || "—",
+    createdAt: iso(r["created_at"])!,
+  }));
+}
+
+/** One sent message rendered as its recipients got it, greeted with a placeholder name. */
+export async function previewSentMail(input: {
+  kind: "mailbox" | "batch";
+  id: string;
+}): Promise<{ html: string }> {
+  await requirePermission("mailbox.send");
+  const sql = await getDb();
+
+  if (input.kind === "mailbox") {
+    const [c] = await sql<Row[]>`
+      select subject, body, body_format from mail_campaigns where id = ${input.id}`;
+    if (!c) throw new AppError("That message no longer exists.");
+    return {
+      html: campaignEmail({
+        to: "preview@anwargroup.net",
+        name: "Employee name",
+        subject: c["subject"] as string,
+        body: c["body"] as string,
+        bodyFormat: c["body_format"] as BodyFormat,
+      }).html,
+    };
+  }
+
+  // The publication's own copy of the batch: what the send was told to say on the day.
+  const [p] = await sql<Row[]>`
+    select batch_no, booking_cutoff, delivery_date, delivery_window, rate_per_litre,
+           saleable_litres, collection_points, mail_subject, mail_body
+    from batch_publications where id = ${input.id}`;
+  if (!p) throw new AppError("That batch email no longer exists.");
+  return {
+    html: bookingEmail({
+      to: "preview@anwargroup.net",
+      name: "Employee name",
+      batch: {
+        batch_no: p["batch_no"] as string,
+        rate_per_litre: p["rate_per_litre"] as string,
+        saleable_litres: Number(p["saleable_litres"]),
+        booking_cutoff: p["booking_cutoff"] as Date,
+        delivery_date: p["delivery_date"] as Date,
+        delivery_window: (p["delivery_window"] as string) ?? "",
+        note: null,
+      },
+      collectionPoint: (p["collection_points"] as string) || "To be confirmed",
+      link: `${appUrl()}/book`,
+      draft: p["mail_subject"]
+        ? { subject: p["mail_subject"] as string, body: (p["mail_body"] as string) ?? "" }
+        : null,
+    }).html,
+  };
 }

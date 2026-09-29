@@ -23,6 +23,8 @@ export interface Employee {
   designation: string;
   /** The directory's Location column. */
   site: Site;
+  /** The floor they work on, e.g. "3" or "Ground". "" when not recorded. */
+  floorNo: string;
   /** Chosen when the account was requested. Null for anyone added straight to the directory. */
   businessUnitCode: string | null;
   /** Inactive means never mailed when a batch is published, and no link that still works. */
@@ -95,9 +97,20 @@ export interface CancellationRequest {
 
 export type PaymentMethod = "Cash" | "bKash" | "Payroll deduction";
 
+/** Who placed a guest order: somebody with no company email or Employee ID. */
+export interface OrderGuest {
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+}
+
 export interface Order {
   orderNo: string;
+  /** "" for a guest order, which has `guest` instead. */
   employeeId: string;
+  /** Set only on a guest order. */
+  guest?: OrderGuest;
   batchNo: string;
   litres: number;
   rate: number;

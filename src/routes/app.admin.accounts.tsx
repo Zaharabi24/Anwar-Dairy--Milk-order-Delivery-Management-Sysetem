@@ -329,11 +329,9 @@ function AccountsPage() {
                         <DropdownMenuItem onSelect={() => setEditing(a)}>
                           Edit details
                         </DropdownMenuItem>
-                        {a.roles.some(isStaffRole) ? (
-                          <DropdownMenuItem onSelect={() => setRoleFor(a)}>
-                            Manage roles
-                          </DropdownMenuItem>
-                        ) : null}
+                        <DropdownMenuItem onSelect={() => setRoleFor(a)}>
+                          Manage roles
+                        </DropdownMenuItem>
                         {a.status === "awaiting_password" ? (
                           <DropdownMenuItem
                             onSelect={() =>
@@ -636,8 +634,9 @@ function EditAccountDialog({
  *
  * Each tick is its own grant or revoke rather than a form that saves a set, so the audit trail
  * names the role that moved and nobody has to reason about what a half-applied save would leave
- * behind. The last staff role can't be unticked here: an account that can sign in to the staff
- * portal and reach nothing is Remove employee access, which settles the account too.
+ * behind. Any account can be given roles here, an ordinary employee included. The last staff
+ * role can only be unticked from someone who is also an employee, which returns them to being
+ * one; otherwise the account would reach nothing, and that is Remove employee access.
  */
 function ManageRolesDialog({
   account,
@@ -662,10 +661,13 @@ function ManageRolesDialog({
           <p className="text-sm text-muted-foreground">
             Tick every role this person should hold. Holding more than one puts Switch role in their
             header, and they see each workspace in turn.
+            {staffHeld.length === 0
+              ? " Giving them a first role signs them out, and they have it from their next sign-in."
+              : ""}
           </p>
           {INVITABLE_ROLES.map((r) => {
             const has = held.includes(r.value);
-            const last = has && staffHeld.length <= 1;
+            const last = has && staffHeld.length <= 1 && !held.includes("employee");
             return (
               <label
                 key={r.value}

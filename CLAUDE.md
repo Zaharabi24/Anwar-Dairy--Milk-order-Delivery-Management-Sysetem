@@ -46,8 +46,9 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
 - Access control is enforced in `src/server/**` with `requirePermission` (map in
   `src/lib/permissions.ts`) on every call. Add permissions there; don't check role names in
   feature code. Route guards in `app.tsx` are UX only.
-- Staff roles are granted only by accepting an invitation (`src/server/auth/invitations.server.ts`).
-  Account requests grant the employee role only.
+- Staff roles are granted by accepting an invitation (`src/server/auth/invitations.server.ts`), or
+  by a Super Admin from Accounts → Manage roles (`grant_role`, any account, several roles at once).
+  Super Admin is never granted from the app. Account requests grant the employee role only.
 - Who is acting comes from the session, never from client input.
 - Only `@anwargroup.net` emails may have accounts.
 - Colours come from theme tokens only; never hardcode hex in components.

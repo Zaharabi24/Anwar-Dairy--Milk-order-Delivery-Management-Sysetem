@@ -82,6 +82,7 @@ function OrdersPage() {
     updateOrder,
     cancelOrder,
     approveOrder,
+    deliverOrder,
     cancellationRequestFor,
     approveCancellation,
     rejectCancellation,
@@ -120,8 +121,12 @@ function OrdersPage() {
           (emp?.name.toLowerCase().includes(q) ?? false) ||
           (emp?.department.toLowerCase().includes(q) ?? false) ||
           (emp?.designation.toLowerCase().includes(q) ?? false) ||
+          (emp?.floorNo.toLowerCase().includes(q) ?? false) ||
           (emp?.companyEmail.toLowerCase().includes(q) ?? false) ||
           (emp?.phone.toLowerCase().includes(q) ?? false) ||
+          (o.guest?.name.toLowerCase().includes(q) ?? false) ||
+          (o.guest?.phone.includes(q) ?? false) ||
+          (o.guest?.email.includes(q) ?? false) ||
           o.employeeId.toLowerCase().includes(q)
         );
       });
@@ -265,12 +270,13 @@ function OrdersPage() {
             <EmptyState title="No orders match" hint="Try clearing the filters." />
           </div>
         ) : (
-          <table className="w-full min-w-[1400px] text-sm">
+          <table className="w-full min-w-[1480px] text-sm">
             <thead className="border-b border-border text-left text-muted-foreground">
               <tr>
                 <Th>Order</Th>
                 <Th>Employee</Th>
                 <Th>Department</Th>
+                <Th>Floor</Th>
                 <Th>Contact</Th>
                 <Th>Litres</Th>
                 <Th>Amount</Th>
@@ -291,19 +297,28 @@ function OrdersPage() {
                     {/* Straight from the Employee Database, so an order placed from an emailed
                         link arrives here already identified -- name, ID, and how to reach them. */}
                     <Td>
-                      {emp?.name ?? o.employeeId}
-                      <span className="block text-xs text-muted-foreground">{o.employeeId}</span>
+                      {o.guest ? o.guest.name : (emp?.name ?? o.employeeId)}
+                      {o.guest ? (
+                        <span className="mt-0.5 block">
+                          <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                            Guest
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="block text-xs text-muted-foreground">{o.employeeId}</span>
+                      )}
                     </Td>
                     <Td>
-                      {emp?.department || "—"}
-                      <span className="block text-xs text-muted-foreground">
-                        {emp?.designation || "—"}
+                      {o.guest ? "—" : emp?.department || "—"}
+                      <span className="block max-w-[14rem] text-xs text-muted-foreground">
+                        {o.guest ? o.guest.address || "—" : emp?.designation || "—"}
                       </span>
                     </Td>
+                    <Td>{emp?.floorNo || "—"}</Td>
                     <Td>
-                      {emp?.companyEmail || "—"}
+                      {o.guest ? o.guest.email || "—" : emp?.companyEmail || "—"}
                       <span className="block text-xs text-muted-foreground">
-                        {emp?.phone || "—"}
+                        {o.guest ? o.guest.phone : emp?.phone || "—"}
                       </span>
                     </Td>
                     <Td>{litres(o.litres)}</Td>
@@ -378,6 +393,20 @@ function OrdersPage() {
                             Confirm request
                           </Button>
                         ) : null}
+                        {/* The handover, offered once the order is confirmed and paid in full.
+                            The server refuses it otherwise, whatever the button says. */}
+                        {o.status === "Confirmed" && paymentStatus(o) === "Paid" ? (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              void deliverOrder(o.orderNo).then((done) => {
+                                if (done) toast.success(`${o.orderNo} delivered`);
+                              });
+                            }}
+                          >
+                            Deliver
+                          </Button>
+                        ) : null}
                         {canDelete ? (
                           <Button variant="outline" size="sm" onClick={() => setDeleting(o)}>
                             Delete
@@ -416,10 +445,11 @@ function OrdersPage() {
           const emp = employees.find((e) => e.id === o.employeeId);
           return {
             orderNo: o.orderNo,
-            name: emp?.name ?? o.employeeId,
-            employeeId: o.employeeId,
-            department: emp?.department || "—",
-            phone: emp?.phone || "—",
+            name: o.guest ? o.guest.name : (emp?.name ?? o.employeeId),
+            employeeId: o.guest ? "Guest" : o.employeeId,
+            department: o.guest ? "—" : emp?.department || "—",
+            floor: emp?.floorNo || "—",
+            phone: o.guest ? o.guest.phone : emp?.phone || "—",
             point: deliveryPoints.find((p) => p.id === o.deliveryPointId)?.name ?? "—",
             litres: o.litres,
             amount: o.amount,
@@ -687,6 +717,7 @@ interface PrintRow {
   name: string;
   employeeId: string;
   department: string;
+  floor: string;
   phone: string;
   point: string;
   litres: number;
@@ -740,6 +771,7 @@ function OrdersPrintSheet({
             <th>Order</th>
             <th>Employee</th>
             <th>Department</th>
+            <th>Floor</th>
             <th>Phone</th>
             <th>Point</th>
             <th className="num">Litres</th>
@@ -759,6 +791,7 @@ function OrdersPrintSheet({
                 <span className="sub">{r.employeeId}</span>
               </td>
               <td>{r.department}</td>
+              <td>{r.floor}</td>
               <td>{r.phone}</td>
               <td>{r.point}</td>
               <td className="num">{litres(r.litres)}</td>
@@ -771,7 +804,7 @@ function OrdersPrintSheet({
         </tbody>
         <tfoot>
           <tr>
-            <td colSpan={6}>Total (excluding cancelled)</td>
+            <td colSpan={7}>Total (excluding cancelled)</td>
             <td className="num">{litres(totalLitres)}</td>
             <td className="num">{taka(totalValue)}</td>
             <td colSpan={3} />
