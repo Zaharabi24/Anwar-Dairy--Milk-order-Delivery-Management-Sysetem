@@ -45,6 +45,7 @@ export function PeriodFilterFields({
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">{allLabel}</SelectItem>
+            <SelectItem value="week">Weekly</SelectItem>
             <SelectItem value="month">Monthly</SelectItem>
             <SelectItem value="year">Yearly</SelectItem>
             <SelectItem value="day">Specific date</SelectItem>
@@ -52,6 +53,21 @@ export function PeriodFilterFields({
           </SelectContent>
         </Select>
       </Field>
+
+      {value.mode === "week" ? (
+        <Field
+          label="Week"
+          htmlFor={`${idPrefix}-week`}
+          hint="Pick any day; the week runs Sunday to Saturday."
+        >
+          <Input
+            id={`${idPrefix}-week`}
+            type="date"
+            value={value.week}
+            onChange={(e) => set({ week: e.target.value })}
+          />
+        </Field>
+      ) : null}
 
       {value.mode === "month" ? (
         <Field label="Month" htmlFor={`${idPrefix}-month`}>

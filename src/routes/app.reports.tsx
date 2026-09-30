@@ -39,6 +39,7 @@ import {
   type PeriodFilter,
 } from "@/lib/date-filter";
 import { dateShort, litres, taka } from "@/lib/format";
+import type { CollectionRecord, Order, PaymentMethod } from "@/lib/types";
 
 export const Route = createFileRoute("/app/reports")({
   head: () => ({
@@ -85,6 +86,19 @@ const METRICS: { value: "produced" | "sealed" | "sold"; label: string; colour: s
   { value: "sold", label: "Sold", colour: "var(--color-primary)" },
 ];
 
+type PaymentStatus = CollectionRecord["status"];
+
+const PAYMENT_STATUSES: PaymentStatus[] = ["Paid", "Partial", "Unpaid"];
+const PAYMENT_METHODS: PaymentMethod[] = ["Cash", "bKash", "Payroll deduction"];
+
+/** The three ways to read the table: one row per batch, per employee, or per order. */
+const VIEWS = [
+  { value: "batch", label: "Batch wise" },
+  { value: "employee", label: "Employee wise" },
+  { value: "order", label: "Order wise" },
+] as const;
+type ReportView = (typeof VIEWS)[number]["value"];
+
 const BATCH_RANGES = [
   { value: "all", label: "All batches" },
   { value: "5", label: "Last 5 batches" },
@@ -104,6 +118,9 @@ function ReportsPage() {
   const [employeeName, setEmployeeName] = useState("");
   const [batchNo, setBatchNo] = useState("all");
   const [batchRange, setBatchRange] = useState<string>("all");
+  const [paymentStatus, setPaymentStatus] = useState<"all" | PaymentStatus>("all");
+  const [paymentMethod, setPaymentMethod] = useState<"all" | PaymentMethod>("all");
+  const [view, setView] = useState<ReportView>("batch");
 
   const { invalid } = periodState(period);
   /**
@@ -147,9 +164,34 @@ function ReportsPage() {
 
   const nameById = useMemo(() => {
     const map = new Map<string, string>();
-    for (const e of employees) map.set(e.id, e.name.toLowerCase());
+    for (const e of employees) map.set(e.id, e.name);
     return map;
   }, [employees]);
+
+  /** One collection row per order at most; an order without one has not been paid anything. */
+  const collectionByOrder = useMemo(() => {
+    const map = new Map<string, CollectionRecord>();
+    for (const c of collections) map.set(c.orderNo, c);
+    return map;
+  }, [collections]);
+
+  /**
+   * How an order stands, read the way every table on the page reads it: what has been collected,
+   * whether that is all of it, the method the money came in by (or else the one chosen when
+   * ordering), and who it is for.
+   */
+  const describe = useMemo(
+    () => (o: Order) => {
+      const record = collectionByOrder.get(o.orderNo);
+      return {
+        collected: record?.amountCollected ?? 0,
+        payment: (record?.status ?? "Unpaid") as PaymentStatus,
+        method: record?.method ?? o.paymentMethod,
+        name: o.guest ? o.guest.name : (nameById.get(o.employeeId) ?? ""),
+      };
+    },
+    [collectionByOrder, nameById],
+  );
 
   /**
    * The orders in scope.
@@ -167,17 +209,28 @@ function ReportsPage() {
       .filter((o) => o.status !== "Cancelled")
       .filter((o) => (no ? o.orderNo.toLowerCase().includes(no) : true))
       .filter((o) => (id ? o.employeeId.toLowerCase().includes(id) : true))
-      .filter((o) =>
-        name
-          ? (o.guest ? o.guest.name.toLowerCase() : (nameById.get(o.employeeId) ?? "")).includes(
-              name,
-            )
-          : true,
-      );
-  }, [orders, selectedBatchNos, orderNo, employeeId, employeeName, nameById]);
+      .filter((o) => (name ? describe(o).name.toLowerCase().includes(name) : true))
+      .filter((o) => (paymentStatus === "all" ? true : describe(o).payment === paymentStatus))
+      .filter((o) => (paymentMethod === "all" ? true : describe(o).method === paymentMethod));
+  }, [
+    orders,
+    selectedBatchNos,
+    orderNo,
+    employeeId,
+    employeeName,
+    describe,
+    paymentStatus,
+    paymentMethod,
+  ]);
 
   /** Whether the orders on screen are a subset of the batches', which changes how to read them. */
-  const narrowedToOrders = Boolean(orderNo.trim() || employeeId.trim() || employeeName.trim());
+  const narrowedToOrders = Boolean(
+    orderNo.trim() ||
+    employeeId.trim() ||
+    employeeName.trim() ||
+    paymentStatus !== "all" ||
+    paymentMethod !== "all",
+  );
 
   /**
    * One row per batch, computed from the filtered orders — so every chart and the table below
@@ -196,6 +249,10 @@ function ReportsPage() {
       selection
         .slice()
         .reverse()
+        // Once the orders are narrowed -- to one employee, say, or to the unpaid -- a batch with
+        // none of them in it is not part of the answer, and listing it at nought buries the ones
+        // that are.
+        .filter((b) => !narrowedToOrders || filteredOrders.some((o) => o.batchNo === b.batchNo))
         .map((b) => {
           const live = filteredOrders.filter((o) => o.batchNo === b.batchNo);
           const sold = live.reduce((s, o) => s + o.litres, 0);
@@ -212,8 +269,75 @@ function ReportsPage() {
             sellThrough: b.saleableLitres ? Math.round((sold / b.saleableLitres) * 100) : 0,
           };
         }),
-    [selection, filteredOrders],
+    [selection, filteredOrders, narrowedToOrders],
   );
+
+  /** One row per order in scope, newest first, with what has been paid against it. */
+  const byOrder = useMemo(
+    () =>
+      filteredOrders.map((o) => {
+        const d = describe(o);
+        return {
+          orderNo: o.orderNo,
+          date: dateShort(o.createdAt),
+          batchNo: o.batchNo,
+          employeeId: o.guest ? "Guest" : o.employeeId,
+          guestKey: o.guest ? `guest:${o.guest.phone || o.guest.name}` : null,
+          name: d.name || "—",
+          litres: o.litres,
+          amount: o.amount,
+          collected: d.collected,
+          due: Math.max(0, o.amount - d.collected),
+          payment: d.payment,
+          method: d.method ?? "—",
+          orderStatus: o.status,
+        };
+      }),
+    [filteredOrders, describe],
+  );
+
+  /** One row per employee (or guest) across every order in scope, biggest buyer first. */
+  const byEmployee = useMemo(() => {
+    const rows = new Map<
+      string,
+      {
+        key: string;
+        employeeId: string;
+        name: string;
+        orders: number;
+        batchNos: Set<string>;
+        litres: number;
+        amount: number;
+        collected: number;
+      }
+    >();
+    for (const o of byOrder) {
+      const key = o.guestKey ?? o.employeeId;
+      const row = rows.get(key) ?? {
+        key,
+        employeeId: o.employeeId,
+        name: o.name,
+        orders: 0,
+        batchNos: new Set<string>(),
+        litres: 0,
+        amount: 0,
+        collected: 0,
+      };
+      row.orders += 1;
+      row.batchNos.add(o.batchNo);
+      row.litres += o.litres;
+      row.amount += o.amount;
+      row.collected += o.collected;
+      rows.set(key, row);
+    }
+    return [...rows.values()]
+      .map(({ batchNos, ...r }) => ({
+        ...r,
+        batches: batchNos.size,
+        due: Math.max(0, r.amount - r.collected),
+      }))
+      .sort((a, b) => b.litres - a.litres || a.name.localeCompare(b.name));
+  }, [byOrder]);
 
   /**
    * The chart's rows: one per production date, not one per batch.
@@ -270,10 +394,7 @@ function ReportsPage() {
   );
 
   const dirty =
-    period.mode !== "all" ||
-    batchNo !== "all" ||
-    batchRange !== "all" ||
-    Boolean(orderNo.trim() || employeeId.trim() || employeeName.trim());
+    period.mode !== "all" || batchNo !== "all" || batchRange !== "all" || narrowedToOrders;
 
   function clearFilters() {
     setPeriod(EMPTY_PERIOD);
@@ -282,30 +403,99 @@ function ReportsPage() {
     setEmployeeName("");
     setBatchNo("all");
     setBatchRange("all");
+    setPaymentStatus("all");
+    setPaymentMethod("all");
+  }
+
+  const viewRowCount =
+    view === "batch" ? series.length : view === "employee" ? byEmployee.length : byOrder.length;
+
+  /** The table on screen, as rows of cells, so the CSV is always what is being looked at. */
+  function viewTable(): (string | number)[][] {
+    if (view === "employee") {
+      return [
+        ["Employee ID", "Name", "Orders", "Batches", "Litres", "Amount", "Collected", "Due"],
+        ...byEmployee.map((r) => [
+          r.employeeId,
+          r.name,
+          r.orders,
+          r.batches,
+          r.litres,
+          r.amount,
+          r.collected,
+          r.due,
+        ]),
+      ];
+    }
+    if (view === "order") {
+      return [
+        [
+          "Order No.",
+          "Order date",
+          "Batch No.",
+          "Employee ID",
+          "Name",
+          "Litres",
+          "Amount",
+          "Collected",
+          "Due",
+          "Payment",
+          "Method",
+          "Order status",
+        ],
+        ...byOrder.map((r) => [
+          r.orderNo,
+          r.date,
+          r.batchNo,
+          r.employeeId,
+          r.name,
+          r.litres,
+          r.amount,
+          r.collected,
+          r.due,
+          r.payment,
+          r.method,
+          r.orderStatus,
+        ]),
+      ];
+    }
+    return [
+      [
+        "Batch No.",
+        "Date",
+        "Produced",
+        "Sealed",
+        "Orders",
+        "Sold",
+        "Unsold",
+        "Sell-through",
+        "Revenue",
+      ],
+      ...series.map((r) => [
+        r.batchNo,
+        r.date,
+        r.produced,
+        r.sealed,
+        r.orders,
+        r.sold,
+        r.unsold,
+        `${r.sellThrough}%`,
+        r.revenue,
+      ]),
+    ];
   }
 
   function exportCsv() {
-    const header = "Batch No.,Date,Produced,Sealed,Orders,Sold,Unsold,Sell-through,Revenue\n";
-    const body = series
-      .map((r) =>
-        [
-          r.batchNo,
-          r.date,
-          r.produced,
-          r.sealed,
-          r.orders,
-          r.sold,
-          r.unsold,
-          `${r.sellThrough}%`,
-          r.revenue,
-        ].join(","),
-      )
+    // Every cell quoted: names and dates can carry commas that would otherwise split a column.
+    const cell = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+    const csv = viewTable()
+      .map((row) => row.map(cell).join(","))
       .join("\n");
-    const blob = new Blob([header + body], { type: "text/csv" });
+    const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "anwar-fresh-report.csv";
+    a.download = `anwar-fresh-report-${view}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Report downloaded");
@@ -317,7 +507,7 @@ function ReportsPage() {
         title="Reports"
         description="Reconcile what was produced, sealed, sold and collected."
         action={
-          <Button variant="outline" onClick={exportCsv} disabled={series.length === 0}>
+          <Button variant="outline" onClick={exportCsv} disabled={viewRowCount === 0}>
             Export CSV
           </Button>
         }
@@ -395,6 +585,42 @@ function ReportsPage() {
             </SelectContent>
           </Select>
         </Field>
+        <Field label="Payment status" htmlFor="report-payment-status">
+          <Select
+            value={paymentStatus}
+            onValueChange={(v) => setPaymentStatus(v as "all" | PaymentStatus)}
+          >
+            <SelectTrigger id="report-payment-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All payments</SelectItem>
+              {PAYMENT_STATUSES.map((p) => (
+                <SelectItem key={p} value={p}>
+                  {p}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <Field label="Payment method" htmlFor="report-payment-method">
+          <Select
+            value={paymentMethod}
+            onValueChange={(v) => setPaymentMethod(v as "all" | PaymentMethod)}
+          >
+            <SelectTrigger id="report-payment-method">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All methods</SelectItem>
+              {PAYMENT_METHODS.map((m) => (
+                <SelectItem key={m} value={m}>
+                  {m}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
         <datalist id="report-employee-names">
           {employees.map((e) => (
             <option key={e.id} value={e.name} />
@@ -426,8 +652,8 @@ function ReportsPage() {
 
       {narrowedToOrders ? (
         <p className="mt-3 text-xs text-muted-foreground">
-          Produced and Sealed are the whole of each batch in range. Orders, Sold and Revenue cover
-          only the orders matching the Order No., Employee ID and Employee Name filters.
+          Produced and Sealed are the whole of each batch in range. Orders, Sold, Revenue and Cash
+          collected cover only the orders matching the order, employee and payment filters.
         </p>
       ) : (
         <p className="mt-3 text-xs text-muted-foreground">
@@ -586,7 +812,114 @@ function ReportsPage() {
         </Card>
       </div>
 
-      <div className="mt-6 overflow-x-auto rounded-xl border border-border bg-card">
+      <div className="mt-6 flex flex-wrap items-center gap-2">
+        {VIEWS.map((v) => (
+          <Button
+            key={v.value}
+            size="sm"
+            variant={view === v.value ? "default" : "outline"}
+            aria-pressed={view === v.value}
+            onClick={() => setView(v.value)}
+          >
+            {v.label}
+          </Button>
+        ))}
+        <span className="text-xs text-muted-foreground">
+          {viewRowCount} row{viewRowCount === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      {view === "employee" ? (
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[820px] text-sm">
+            <thead className="border-b border-border text-left text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-medium">Employee ID</th>
+                <th className="px-4 py-3 font-medium">Name</th>
+                <th className="px-4 py-3 font-medium">Orders</th>
+                <th className="px-4 py-3 font-medium">Batches</th>
+                <th className="px-4 py-3 font-medium">Litres</th>
+                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Collected</th>
+                <th className="px-4 py-3 font-medium">Due</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byEmployee.map((r) => (
+                <tr key={r.key} className="border-b border-border/60 last:border-0">
+                  <td className="px-4 py-3 font-medium">{r.employeeId}</td>
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.orders}</td>
+                  <td className="px-4 py-3">{r.batches}</td>
+                  <td className="px-4 py-3">{litres(r.litres)}</td>
+                  <td className="px-4 py-3">{taka(r.amount)}</td>
+                  <td className="px-4 py-3">{taka(r.collected)}</td>
+                  <td className="px-4 py-3">{taka(r.due)}</td>
+                </tr>
+              ))}
+              {byEmployee.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-muted-foreground">
+                    No orders match the selected filters.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {view === "order" ? (
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="w-full min-w-[1040px] text-sm">
+            <thead className="border-b border-border text-left text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-medium">Order No.</th>
+                <th className="px-4 py-3 font-medium">Date</th>
+                <th className="px-4 py-3 font-medium">Batch No.</th>
+                <th className="px-4 py-3 font-medium">Employee</th>
+                <th className="px-4 py-3 font-medium">Litres</th>
+                <th className="px-4 py-3 font-medium">Amount</th>
+                <th className="px-4 py-3 font-medium">Collected</th>
+                <th className="px-4 py-3 font-medium">Due</th>
+                <th className="px-4 py-3 font-medium">Payment</th>
+                <th className="px-4 py-3 font-medium">Method</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byOrder.map((r) => (
+                <tr key={r.orderNo} className="border-b border-border/60 last:border-0">
+                  <td className="px-4 py-3 font-medium">{r.orderNo}</td>
+                  <td className="px-4 py-3">{r.date}</td>
+                  <td className="px-4 py-3">{r.batchNo}</td>
+                  <td className="px-4 py-3">
+                    {r.name}
+                    <span className="block text-xs text-muted-foreground">{r.employeeId}</span>
+                  </td>
+                  <td className="px-4 py-3">{litres(r.litres)}</td>
+                  <td className="px-4 py-3">{taka(r.amount)}</td>
+                  <td className="px-4 py-3">{taka(r.collected)}</td>
+                  <td className="px-4 py-3">{taka(r.due)}</td>
+                  <td className="px-4 py-3">{r.payment}</td>
+                  <td className="px-4 py-3">{r.method}</td>
+                </tr>
+              ))}
+              {byOrder.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-10 text-center text-muted-foreground">
+                    No orders match the selected filters.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      <div
+        className="mt-3 overflow-x-auto rounded-xl border border-border bg-card"
+        hidden={view !== "batch"}
+      >
         <table className="w-full min-w-[820px] text-sm">
           <thead className="border-b border-border text-left text-muted-foreground">
             <tr>

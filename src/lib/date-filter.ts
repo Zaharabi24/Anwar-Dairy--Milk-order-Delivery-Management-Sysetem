@@ -10,10 +10,12 @@
 // Types and pure functions only: safe to import from client code.
 
 /** How the range is being chosen. `all` is every record, which is where each screen starts. */
-export type PeriodMode = "all" | "month" | "year" | "day" | "range";
+export type PeriodMode = "all" | "week" | "month" | "year" | "day" | "range";
 
 export interface PeriodFilter {
   mode: PeriodMode;
+  /** yyyy-MM-dd, any day in the week wanted. The week runs Sunday to Saturday. */
+  week: string;
   /** yyyy-MM, from a month input. */
   month: string;
   /** yyyy. */
@@ -27,6 +29,7 @@ export interface PeriodFilter {
 
 export const EMPTY_PERIOD: PeriodFilter = {
   mode: "all",
+  week: "",
   month: "",
   year: "",
   day: "",
@@ -61,6 +64,7 @@ export function periodState(f: PeriodFilter): { invalid: boolean; incomplete: bo
     if (f.from && f.to && f.from > f.to) return { invalid: true, incomplete: false };
     return { invalid: false, incomplete: !f.from && !f.to };
   }
+  if (f.mode === "week") return { invalid: false, incomplete: !f.week };
   if (f.mode === "month") return { invalid: false, incomplete: !f.month };
   if (f.mode === "year") return { invalid: false, incomplete: !f.year };
   if (f.mode === "day") return { invalid: false, incomplete: !f.day };
@@ -81,6 +85,10 @@ export function periodMatches(f: PeriodFilter, value: string | Date | null): boo
   if (!value) return false;
   const day = dhakaDay(value);
   switch (f.mode) {
+    case "week": {
+      const { from, to } = weekBounds(f.week);
+      return day >= from && day <= to;
+    }
     case "month":
       return day.slice(0, 7) === f.month;
     case "year":
@@ -102,6 +110,8 @@ export function periodBounds(f: PeriodFilter): { from: string | null; to: string
   const { invalid, incomplete } = periodState(f);
   if (f.mode === "all" || invalid || incomplete) return { from: null, to: null };
   switch (f.mode) {
+    case "week":
+      return weekBounds(f.week);
     case "month":
       return { from: `${f.month}-01`, to: lastDayOfMonth(f.month) };
     case "year":
@@ -113,6 +123,22 @@ export function periodBounds(f: PeriodFilter): { from: string | null; to: string
     default:
       return { from: null, to: null };
   }
+}
+
+/**
+ * The Sunday-to-Saturday week a yyyy-MM-dd falls in, as yyyy-MM-dd at both ends.
+ *
+ * Sunday first because that is when the working week starts in Bangladesh. Worked in UTC on the
+ * calendar date alone, so the answer cannot shift with the browser's timezone.
+ */
+export function weekBounds(day: string): { from: string; to: string } {
+  const [y, m, d] = day.split("-").map(Number);
+  const date = new Date(Date.UTC(y!, m! - 1, d!));
+  const start = new Date(date);
+  start.setUTCDate(date.getUTCDate() - date.getUTCDay());
+  const end = new Date(start);
+  end.setUTCDate(start.getUTCDate() + 6);
+  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
 function lastDayOfMonth(month: string): string {
@@ -130,6 +156,17 @@ export function periodLabel(f: PeriodFilter): string {
   if (invalid) return "End date is before the start date";
   if (incomplete) return "All dates";
   switch (f.mode) {
+    case "week": {
+      const { from, to } = weekBounds(f.week);
+      const fmt = (d: string) =>
+        new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", {
+          timeZone: "UTC",
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+        });
+      return `Week of ${fmt(from)} to ${fmt(to)}`;
+    }
     case "month": {
       const [y, m] = f.month.split("-").map(Number);
       return new Date(Date.UTC(y!, m! - 1, 1)).toLocaleDateString("en-GB", {
