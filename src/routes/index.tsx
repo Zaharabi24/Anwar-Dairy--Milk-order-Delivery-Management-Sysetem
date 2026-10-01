@@ -70,12 +70,12 @@ function Nav({ auth, onLogin }: { auth: AuthUser | null; onLogin: (i: LoginInten
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/85 backdrop-blur">
       {/* The bar is sticky, so on a phone its full height is taken off every screen and sits over
-          whatever scrolls past. It shrinks below sm and is unchanged from sm up. */}
-      <div className="mx-auto flex h-20 max-w-6xl items-center justify-between px-5 sm:h-28">
+          whatever scrolls past, so it is kept slim, and slimmer still below sm. */}
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 sm:h-20">
         <img
           src={logoUrl}
           alt="Anwar Organic"
-          className="h-12 w-auto sm:h-20"
+          className="h-11 w-auto sm:h-14"
           width={83}
           height={80}
         />
@@ -169,30 +169,112 @@ const farmStages: Stage[] = [
   { icon: Truck, title: "Delivery", copy: "Fresh batch reaches you." },
 ];
 
-// Both step sections share one design; only the id, heading, steps and backdrop differ.
+// Seconds the timeline takes to travel from one farm stage to the next.
+const FARM_STEP = 0.5;
+
+/**
+ * From farm to home, as a timeline: numbered markers joined by a line that fills in, stage by
+ * stage, once the section scrolls into view, with each stage's card lighting up as the line
+ * reaches it. Across the page from md up; down the left edge on a phone.
+ */
+function FarmJourney() {
+  const ref = useRef<HTMLOListElement>(null);
+  const inView = useInView(ref, { once: true, amount: 0.3 });
+  const reduce = useReducedMotion();
+  const delay = (i: number) => (reduce ? 0 : i * FARM_STEP);
+  const last = farmStages.length - 1;
+
+  return (
+    <section
+      id="farm-to-home"
+      className="scroll-mt-20 border-y border-border bg-secondary/60 sm:scroll-mt-0"
+    >
+      <div className="mx-auto max-w-6xl px-5 py-12 sm:py-20">
+        <SectionHeading
+          eyebrow="At the farm"
+          title="From Farm To Your Home"
+          lead="From the herd at Anwar Organic Dairy Farm, Gazaria, to your delivery point, every step is handled with care."
+        />
+        <ol ref={ref} className="mt-10 grid md:mt-14 md:grid-cols-5 md:gap-6">
+          {farmStages.map((s, i) => (
+            <li
+              key={s.title}
+              className="relative grid grid-cols-[2.5rem_1fr] gap-4 pb-5 last:pb-0 md:flex md:flex-col md:gap-0 md:pb-0"
+            >
+              {i < last ? (
+                // The connector to the next stage: a grey track, and a green fill drawn over it
+                // once the stage before it has lit. Down from the marker on a phone, across to
+                // the next marker (a column plus the gap) from md up.
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="absolute bottom-0 left-5 top-10 w-0.5 -translate-x-1/2 bg-border md:bottom-auto md:left-1/2 md:top-5 md:h-0.5 md:w-[calc(100%+1.5rem)] md:-translate-y-1/2 md:translate-x-0"
+                  />
+                  <span
+                    aria-hidden="true"
+                    className={`absolute bottom-0 left-5 top-10 w-0.5 -translate-x-1/2 origin-top bg-primary transition-[scale] ease-linear md:bottom-auto md:left-1/2 md:top-5 md:h-0.5 md:w-[calc(100%+1.5rem)] md:origin-left md:-translate-y-1/2 md:translate-x-0 ${
+                      inView ? "scale-100" : "scale-y-0 md:scale-x-0 md:scale-y-100"
+                    }`}
+                    style={{
+                      transitionDuration: `${reduce ? 0 : FARM_STEP}s`,
+                      transitionDelay: `${delay(i)}s`,
+                    }}
+                  />
+                </>
+              ) : null}
+
+              <span
+                className={`relative z-10 flex size-10 items-center justify-center rounded-full border-2 text-sm font-bold tabular-nums ring-4 ring-secondary transition-colors duration-300 md:mx-auto ${
+                  inView
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground"
+                }`}
+                style={{ transitionDelay: `${delay(i)}s` }}
+              >
+                {i + 1}
+              </span>
+
+              <motion.div
+                className="group rounded-2xl border border-border bg-card p-5 shadow-sm transition-[translate,box-shadow,border-color] duration-300 hover:-translate-y-1 hover:border-primary/40 hover:shadow-md md:mt-6 md:flex-1 md:text-center"
+                initial={{ opacity: 0, y: 12 }}
+                animate={inView ? { opacity: 1, y: 0 } : {}}
+                transition={{ delay: delay(i), duration: 0.4 }}
+              >
+                {/* Icon beside the title on a phone, above it from md up. */}
+                <div className="flex items-center gap-3 md:block">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary transition-colors duration-300 group-hover:bg-primary group-hover:text-primary-foreground md:mx-auto">
+                    <s.icon className="size-5" aria-hidden="true" />
+                  </div>
+                  <h3 className="text-lg font-semibold md:mt-4">{s.title}</h3>
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{s.copy}</p>
+              </motion.div>
+            </li>
+          ))}
+        </ol>
+      </div>
+    </section>
+  );
+}
+
+// The "How it works" steps: a row of icons along a line a dot travels down.
 function StepsSection({
   id,
   eyebrow,
   title,
   stages,
-  tinted = false,
 }: {
   id: string;
   eyebrow: string;
   title: string;
   stages: Stage[];
-  tinted?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const inView = useInView(ref, { once: true, amount: 0.4 });
   const reduce = useReducedMotion();
 
   return (
-    <section
-      id={id}
-      ref={ref}
-      className={`scroll-mt-20 sm:scroll-mt-0 ${tinted ? "border-y border-border bg-secondary/60" : ""}`}
-    >
+    <section id={id} ref={ref} className="scroll-mt-20 sm:scroll-mt-0">
       <div className="mx-auto max-w-6xl px-5 py-12 sm:py-20">
         <SectionHeading eyebrow={eyebrow} title={title} />
         <div className="relative mt-8 sm:mt-14">
@@ -427,7 +509,7 @@ function Landing() {
     <div className="min-h-screen bg-background text-foreground">
       <Nav auth={auth} onLogin={onLogin} />
 
-      <div className="relative overflow-hidden bg-gradient-to-b from-secondary/70 via-background to-background">
+      <div className="relative overflow-hidden bg-gradient-to-b from-secondary/70 via-background to-background md:flex md:min-h-[calc(100svh-5rem)] md:items-center">
         {/* Soft washes of the brand colours drift behind the hero, and show through the frosted
             batch card, so it is not a flat page. */}
         <div
@@ -442,35 +524,35 @@ function Landing() {
           aria-hidden="true"
           className="hero-blob pointer-events-none absolute right-1/4 top-10 size-72 rounded-full bg-primary/10 blur-3xl [animation-delay:-11s] [animation-duration:22s]"
         />
-        <section className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 py-16 md:grid-cols-[50fr_50fr] md:py-24 lg:grid-cols-[46fr_54fr]">
+        <section className="relative mx-auto grid w-full max-w-6xl items-center gap-12 px-5 py-10 md:grid-cols-[50fr_50fr] md:py-8 short:py-3 lg:grid-cols-[46fr_54fr]">
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-700">
             <p className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-primary shadow-sm">
               <Leaf className="size-3.5" aria-hidden="true" />
               An Anwar Group Initiative
             </p>
-            <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] sm:text-6xl">
+            <h1 className="mt-5 text-4xl font-extrabold leading-[1.05] sm:text-6xl short:mt-3 short:text-5xl">
               Today&apos;s Milk, <br className="hidden sm:block" />
               <span className="bg-gradient-to-r from-primary to-primary-deep bg-clip-text text-transparent">
                 Booked in Under a Minute.
               </span>
             </h1>
-            <p className="mt-5 max-w-xl text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-5 max-w-xl text-lg short:mt-3 short:text-base leading-relaxed text-muted-foreground">
               Fresh Whole Milk from{" "}
               <strong className="font-semibold">Anwar Organic Dairy Farm, Gazaria</strong> — where
               responsible cow care, quality nutrition and careful farm practices come together.
             </p>
-            <ul className="mt-6 flex flex-wrap gap-2">
+            <ul className="mt-6 flex flex-wrap gap-2 short:mt-4">
               {heroTags.map((t) => (
                 <li
                   key={t}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-4 py-1.5 text-sm font-semibold shadow-sm backdrop-blur transition-transform duration-300 hover:-translate-y-0.5"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card/80 px-4 py-1.5 text-sm short:py-1 font-semibold shadow-sm backdrop-blur transition-transform duration-300 hover:-translate-y-0.5"
                 >
                   <Check className="size-3.5 text-primary" aria-hidden="true" />
                   {t}
                 </li>
               ))}
             </ul>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3 short:mt-5">
               {auth?.withoutAccount ? (
                 // Booking is the point of the visit, so it leads; the batch is still one click away
                 // for anyone who wants to look before they order.
@@ -514,20 +596,14 @@ function Landing() {
           </div>
           {/* Top-aligned with the headline rather than centred: the offset is the height of the
               "An Anwar Group Initiative" pill and the gap under it. */}
-          <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-6 duration-1000 md:mt-[3.5rem] md:self-start">
+          <div className="animate-in fade-in zoom-in-95 slide-in-from-bottom-6 duration-1000 md:mt-[3.5rem] md:self-start short:mt-0 short:self-center">
             <BatchWidget />
           </div>
         </section>
       </div>
 
       <Capabilities />
-      <StepsSection
-        id="farm-to-home"
-        eyebrow="At the farm"
-        title="From Farm To Your Home"
-        stages={farmStages}
-        tinted
-      />
+      <FarmJourney />
       <ExternalOrderSection />
       <StepsSection
         id="how-it-works"
@@ -575,10 +651,11 @@ function SiteFooter() {
         <div className="mt-3 max-w-xl space-y-3 text-sm leading-relaxed text-muted-foreground">
           <p>Fresh Whole Milk from Anwar Organic Dairy Farm, Gazaria.</p>
           <p>
-            Our commitment is to provide fresh milk through responsible farming, careful cow care
-            and hygienic handling practices.
+            Anwar Organic offers fresh unpasteurized whole milk that provides protein, calcium and
+            other essential nutrients and is chilled to 4°C. As it is unpasteurized, please
+            refrigerate it immediately upon reaching home to help prevent spoilage and curdling,
+            and boil thoroughly before consumption.
           </p>
-          <p>Keep refrigerated and boil thoroughly before consumption.</p>
         </div>
 
         <p className="mt-10 border-t border-border pt-6 text-sm text-muted-foreground sm:mt-12">

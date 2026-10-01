@@ -3,6 +3,9 @@
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
+/* A short desktop screen (a laptop with the browser's bars taken off), where the landing hero
+   tightens so the whole of it, Book Milk included, fits without scrolling. */
+@custom-variant short (@media (min-width: 48rem) and (max-height: 720px));
 
 /*
  * Design system definition.

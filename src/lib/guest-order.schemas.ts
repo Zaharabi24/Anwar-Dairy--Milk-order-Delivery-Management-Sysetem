@@ -11,6 +11,15 @@ export function normalisePhone(raw: string): string {
 }
 const BD_MOBILE = /^01[3-9]\d{8}$/;
 
+/** An optional text field: trimmed, and left out altogether when blank. */
+const optionalText = (max: number, tooLong: string) =>
+  z
+    .string()
+    .trim()
+    .max(max, tooLong)
+    .optional()
+    .transform((v) => v || undefined);
+
 export const guestOrderInput = z.object({
   batchNo: z.string().trim().min(1).max(60),
   name: z.string().trim().min(2, "Enter your full name.").max(120, "Keep the name shorter."),
@@ -20,17 +29,22 @@ export const guestOrderInput = z.object({
     .max(20)
     .transform(normalisePhone)
     .refine((v) => BD_MOBILE.test(v), "Enter a mobile number like 01712345678."),
+  // Optional: without one there is simply no emailed receipt.
   email: z
     .string()
     .trim()
     .toLowerCase()
     .max(200)
-    .email("Enter a valid email address.")
+    .optional()
+    .transform((v) => v || undefined)
+    .refine((v) => !v || z.string().email().safeParse(v).success, "Enter a valid email address.")
     // Someone with a company address has an Employee ID too, and books through Book Milk.
     .refine(
-      (v) => !v.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`),
+      (v) => !v?.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`),
       "This is a company address. Use Book Milk and sign in with your company account instead.",
     ),
+  floor: optionalText(40, "Keep the floor under 40 characters."),
+  profile: optionalText(200, "Keep the description under 200 characters."),
   address: z
     .string()
     .trim()

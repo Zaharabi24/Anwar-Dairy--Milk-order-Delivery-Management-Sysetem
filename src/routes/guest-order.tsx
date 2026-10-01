@@ -14,7 +14,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { guestBookingInfoFn, placeGuestOrderFn } from "@/functions/public.functions";
+import { LiveBatchCard } from "@/components/landing/LiveBatchCard";
+import {
+  guestBookingInfoFn,
+  placeGuestOrderFn,
+  publicBatchStatusFn,
+} from "@/functions/public.functions";
+import type { PublicBatchStatus } from "@/server/public-batch.server";
 import {
   guestOrderInput,
   type GuestBookingInfo,
@@ -24,42 +30,44 @@ import {
 export const Route = createFileRoute("/guest-order")({
   head: () => ({
     meta: [
-      { title: "Non-Management Order — Anwar Organic" },
-      {
-        name: "description",
-        content:
-          "For people who work in the office and collect from a pickup point, but have no company email or Employee ID.",
-      },
+      { title: "Order Milk — Anwar Organic" },
+      { name: "description", content: "Order fresh whole milk from today's batch." },
     ],
   }),
+  // The form's own batch details, and the landing page's live view of the same batch for the card
+  // at the top. Either failing just leaves that part out.
   loader: async () => {
-    try {
-      return { batch: await guestBookingInfoFn() };
-    } catch {
-      return { batch: null as GuestBookingInfo | null };
-    }
+    const [batch, live] = await Promise.all([
+      guestBookingInfoFn().catch(() => null as GuestBookingInfo | null),
+      publicBatchStatusFn().catch(() => null as PublicBatchStatus | null),
+    ]);
+    return { batch, live };
   },
   component: GuestOrderPage,
 });
 
-type Field = "name" | "phone" | "email" | "address" | "deliveryPointId" | "litres";
+type Field =
+  | "name"
+  | "phone"
+  | "email"
+  | "address"
+  | "floor"
+  | "profile"
+  | "deliveryPointId"
+  | "litres";
 
-const dhakaDateTime = (iso: string) =>
-  new Date(iso).toLocaleString("en-GB", {
-    timeZone: "Asia/Dhaka",
-    dateStyle: "medium",
-    timeStyle: "short",
-  });
 const dhakaDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-GB", { timeZone: "Asia/Dhaka", dateStyle: "medium" });
 
 function GuestOrderPage() {
-  const { batch } = Route.useLoaderData();
+  const { batch, live } = Route.useLoaderData();
   const [form, setForm] = useState({
     name: "",
     phone: "",
     email: "",
     address: "",
+    floor: "",
+    profile: "",
     deliveryPointId: "",
     litres: batch ? String(batch.minLitres) : "1",
     paymentMethod: "Cash" as "Cash" | "bKash",
@@ -103,6 +111,8 @@ function GuestOrderPage() {
       phone: form.phone,
       email: form.email,
       address: form.address,
+      floor: form.floor,
+      profile: form.profile,
       deliveryPointId: form.deliveryPointId,
       litres,
       paymentMethod: form.paymentMethod,
@@ -145,7 +155,8 @@ function GuestOrderPage() {
           <h1 className="mt-4 font-display text-2xl font-bold">Order received</h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
             Your order number is <strong className="text-foreground">{placed.orderNo}</strong>. The
-            head office coordinator confirms it before collection. A copy was sent to {form.email}.
+            head office coordinator confirms it before collection.
+            {form.email.trim() ? ` A copy was sent to ${form.email.trim()}.` : ""}
           </p>
         </div>
         <dl className="mt-6 grid grid-cols-[auto_1fr] gap-x-6 gap-y-2 rounded-lg border border-border bg-secondary/50 p-4 text-sm">
@@ -174,19 +185,13 @@ function GuestOrderPage() {
 
   return (
     <AuthShell width="wide">
-      <AuthHeading
-        title="Non-Management Order"
-        description="For people who work in the office and collect from a pickup point, but have no company email or Employee ID."
-      />
-
-      <div className="-mt-3 mb-5 rounded-lg border border-border bg-secondary/50 px-4 py-3 text-sm">
-        <p className="font-medium">Batch {batch.batchNo}</p>
-        <p className="mt-1 text-muted-foreground">
-          Tk {batch.ratePerLitre}/litre · {batch.remainingLitres} L left · bookings close{" "}
-          {dhakaDateTime(batch.bookingCutoff)} (Dhaka) · collect on {dhakaDate(batch.deliveryDate)},{" "}
-          {batch.deliveryWindow}
-        </p>
-      </div>
+      {/* The same batch card as the landing page hero: litres left, rate, closing time and
+          delivery, in place of a heading and a line of batch details. */}
+      {live ? (
+        <div className="mb-6">
+          <LiveBatchCard batch={live} compact />
+        </div>
+      ) : null}
 
       {message ? (
         <Alert variant="destructive" className="mb-5">
@@ -231,7 +236,9 @@ function GuestOrderPage() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="guest-email">Personal Email</Label>
+          <Label htmlFor="guest-email">
+            Personal Email <span className="font-normal text-muted-foreground">(optional)</span>
+          </Label>
           <Input
             id="guest-email"
             type="email"
@@ -244,7 +251,9 @@ function GuestOrderPage() {
           {errors.email ? (
             <FieldError message={errors.email} />
           ) : (
-            <p className="text-xs text-muted-foreground">Your order confirmation is sent here.</p>
+            <p className="text-xs text-muted-foreground">
+              Add one to get your order confirmation by email.
+            </p>
           )}
         </div>
 
@@ -260,6 +269,36 @@ function GuestOrderPage() {
             className={errors.address ? "border-destructive" : ""}
           />
           <FieldError message={errors.address} />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
+          <div className="space-y-2">
+            <Label htmlFor="guest-floor">
+              Floor <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="guest-floor"
+              value={form.floor}
+              placeholder="e.g. 5th"
+              onChange={(e) => set("floor", e.target.value)}
+              className={errors.floor ? "border-destructive" : ""}
+            />
+            <FieldError message={errors.floor} />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="guest-profile">
+              Profile Description{" "}
+              <span className="font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            <Input
+              id="guest-profile"
+              value={form.profile}
+              placeholder="e.g. Office assistant, Accounts"
+              onChange={(e) => set("profile", e.target.value)}
+              className={errors.profile ? "border-destructive" : ""}
+            />
+            <FieldError message={errors.profile} />
+          </div>
         </div>
 
         <div className="space-y-2">

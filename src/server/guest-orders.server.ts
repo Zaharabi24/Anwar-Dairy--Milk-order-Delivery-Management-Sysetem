@@ -136,11 +136,11 @@ export async function placeGuestOrder(raw: GuestOrderInput): Promise<GuestOrderR
     const [row] = await tx<Row[]>`
       insert into orders (order_no, employee_id, batch_no, litres, rate, delivery_point_id,
                           status, payment_method, guest_name, guest_phone, guest_email,
-                          guest_address, guest_ip)
+                          guest_address, guest_floor, guest_profile, guest_ip)
       values ('ORD-' || nextval('order_no_seq'), null, ${input.batchNo}, ${input.litres},
               ${batch["rate_per_litre"] as string}, ${input.deliveryPointId}, 'Pending',
-              ${input.paymentMethod}, ${input.name}, ${input.phone}, ${input.email},
-              ${input.address}, ${ip})
+              ${input.paymentMethod}, ${input.name}, ${input.phone}, ${input.email ?? null},
+              ${input.address}, ${input.floor ?? null}, ${input.profile ?? null}, ${ip})
       returning order_no, amount`;
 
     await tx`
@@ -163,7 +163,9 @@ export async function placeGuestOrder(raw: GuestOrderInput): Promise<GuestOrderR
     } satisfies GuestOrderResult;
   });
 
-  // Committed, so the order stands whatever the mail server says. A receipt they can keep.
+  // Committed, so the order stands whatever the mail server says. A receipt they can keep, when
+  // they gave an address to send it to.
+  if (!input.email) return result;
   void sendMail({
     to: input.email,
     subject: `Your milk order ${result.orderNo} is received`,

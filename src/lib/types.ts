@@ -103,6 +103,9 @@ export interface OrderGuest {
   phone: string;
   email: string;
   address: string;
+  floor: string;
+  /** Who they are, in their own words: their job, team or office. */
+  profile: string;
 }
 
 export interface Order {

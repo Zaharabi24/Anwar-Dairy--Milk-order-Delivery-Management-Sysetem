@@ -127,6 +127,8 @@ function OrdersPage() {
           (o.guest?.name.toLowerCase().includes(q) ?? false) ||
           (o.guest?.phone.includes(q) ?? false) ||
           (o.guest?.email.includes(q) ?? false) ||
+          (o.guest?.floor.toLowerCase().includes(q) ?? false) ||
+          (o.guest?.profile.toLowerCase().includes(q) ?? false) ||
           o.employeeId.toLowerCase().includes(q)
         );
       });
@@ -309,12 +311,12 @@ function OrdersPage() {
                       )}
                     </Td>
                     <Td>
-                      {o.guest ? "—" : emp?.department || "—"}
+                      {o.guest ? o.guest.profile || "—" : emp?.department || "—"}
                       <span className="block max-w-[14rem] text-xs text-muted-foreground">
                         {o.guest ? o.guest.address || "—" : emp?.designation || "—"}
                       </span>
                     </Td>
-                    <Td>{emp?.floorNo || "—"}</Td>
+                    <Td>{(o.guest ? o.guest.floor : emp?.floorNo) || "—"}</Td>
                     <Td>
                       {o.guest ? o.guest.email || "—" : emp?.companyEmail || "—"}
                       <span className="block text-xs text-muted-foreground">
@@ -447,8 +449,8 @@ function OrdersPage() {
             orderNo: o.orderNo,
             name: o.guest ? o.guest.name : (emp?.name ?? o.employeeId),
             employeeId: o.guest ? "Guest" : o.employeeId,
-            department: o.guest ? "—" : emp?.department || "—",
-            floor: emp?.floorNo || "—",
+            department: o.guest ? o.guest.profile || "—" : emp?.department || "—",
+            floor: (o.guest ? o.guest.floor : emp?.floorNo) || "—",
             phone: o.guest ? o.guest.phone : emp?.phone || "—",
             point: deliveryPoints.find((p) => p.id === o.deliveryPointId)?.name ?? "—",
             litres: o.litres,

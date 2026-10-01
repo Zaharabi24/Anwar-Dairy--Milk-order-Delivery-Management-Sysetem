@@ -117,6 +117,8 @@ const toOrder = (r: Row): Order => ({
           phone: r.guest_phone ?? "",
           email: r.guest_email ?? "",
           address: r.guest_address ?? "",
+          floor: r.guest_floor ?? "",
+          profile: r.guest_profile ?? "",
         },
       }
     : {}),
