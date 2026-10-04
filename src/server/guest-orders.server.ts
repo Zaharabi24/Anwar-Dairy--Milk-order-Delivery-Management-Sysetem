@@ -136,11 +136,11 @@ export async function placeGuestOrder(raw: GuestOrderInput): Promise<GuestOrderR
     const [row] = await tx<Row[]>`
       insert into orders (order_no, employee_id, batch_no, litres, rate, delivery_point_id,
                           status, payment_method, guest_name, guest_phone, guest_email,
-                          guest_address, guest_floor, guest_profile, guest_ip)
+                          guest_floor, guest_profile, guest_ip)
       values ('ORD-' || nextval('order_no_seq'), null, ${input.batchNo}, ${input.litres},
               ${batch["rate_per_litre"] as string}, ${input.deliveryPointId}, 'Pending',
               ${input.paymentMethod}, ${input.name}, ${input.phone}, ${input.email ?? null},
-              ${input.address}, ${input.floor ?? null}, ${input.profile ?? null}, ${ip})
+              ${input.floor}, ${input.profile}, ${ip})
       returning order_no, amount`;
 
     await tx`

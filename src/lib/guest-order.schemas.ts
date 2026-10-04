@@ -11,15 +11,6 @@ export function normalisePhone(raw: string): string {
 }
 const BD_MOBILE = /^01[3-9]\d{8}$/;
 
-/** An optional text field: trimmed, and left out altogether when blank. */
-const optionalText = (max: number, tooLong: string) =>
-  z
-    .string()
-    .trim()
-    .max(max, tooLong)
-    .optional()
-    .transform((v) => v || undefined);
-
 export const guestOrderInput = z.object({
   batchNo: z.string().trim().min(1).max(60),
   name: z.string().trim().min(2, "Enter your full name.").max(120, "Keep the name shorter."),
@@ -43,17 +34,18 @@ export const guestOrderInput = z.object({
       (v) => !v?.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`),
       "This is a company address. Use Book Milk and sign in with your company account instead.",
     ),
-  floor: optionalText(40, "Keep the floor under 40 characters."),
-  profile: optionalText(200, "Keep the description under 200 characters."),
-  address: z
+  // Guests collect from a pickup point, so the form asks where they sit and who they are rather
+  // than for an address.
+  floor: z.string().trim().min(1, "Enter your floor.").max(40, "Keep the floor under 40 characters."),
+  profile: z
     .string()
     .trim()
-    .min(5, "Enter your address.")
-    .max(300, "Keep the address under 300 characters."),
+    .min(1, "Enter a short description of yourself.")
+    .max(200, "Keep the description under 200 characters."),
   deliveryPointId: z.string().trim().min(1, "Choose a pickup point.").max(60),
   litres: z.number().int().positive().max(1000),
-  // Guests aren't on payroll, so they pay at collection.
-  paymentMethod: z.enum(["Cash", "bKash"]),
+  // Guests aren't on payroll, so they pay cash at collection.
+  paymentMethod: z.literal("Cash"),
 });
 
 export type GuestOrderInput = z.input<typeof guestOrderInput>;

@@ -6,7 +6,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -50,7 +49,6 @@ type Field =
   | "name"
   | "phone"
   | "email"
-  | "address"
   | "floor"
   | "profile"
   | "deliveryPointId"
@@ -65,12 +63,11 @@ function GuestOrderPage() {
     name: "",
     phone: "",
     email: "",
-    address: "",
     floor: "",
     profile: "",
     deliveryPointId: "",
     litres: batch ? String(batch.minLitres) : "1",
-    paymentMethod: "Cash" as "Cash" | "bKash",
+    paymentMethod: "Cash" as const,
   });
   const [errors, setErrors] = useState<Partial<Record<Field, string>>>({});
   const [message, setMessage] = useState<string | null>(null);
@@ -110,7 +107,6 @@ function GuestOrderPage() {
       name: form.name,
       phone: form.phone,
       email: form.email,
-      address: form.address,
       floor: form.floor,
       profile: form.profile,
       deliveryPointId: form.deliveryPointId,
@@ -257,25 +253,9 @@ function GuestOrderPage() {
           )}
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="guest-address">Address</Label>
-          <Textarea
-            id="guest-address"
-            rows={2}
-            value={form.address}
-            autoComplete="street-address"
-            placeholder="House, road, area"
-            onChange={(e) => set("address", e.target.value)}
-            className={errors.address ? "border-destructive" : ""}
-          />
-          <FieldError message={errors.address} />
-        </div>
-
         <div className="grid gap-4 sm:grid-cols-[10rem_1fr]">
           <div className="space-y-2">
-            <Label htmlFor="guest-floor">
-              Floor <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
+            <Label htmlFor="guest-floor">Floor</Label>
             <Input
               id="guest-floor"
               value={form.floor}
@@ -286,10 +266,7 @@ function GuestOrderPage() {
             <FieldError message={errors.floor} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="guest-profile">
-              Profile Description{" "}
-              <span className="font-normal text-muted-foreground">(optional)</span>
-            </Label>
+            <Label htmlFor="guest-profile">Profile Description</Label>
             <Input
               id="guest-profile"
               value={form.profile}
@@ -350,16 +327,12 @@ function GuestOrderPage() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="guest-payment">Payment at Collection</Label>
-            <Select
-              value={form.paymentMethod}
-              onValueChange={(v) => set("paymentMethod", v as "Cash" | "bKash")}
-            >
+            <Select value={form.paymentMethod}>
               <SelectTrigger id="guest-payment">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Cash">Cash</SelectItem>
-                <SelectItem value="bKash">bKash</SelectItem>
               </SelectContent>
             </Select>
           </div>
