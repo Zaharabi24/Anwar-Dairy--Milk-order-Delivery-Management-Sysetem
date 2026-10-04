@@ -34,3 +34,6 @@ dist-ssr
 # Local database backups: real employee data, never commit
 DB Backup/
 *.dump
+
+# Database dumps: employee data and password hashes, never commit
+backups/

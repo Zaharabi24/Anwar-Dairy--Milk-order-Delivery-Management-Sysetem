@@ -20,6 +20,12 @@ const text = (max: number) => z.string().max(max);
 const isoDate = z.string().datetime({ offset: true });
 const reason = z.string().trim().min(1).max(500);
 const litres = z.number().int().positive().max(100_000);
+/** What somebody orders: half litres, so 0.5, 1, 1.5 and so on. Batch stock stays whole litres. */
+const orderLitres = z
+  .number()
+  .positive()
+  .max(100_000)
+  .multipleOf(0.5, "Order in steps of 0.5 L.");
 const money = z.number().nonnegative().max(100_000_000);
 
 export const batchStatusInput = z.object({ batchNo: id, status: z.enum(batchStatuses) });
@@ -38,7 +44,7 @@ export const createBatchInput = z.object({
     producedLitres: litres,
     saleableLitres: litres,
     ratePerLitre: money,
-    minOrder: litres,
+    minOrder: orderLitres,
     maxOrder: litres,
     employeeCap: litres,
     bookingCutoff: isoDate,
@@ -59,7 +65,7 @@ export const createBatchInput = z.object({
 
 export const confirmOrderInput = z.object({
   batchNo: id,
-  litres,
+  litres: orderLitres,
   deliveryPointId: id,
   paymentMethod: z.enum(paymentMethods),
   collectionTime: text(100),
@@ -70,7 +76,7 @@ export const orderReasonInput = z.object({ orderNo: id, reason });
 
 export const updateOrderInput = z.object({
   orderNo: id,
-  patch: z.object({ litres: litres.optional(), status: z.enum(orderStatuses).optional() }),
+  patch: z.object({ litres: orderLitres.optional(), status: z.enum(orderStatuses).optional() }),
   reason,
 });
 
@@ -81,7 +87,7 @@ export const deliveryRecordInput = z.object({
   dateTime: isoDate,
   location: text(200),
   floor: text(100),
-  quantity: litres,
+  quantity: orderLitres,
   receiverName: text(120),
   remarks: text(500),
 });
@@ -152,7 +158,7 @@ export const saveSettingsInput = z.object({
     ratePerLitre: money,
     bookingCutoff: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Cutoff must be HH:MM."),
     employeeCap: litres,
-    minOrder: litres,
+    minOrder: orderLitres,
     deliveryWindow: text(100),
     emailAlerts: z.boolean(),
     smsAlerts: z.boolean(),

@@ -37,7 +37,7 @@ export function StatCard({
       }`}
     >
       <p className={`text-sm ${emphasis ? "opacity-80" : "text-muted-foreground"}`}>{label}</p>
-      <p className="mt-2 font-display text-3xl font-extrabold">{format(Math.round(shown))}</p>
+      <p className="mt-2 font-display text-3xl font-extrabold">{format(shown === value ? value : Math.round(shown))}</p>
       {hint ? (
         <p className={`mt-1 text-xs ${emphasis ? "opacity-80" : "text-muted-foreground"}`}>{hint}</p>
       ) : null}

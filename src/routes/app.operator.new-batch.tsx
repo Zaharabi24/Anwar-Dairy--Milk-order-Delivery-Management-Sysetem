@@ -61,20 +61,22 @@ function NewBatch() {
   const { batches, deliveryPoints, employees, addBatch } = useAppData();
   const navigate = useNavigate();
 
-  const [producedText, setProducedText] = useState("640");
-  const [saleableText, setSaleableText] = useState("600");
-  const [rate, setRate] = useState(92);
-  const [minOrder, setMin] = useState(1);
+  const [producedText, setProducedText] = useState("150");
+  const [saleableText, setSaleableText] = useState("150");
+  const [rate, setRate] = useState(100);
+  const [minOrder, setMin] = useState(0.5);
   const [maxOrder, setMax] = useState(10);
   const [cap, setCap] = useState(10);
   const today = startOfDay(new Date());
   const [productionDate, setProductionDate] = useState(today);
   const [cutoffDate, setCutoffDate] = useState(today);
-  const [cutoffTime, setCutoffTime] = useState("13:00");
+  const [cutoffTime, setCutoffTime] = useState("17:00");
   const [deliveryDate, setDeliveryDate] = useState(today);
-  const [windowFrom, setWindowFrom] = useState("16:00");
+  const [windowFrom, setWindowFrom] = useState("17:00");
   const [windowTo, setWindowTo] = useState("18:30");
-  const [note, setNote] = useState("Chilled at 4°C. Please bring your own carry bag.");
+  const [note, setNote] = useState(
+    "As this is unpasteurized milk, please refrigerate it immediately upon reaching home to help prevent spoilage and curdling, and boil thoroughly before consumption.",
+  );
   // Selection starts as null and means "every active point". Nothing is hardcoded: the demo
   // seed's ids don't exist on a real database, and a batch saved against one is only rejected
   // once it reaches the foreign key.
@@ -220,6 +222,8 @@ function NewBatch() {
           >
             <Input
               type="number"
+              min={0.5}
+              step={0.5}
               value={minOrder}
               onChange={(e) => setMin(Number(e.target.value))}
             />

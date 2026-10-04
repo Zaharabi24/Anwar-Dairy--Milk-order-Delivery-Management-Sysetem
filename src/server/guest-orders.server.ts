@@ -40,7 +40,7 @@ export async function getGuestBookingInfo(): Promise<GuestBookingInfo | null> {
     select b.batch_no, b.rate_per_litre, b.saleable_litres, b.min_order, b.max_order,
            b.employee_cap, b.booking_cutoff, b.delivery_date, b.delivery_window,
            coalesce((select sum(o.litres) from orders o
-                     where o.batch_no = b.batch_no and o.status <> 'Cancelled'), 0)::int as booked
+                     where o.batch_no = b.batch_no and o.status <> 'Cancelled'), 0)::float8 as booked
     from batches b
     where ${OPEN_TO_GUESTS(sql)}
     order by b.booking_cutoff, b.seq desc
@@ -124,7 +124,7 @@ export async function placeGuestOrder(raw: GuestOrderInput): Promise<GuestOrderR
     if (!point) throw new AppError("Choose one of this batch's pickup points.");
 
     const [{ booked }] = (await tx<Row[]>`
-      select coalesce(sum(litres), 0)::int as booked from orders
+      select coalesce(sum(litres), 0)::float8 as booked from orders
       where batch_no = ${input.batchNo} and status <> 'Cancelled'`) as unknown as [
       { booked: number },
     ];

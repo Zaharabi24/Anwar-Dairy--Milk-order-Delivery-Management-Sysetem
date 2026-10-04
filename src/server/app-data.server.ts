@@ -94,7 +94,7 @@ const toBatch = (r: Row): DailyMilkBatch => ({
   producedLitres: r.produced_litres,
   saleableLitres: r.saleable_litres,
   ratePerLitre: Number(r.rate_per_litre),
-  minOrder: r.min_order,
+  minOrder: Number(r.min_order),
   maxOrder: r.max_order,
   employeeCap: r.employee_cap,
   bookingCutoff: iso(r.booking_cutoff),
@@ -123,7 +123,7 @@ const toOrder = (r: Row): Order => ({
       }
     : {}),
   batchNo: r.batch_no,
-  litres: r.litres,
+  litres: Number(r.litres),
   rate: Number(r.rate),
   amount: Number(r.amount),
   deliveryPointId: r.delivery_point_id,
@@ -153,7 +153,7 @@ const toDeliveryRecord = (r: Row): DeliveryRecord => ({
   dateTime: iso(r.date_time),
   location: r.location,
   floor: r.floor,
-  quantity: r.quantity,
+  quantity: Number(r.quantity),
   receiverName: r.receiver_name,
   remarks: r.remarks,
 });
@@ -193,7 +193,7 @@ const toSettings = (r: Row): AppSettings => ({
   ratePerLitre: Number(r.rate_per_litre),
   bookingCutoff: r.booking_cutoff,
   employeeCap: r.employee_cap,
-  minOrder: r.min_order,
+  minOrder: Number(r.min_order),
   deliveryWindow: r.delivery_window,
   emailAlerts: r.email_alerts,
   smsAlerts: r.sms_alerts,
@@ -284,8 +284,8 @@ export async function readSnapshot(user?: SessionUser): Promise<AppSnapshot> {
   const batchTotals: Record<string, BatchTotals> = {};
   for (const b of totals!) {
     batchTotals[b.batch_no] = {
-      booked: b.final_booked_litres,
-      delivered: b.final_delivered_litres ?? 0,
+      booked: Number(b.final_booked_litres),
+      delivered: Number(b.final_delivered_litres ?? 0),
     };
   }
 
@@ -448,6 +448,8 @@ const LOCK_DELIVERY_POINT_ID = 4_217_004;
 async function lockOrder(tx: Tx, orderNo: string): Promise<Row> {
   const [order] = await tx<Row[]>`select * from orders where order_no = ${orderNo} for update`;
   if (!order) throw new AppError(`Order ${orderNo} doesn't exist.`);
+  // numeric arrives as text: "1.5", and "2.0" for a whole litre.
+  order.litres = Number(order.litres);
   return order;
 }
 
@@ -539,7 +541,8 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
 }
 
 /**
- * Deletes a batch and everything that belongs to it. Super Admin only.
+ * Deletes a batch and everything that belongs to it. Super Admin only, except for a draft, which
+ * anyone who manages batches may delete.
  *
  * `orders.batch_no` is `on delete restrict`, deliberately, so a batch with bookings behind it
  * cannot be removed by accident. That is why the orders are deleted first and explicitly, rather
@@ -560,12 +563,17 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
  * surprise.
  */
 export async function deleteBatch({ batchNo, confirmBatchNo }: DeleteBatchInput) {
-  const user = await requirePermission("batches.delete");
+  // Whoever makes batches may throw away a draft: it was never published, so nothing was sent and
+  // nobody booked. Anything that has been published is still the Super Admin's alone.
+  const user = await requirePermission("batches.manage");
   if (batchNo !== confirmBatchNo) throw new AppError("Type the batch number to confirm.");
   return mutate(user, async (tx) => {
     const [batch] = await tx<Row[]>`
       select batch_no, status, product from batches where batch_no = ${batchNo} for update`;
     if (!batch) throw new AppError(`Batch ${batchNo} doesn't exist.`);
+    if (batch.status !== "Draft" && !hasPermission(user.roles, "batches.delete")) {
+      throw new AppError("Only a Super Admin can delete a batch that has been published.");
+    }
 
     // Counted before anything is removed, so the numbers describe what was actually there.
     const [counts] = (await tx<Row[]>`
@@ -727,9 +735,10 @@ export async function confirmOrder(input: ConfirmOrderInput) {
     if (!employee?.active)
       throw new AppError("Your employee record is inactive, so you can't book milk.");
 
+    const minAllowed = Number(batch.min_order);
     const maxAllowed = Math.min(batch.max_order, batch.employee_cap);
-    if (input.litres < batch.min_order || input.litres > maxAllowed) {
-      throw new AppError(`Order between ${batch.min_order} and ${maxAllowed} L.`);
+    if (input.litres < minAllowed || input.litres > maxAllowed) {
+      throw new AppError(`Order between ${minAllowed} and ${maxAllowed} L.`);
     }
 
     const [point] = await tx<Row[]>`
@@ -738,7 +747,7 @@ export async function confirmOrder(input: ConfirmOrderInput) {
     if (!point) throw new AppError("Choose one of this batch's delivery points.");
 
     const [{ booked }] = (await tx<Row[]>`
-      select coalesce(sum(litres), 0)::int as booked from orders
+      select coalesce(sum(litres), 0)::float8 as booked from orders
       where batch_no = ${input.batchNo} and status <> 'Cancelled'`) as unknown as [
       { booked: number },
     ];
@@ -901,7 +910,7 @@ export async function deleteOrder({ orderNo }: OrderActionInput) {
       action: "Deleted order",
       record: orderNo,
       oldValue:
-        `${order["status"] as string} · ${order["litres"]} L, ${taka(Number(order["amount"]))} · ` +
+        `${order["status"] as string} · ${Number(order["litres"])} L, ${taka(Number(order["amount"]))} · ` +
         `${order["collections"]} collection(s) totalling ${taka(Number(order["collected"]))}, ` +
         `${order["coupons"]} coupon(s)`,
       newValue: "Deleted",
@@ -1039,7 +1048,7 @@ export async function updateOrder({ orderNo, patch, reason }: UpdateOrderInput) 
         Row[]
       >`select saleable_litres from batches where batch_no = ${order.batch_no} for update`;
       const [{ others }] = (await tx<Row[]>`
-        select coalesce(sum(litres), 0)::int as others from orders
+        select coalesce(sum(litres), 0)::float8 as others from orders
         where batch_no = ${order.batch_no} and status <> 'Cancelled' and order_no <> ${orderNo}`) as unknown as [
         { others: number },
       ];

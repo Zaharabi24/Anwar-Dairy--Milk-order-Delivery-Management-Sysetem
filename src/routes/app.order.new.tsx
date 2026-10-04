@@ -35,7 +35,7 @@ function NewOrderPage() {
   const { activeBatch, remainingLitres, deliveryPoints, currentEmployee, confirmOrder } =
     useAppData();
   const navigate = useNavigate();
-  const [litres, setLitres] = useState(2);
+  const [litres, setLitres] = useState(activeBatch?.minOrder ?? 0.5);
   const [point, setPoint] = useState<string>(activeBatch?.deliveryPoints[0] ?? "");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Cash");
 
@@ -109,9 +109,9 @@ function NewOrderPage() {
             <Button
               variant="outline"
               size="icon"
-              aria-label="Reduce by one litre"
+              aria-label="Reduce by half a litre"
               disabled={litres <= activeBatch.minOrder}
-              onClick={() => setLitres((l) => Math.max(activeBatch.minOrder, l - 1))}
+              onClick={() => setLitres((l) => Math.max(activeBatch.minOrder, l - 0.5))}
             >
               <Minus className="size-4" />
             </Button>
@@ -119,14 +119,14 @@ function NewOrderPage() {
             <Button
               variant="outline"
               size="icon"
-              aria-label="Add one litre"
+              aria-label="Add half a litre"
               disabled={litres >= cap}
-              onClick={() => setLitres((l) => Math.min(cap, l + 1))}
+              onClick={() => setLitres((l) => Math.min(cap, l + 0.5))}
             >
               <Plus className="size-4" />
             </Button>
             <span className="text-sm text-muted-foreground">
-              1 L steps · up to {cap} L for you today
+              0.5 L steps · up to {cap} L for you today
             </span>
           </div>
         </section>

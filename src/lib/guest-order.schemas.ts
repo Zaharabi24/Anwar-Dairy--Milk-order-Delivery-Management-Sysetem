@@ -43,7 +43,7 @@ export const guestOrderInput = z.object({
     .min(1, "Enter a short description of yourself.")
     .max(200, "Keep the description under 200 characters."),
   deliveryPointId: z.string().trim().min(1, "Choose a pickup point.").max(60),
-  litres: z.number().int().positive().max(1000),
+  litres: z.number().positive().max(1000).multipleOf(0.5, "Order in steps of 0.5 L."),
   // Guests aren't on payroll, so they pay cash at collection.
   paymentMethod: z.literal("Cash"),
 });

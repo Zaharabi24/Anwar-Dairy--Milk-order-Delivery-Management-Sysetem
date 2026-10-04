@@ -40,12 +40,15 @@ function Publish() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [confirming, setConfirming] = useState(false);
-  // A draft has never been published, so it is not in Publish records, which is where a batch is
-  // otherwise deleted from. Without this there would be one kind of batch a Super Admin could not
-  // remove -- the only kind with nothing behind it.
-  const canDelete = hasPermission(user?.roles ?? [], "batches.delete");
   const draft =
     batches.find((b) => b.status === "Draft") ?? batches.find((b) => b.status === "Active");
+  // A draft has never been published, so it is not in Publish records, which is where a batch is
+  // otherwise deleted from. Whoever made it may delete it; a published batch stays the Super
+  // Admin's to remove. The server decides the same way.
+  const canDelete = hasPermission(
+    user?.roles ?? [],
+    draft?.status === "Draft" ? "batches.manage" : "batches.delete",
+  );
 
   if (!draft) {
     return (
@@ -131,7 +134,7 @@ function Publish() {
         </Button>
         {canDelete ? (
           <Button variant="outline" onClick={() => setConfirming(true)}>
-            Delete batch
+            Delete
           </Button>
         ) : null}
       </div>

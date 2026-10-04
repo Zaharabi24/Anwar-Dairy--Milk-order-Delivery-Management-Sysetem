@@ -308,10 +308,10 @@ function GuestOrderPage() {
             <Input
               id="guest-litres"
               type="number"
-              inputMode="numeric"
+              inputMode="decimal"
               min={batch.minLitres}
               max={Math.max(batch.minLitres, maxLitres)}
-              step={1}
+              step={0.5}
               value={form.litres}
               onChange={(e) => set("litres", e.target.value)}
               className={errors.litres ? "border-destructive" : ""}

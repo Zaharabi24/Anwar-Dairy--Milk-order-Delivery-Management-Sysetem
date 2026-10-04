@@ -539,6 +539,7 @@ function OrdersPage() {
                 <Input
                   type="number"
                   min={0}
+                  step={0.5}
                   value={editLitres}
                   disabled={decline}
                   onChange={(e) => {
@@ -584,8 +585,8 @@ function OrdersPage() {
                   setEditing(null);
                   return;
                 }
-                if (editLitres < 1) {
-                  toast.error("Litres must be at least 1.");
+                if (editLitres < 0.5 || !Number.isInteger(editLitres * 2)) {
+                  toast.error("Litres go in steps of 0.5, starting at 0.5.");
                   return;
                 }
                 updateOrder(editing.orderNo, { litres: editLitres }, reason.trim());

@@ -91,6 +91,8 @@ function SettingsPage() {
               <Input
                 id="settings-min"
                 type="number"
+                min={0.5}
+                step={0.5}
                 value={minOrder}
                 onChange={(e) => setMinOrder(Number(e.target.value))}
               />
