@@ -48,7 +48,11 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       TZ: ${TZ:-Asia/Dhaka}
-      DATABASE_URL: postgres://${POSTGRES_USER:-anwar}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-anwar_fresh}
+      # Leave this unset to use the bundled `db` service above. Set DATABASE_URL to point the app
+      # at a Postgres that is not part of this compose file (a managed or separately deployed
+      # database), for example:
+      #   DATABASE_URL=postgresql://anwar_agro:password@anwar-organic-anwar-agro-db-vd9zl4:5432/anwar-agro
+      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-anwar}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-anwar_fresh}}
 
       # Batch mail queue. Without it the app still sends, in-process and at the same rate, but a
       # restart partway through a send has to be picked up again rather than simply carrying on.

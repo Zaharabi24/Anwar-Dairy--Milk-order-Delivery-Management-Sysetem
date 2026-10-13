@@ -181,6 +181,69 @@ directly, but new deployments shouldn't need them.
 - **Demo data:** `SEED_DEMO_DATA=true` loads demo employees, batches, orders and the demo accounts
   above into an empty database. It's off by default in `docker-compose.yml`.
 
+### The Employee Database, October 2026
+
+`0031_employee_directory_october_2026.sql` imports the 530 people in
+`AGI ALL Employee Data - October 2026.xlsx` (sheet "AGI ALL Employee Data - HQ"). It updates the
+358 already on file and adds the rest, and it brings three things the older file (migration `0009`)
+did not:
+
+| Column in the file | Stored in | Notes |
+| --- | --- | --- |
+| Company Unit | `employees.company_unit` and `business_unit_code` | The units the group didn't have yet are added to `business_units`, so every screen that shows a business unit shows the real name |
+| Location | `employees.site` | "Head Office" for everyone |
+| Floor | `employees.floor_no` | |
+
+Five people are imported inactive because they can't be mailed (four have no address on file, one
+shares another's address) but stay in the directory; a System Admin can fix the address and switch
+them back on. The file's own sheet "STF-0001" row is kept as given.
+
+The migration runs automatically the first time the app connects to a database that doesn't have
+it — the new `anwar-agro` database included, where it runs after `0009` and leaves one directory in
+place. To *only* seed the directory of a fresh database, nothing else is needed.
+
+### Pointing the app at an external database
+
+The bundled `db` service is used unless `DATABASE_URL` is set. To run the app against a Postgres
+that isn't part of `docker-compose.yml` — a managed instance, or a database created in another
+Dokploy project — set `DATABASE_URL` in the service's **Environment** tab and leave the rest as
+usual:
+
+```
+DATABASE_URL=postgresql://anwar_agro:anwar-agro-420@anwar-organic-anwar-agro-db-vd9zl4:5432/anwar-agro
+```
+
+On the next deploy the app connects to that database and applies every pending migration,
+including the October 2026 directory import above. The local `db` container is still started (it
+does nothing without `DATABASE_URL` pointing at it) and can be removed from `docker-compose.yml`
+once the external database is the only one in use.
+
+> The hostname in the example is a Docker/Dokploy service name. The app can only reach it from the
+> same Docker network, so it will not resolve from a developer laptop; run against it from the
+> deployed `web` container, not `bun run dev`.
+
+### Moving an existing database's data
+
+To move the live data — employees and their accounts and roles, batches, orders, collections, and
+the email and audit history — from another installation into a new database, take a full dump and
+restore it, then let the app bring the schema up to date:
+
+```sh
+# 1. Dump the source (here: the Neon database the app ran on before).
+pg_dump "<source-url>" -Fc --no-owner --no-privileges -f neon.dump
+
+# 2. Restore into the new database (the credentials come from DATABASE_URL).
+PGPASSWORD='<password>' pg_restore -h <host> -p 5432 -U anwar_agro -d anwar-agro \
+  --no-owner --no-privileges neon.dump
+
+# 3. Start the app. It applies every migration the source hadn't run yet -- including the
+#    October 2026 Employee Database import (0031) and its cleanup (0032).
+```
+
+The restore carries `schema_migrations` across, so the app only runs the migrations the source was
+missing and never re-runs one already applied. `user_roles` and `employees.account_status` come
+with the data, so sign-in and role-based access keep working with no extra step.
+
 ## Deploy on Dokploy
 
 1. Push the repo to GitHub, GitLab or Gitea.
@@ -421,13 +484,56 @@ network as the mail servers — the Dokploy host is ideal, since that is where t
 If an email failed, fix the settings and use **Resend email** (Team page) or **Resend password
 setup link** (Accounts). The invitation or approval itself is already saved.
 
-## Pre-launch checklist
+## Production environment checklist
 
-- [ ] `SEED_DEMO_DATA` is `false` (or unset) in Dokploy
-- [ ] `POSTGRES_PASSWORD`, `APP_URL` and `SUPER_ADMIN_EMAIL` set; Super Admin invitation accepted
-- [ ] `SUPER_ADMIN_PASSWORD` not left in the environment (if it was used)
-- [ ] Email transport works (check `email_outbox` for `failed` rows)
-- [ ] For Graph: Application Access Policy limits the app to the sender mailbox
-- [ ] For Graph: Safe Links exclusion for the app domain
-- [ ] At least one System Admin invited, to approve employee account requests
-- [ ] Database backups scheduled
+The settings that most often go wrong on a fresh deployment, and what each must be.
+
+### Database
+
+- [ ] Point the app at **exactly one** database:
+  - **bundled** Postgres — set `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and leave
+    `DATABASE_URL` unset; or
+  - an **external** Postgres — set `DATABASE_URL` (the `POSTGRES_*` values are then unused).
+- [ ] `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD` take effect **only on an empty data
+  volume**. Changing them on an existing `db-data` volume does nothing, and the app then connects
+  to a database that isn't there. Remove the volume and redeploy when changing them.
+- [ ] `POSTGRES_PASSWORD` uses URL-safe characters only (letters, digits, `-`, `_`): it is
+  interpolated into the connection URL.
+- [ ] Migrations apply themselves on first start; watch the `web` log for `[db] applied migration`.
+
+### First Super Admin
+
+- [ ] `SUPER_ADMIN_EMAIL` must be an `@anwargroup.net` address.
+- [ ] The bootstrap acts **only while no active Super Admin exists**. On a database restored from
+  another installation, that account already exists, so `SUPER_ADMIN_EMAIL`/`SUPER_ADMIN_PASSWORD`
+  do nothing — sign in with the existing password, or clear the account first.
+- [ ] Remove `SUPER_ADMIN_PASSWORD` from the environment once you are signed in.
+
+### Links and cookies
+
+- [ ] `APP_URL` **includes the scheme**: `https://agro.a1polymer.net`, not `agro.a1polymer.net`.
+  Every invitation, password-setup, reset and booking link is built from it, and a missing scheme
+  makes them unopenable; it also decides whether the session cookie is marked `Secure`.
+- [ ] A DNS record and a Dokploy domain (service `web`, port `3000`, HTTPS on) exist for the host
+  in `APP_URL`.
+
+### Email
+
+- [ ] `MAIL_CAPTURE=false` for real delivery (it is `true` in local development).
+- [ ] `SMTP_REQUIRE_TLS=true` needs the server to offer STARTTLS. On port 25 many relays do not;
+  check with `node scripts/mail-probe.mjs --hosts <ip> --ports 25`.
+- [ ] `MAIL_FROM` is an address the authenticated account (`SMTP_USER`) is allowed to send as, or
+  the server answers "not allowed to send as".
+- [ ] `MAIL_RATE_PER_MINUTE` is within what the server allows — an internal Exchange often allows
+  far fewer than Microsoft 365. Publishing to the whole directory takes about
+  `recipients ÷ MAIL_RATE_PER_MINUTE` minutes.
+- [ ] Send one real invitation to yourself and confirm it arrives.
+- [ ] For Graph: Application Access Policy limits the app to the sender mailbox, and Safe Links is
+  excluded for the app domain.
+
+### Safety
+
+- [ ] `SEED_DEMO_DATA` is `false` (or unset) in production.
+- [ ] Rotate any password that has been shared outside the server, and keep secrets out of git.
+- [ ] At least one System Admin invited, to approve employee account requests.
+- [ ] Database backups scheduled.
