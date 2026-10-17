@@ -314,13 +314,13 @@ from your machine with `-h <server> -p <port>`; remove the port again afterwards
 
 Then redeploy `web`. If the dump is as new as the code, the log shows no `[db] applied migration`
 lines and the home page answers at once. Checked on 2026-10-17 with `backups/backup.sql`
-(32 migrations, 546 employees, 86 orders): the restore runs clean with `ON_ERROR_STOP`, every
+(32 migrations, 546 employees, 86 orders) into both Postgres 17 and 18: the restore runs clean with `ON_ERROR_STOP`, every
 table ends up owned by `anwar_agro`, and the app starts with nothing pending.
 
 ## Deploy on Dokploy
 
 1. Push the repo to GitHub, GitLab or Gitea.
-2. **The database first.** In Dokploy: **Create Service → Database → PostgreSQL** (version 17),
+2. **The database first.** In Dokploy: **Create Service → Database → PostgreSQL** (17 or 18; production runs 18),
    with the database name, user and password you'll give the app. Deploy it and note the
    hostname Dokploy shows for it (for the current installation that is
    `anwar-organic-anwar-agro-db-vd9zl4`). Skip this if the database already exists.

@@ -6,7 +6,7 @@ Internal employee milk ordering platform for Anwar Agro Farms, Anwar Group of In
 - TanStack Start (SSR) + Vite + React + TypeScript
 - Tailwind + shadcn/ui
 - Bun: `bun.lock` is the lockfile, never use npm
-- PostgreSQL 17 through the `postgres` driver, with plain SQL migrations. No Supabase
+- PostgreSQL 17 locally, 18 in production, through the `postgres` driver, with plain SQL migrations. No Supabase
 - Email: Microsoft Graph, or SMTP (Mailpit locally). Batch mail goes out through a BullMQ queue
   on Redis, paced to the provider's rate limit; see `src/server/mail/`
 - Docker Compose, deployed on Dokploy behind Traefik
