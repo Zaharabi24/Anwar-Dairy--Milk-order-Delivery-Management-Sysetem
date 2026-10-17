@@ -60,10 +60,26 @@ export function clientIp(): string | null {
  */
 let lastRequestOrigin: string | undefined;
 
+/**
+ * APP_URL as a usable origin, or undefined when it is not set.
+ *
+ * Written without its scheme -- "//agro.a1polymer.net", or just the host -- it is taken as https.
+ * A link that begins "//" is relative to wherever it is read, and in an email that is nowhere: the
+ * booking button does nothing, and the cookie check cannot parse the value either. The sites this
+ * runs behind are all HTTPS, so https is the only sensible reading; a plain http site can say so.
+ */
+function configuredAppUrl(): string | undefined {
+  const raw = process.env["APP_URL"]?.trim().replace(/\/+$/, "");
+  if (!raw) return undefined;
+  if (/^https?:\/\//i.test(raw)) return raw;
+  if (raw.startsWith("//")) return `https:${raw}`;
+  return `https://${raw}`;
+}
+
 /** Base URL for links in emails: APP_URL when set, otherwise the URL the request came in on. */
 export function appUrl(): string {
-  const configured = process.env["APP_URL"]?.trim();
-  if (configured) return configured.replace(/\/+$/, "");
+  const configured = configuredAppUrl();
+  if (configured) return configured;
   try {
     lastRequestOrigin = getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin;
     return lastRequestOrigin;
@@ -97,7 +113,7 @@ function isHttps(): boolean {
   // Reading X-Forwarded-Proto instead lets the answer change when a proxy hop or a health check
   // arrives without the header, and a cookie marked secure is silently dropped by a browser on
   // http -- which looks exactly like being signed out at random.
-  const configured = process.env["APP_URL"]?.trim();
+  const configured = configuredAppUrl();
   if (configured) {
     try {
       return new URL(configured).protocol === "https:";
