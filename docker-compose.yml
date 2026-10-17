@@ -57,7 +57,9 @@ services:
       # under it. Raise it only to match what your provider actually allows.
       MAIL_RATE_PER_MINUTE: ${MAIL_RATE_PER_MINUTE:-25}
 
-      # Base URL used in password setup/reset emails, e.g. https://fresh.anwargroup.net
+      # Base URL of every emailed link, e.g. https://agro.a1polymer.net (scheme included). Set it:
+      # booking emails are sent from the mail queue, where there is no web request to read the
+      # address from, so without it they can only use the address of the request that published.
       APP_URL: ${APP_URL:-}
 
       # First Super Admin. While no active Super Admin exists, each start emails this address a
@@ -81,8 +83,9 @@ services:
       MS_CLIENT_ID: ${MS_CLIENT_ID:-}
       MS_CLIENT_SECRET: ${MS_CLIENT_SECRET:-}
       MS_SENDER_MAILBOX: ${MS_SENDER_MAILBOX:-}
-      # ...otherwise SMTP. Defaults send every email to the bundled Mailpit inbox (below).
-      # For a real provider set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS and MAIL_CAPTURE=false.
+      # ...otherwise SMTP. Defaults send every email to the bundled Mailpit inbox (below), where
+      # it is kept, not delivered: NOBODY RECEIVES A BOOKING EMAIL until SMTP_HOST (with
+      # SMTP_PORT, SMTP_USER, SMTP_PASS) or the MS_* variables above name a real mail server.
       SMTP_HOST: ${SMTP_HOST:-anwar-fresh-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_USER: ${SMTP_USER:-}
@@ -91,8 +94,10 @@ services:
       SMTP_REQUIRE_TLS: ${SMTP_REQUIRE_TLS:-false}
       # false = accept a self-signed certificate (internal mail server only).
       SMTP_TLS_REJECT_UNAUTHORIZED: ${SMTP_TLS_REJECT_UNAUTHORIZED:-true}
-      # true = the SMTP server is a test inbox (Mailpit): emails are recorded as "captured".
-      MAIL_CAPTURE: ${MAIL_CAPTURE:-true}
+      # true = the SMTP server is a test inbox (Mailpit): emails are recorded as "captured", never
+      # as delivered. Unset, the app decides from the host: Mailpit is a test inbox, anything else
+      # is real. Set it only to override that.
+      MAIL_CAPTURE: ${MAIL_CAPTURE:-}
       MAIL_FROM: ${MAIL_FROM:-no-reply@anwargroup.net}
 
       # Demo employees, batches, orders and demo sign-in accounts. Keep false in production.

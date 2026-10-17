@@ -329,7 +329,11 @@ table ends up owned by `anwar_agro`, and the app starts with nothing pending.
 5. **Environment** tab: set `POSTGRES_PASSWORD` (plus `POSTGRES_HOST`, `POSTGRES_USER` and
    `POSTGRES_DB` if they differ from the defaults in [The database](#the-database)), `APP_URL`,
    `SUPER_ADMIN_EMAIL` (+ `SUPER_ADMIN_NAME`) and `MAILPIT_UI_AUTH` (`username:password` for the
-   inbox). Leave the `SMTP_*`, `MS_*` and `MAIL_CAPTURE` variables unset so email goes to Mailpit.
+   inbox). **Email:** with the `SMTP_*` and `MS_*` variables unset, every message goes to the
+   bundled Mailpit inbox and nobody receives anything -- fine for a trial, not for a working
+   system. For real delivery set the four `MS_*` variables (Microsoft Graph) or `SMTP_HOST`,
+   `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM` (SMTP) -- see
+   [Email delivery](#email-delivery). The Publish screen warns while mail is still going to Mailpit.
 6. Click **Deploy**.
 7. **Domains** tab: add a domain with service `web`, container port `3000`, HTTPS on with
    Let's Encrypt. Add a second domain with service `mailpit`, container port `8025` for the
@@ -353,6 +357,34 @@ the **Environment** tab doesn't match the database. There is no `db` container i
 more, so the compose file never sets a password: change it in the database service, or correct the
 variable, and redeploy `web`.
 
+**A batch was published, but nobody received the email.** Open **Publish records** (operator) or
+**Email records** (System Admin) and read the status against the messages:
+
+- **Captured locally** -- the server is sending to its own Mailpit test inbox, which keeps mail
+  rather than delivering it. This is the default of a fresh deployment: no `MS_*` or `SMTP_*`
+  variables are set in the Dokploy **Environment** tab, so `SMTP_HOST` fell back to the bundled
+  Mailpit. The messages are in the Mailpit inbox (its domain in Dokploy). Set a real transport --
+  the four `MS_*` variables, or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`,
+  `MAIL_FROM` -- and redeploy. The Publish screen shows a warning for as long as this is the case.
+  A redeploy does not resend what was captured: publish again, or use **Send the rest** / **Resend**
+  from Publish records once the new settings are in.
+- **Send failed** with an error naming `APP_URL` -- the queue could not build the booking link
+  because `APP_URL` is unset and the mail is sent outside any web request. Set `APP_URL` (with the
+  scheme, e.g. `https://agro.a1polymer.net`), redeploy, and the remaining attempts go through on
+  their own; use **Resend** for anything already marked failed.
+- **Send failed** with a mail-server error (`535`, `421 4.4.2`, `ECONNREFUSED`, a certificate) --
+  see the `[mail] NOT READY` / `[mail] delivery ... failed` lines in the `web` log and
+  [Email delivery](#email-delivery). The rate-limit case is covered in
+  [The batch mail queue](#the-batch-mail-queue).
+- **Queued** for more than a few minutes with nothing moving -- the `redis` service is down or
+  `REDIS_URL` points at the wrong host. The `web` log says `[mail] queue unreachable, sending
+  in-process instead`; opening Publish records puts the messages back on their way either way.
+- **No recipients** -- nobody in the Employee Database is active with an address and the employee
+  role; check the directory, or the batch's chosen recipients.
+
+The quickest end-to-end check is **Accounts → Send test email** as a System Admin: it reports the
+transport in use and whether the message was delivered, captured or failed.
+
 ## Environment variables
 
 | Variable | Default | Notes |
@@ -361,7 +393,7 @@ variable, and redeploy `web`.
 | `POSTGRES_PASSWORD` | — | **Required** unless `DATABASE_URL` is set. URL-safe characters only (letters, digits, `-`, `_`) |
 | `POSTGRES_HOST` / `POSTGRES_PORT` | `anwar-organic-anwar-agro-db-vd9zl4` / `5432` | The Dokploy database service's hostname |
 | `POSTGRES_USER` / `POSTGRES_DB` | `anwar_agro` / `anwar-agro` | |
-| `APP_URL` | request URL | Base for email links, e.g. `https://fresh.anwargroup.net` |
+| `APP_URL` | request URL | Base for email links, e.g. `https://agro.a1polymer.net`. **Set it in production:** booking emails go out from the mail queue, where there is no request to read the address from |
 | `SUPER_ADMIN_EMAIL` | — | First Super Admin (must be `@anwargroup.net`); see above |
 | `SUPER_ADMIN_NAME` | `Super Admin` | Pre-fills the invitation |
 | `SUPER_ADMIN_EMPLOYEE_ID` | auto `STF-nnnn` | Optional |
@@ -369,7 +401,7 @@ variable, and redeploy `web`.
 | `INVITE_TTL_HOURS` | `72` | How long staff invitation links stay valid |
 | `MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SENDER_MAILBOX` | — | Microsoft Graph email. The app registration needs `Mail.Send` with admin consent |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_SECURE` | `mailpit`, `1025`, —, —, `false` | SMTP email, used when Graph isn't configured. Defaults point at the bundled Mailpit. `SMTP_HOST` accepts a comma-separated list of mail servers — see [Several mail servers](#several-mail-servers) |
-| `MAIL_CAPTURE` | `true` | `true` while email goes to Mailpit. Set `false` with a real SMTP provider |
+| `MAIL_CAPTURE` | by host | `true` = the SMTP server is a test inbox; messages are recorded as captured, never delivered. Unset, a host named after Mailpit counts as a test inbox and any other host as real, so it only needs setting to override that |
 | `SMTP_REQUIRE_TLS` | `false` | `true` = refuse to send unless the server upgrades to TLS (STARTTLS) |
 | `SMTP_TLS_REJECT_UNAUTHORIZED` | `true` | `false` accepts a self-signed certificate. Only for an internal mail server such as on-premises Exchange |
 | `SMTP_ANONYMOUS_FALLBACK` | `true` | `false` requires authentication and never relays without credentials — see [Several mail servers](#several-mail-servers) |
@@ -602,7 +634,10 @@ The settings that most often go wrong on a fresh deployment, and what each must 
 
 ### Email
 
-- [ ] `MAIL_CAPTURE=false` for real delivery (it is `true` in local development).
+- [ ] A real transport is configured: the four `MS_*` variables, or `SMTP_HOST` naming the mail
+  server (with `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM`). Unset, mail goes to the bundled
+  Mailpit and is never delivered; the Publish screen warns while that is so.
+- [ ] `MAIL_CAPTURE` is unset or `false` -- `true` records every message as captured.
 - [ ] `SMTP_REQUIRE_TLS=true` needs the server to offer STARTTLS. On port 25 many relays do not;
   check with `node scripts/mail-probe.mjs --hosts <ip> --ports 25`.
 - [ ] `MAIL_FROM` is an address the authenticated account (`SMTP_USER`) is allowed to send as, or

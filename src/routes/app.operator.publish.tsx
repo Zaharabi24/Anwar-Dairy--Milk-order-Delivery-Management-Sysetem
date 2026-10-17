@@ -13,9 +13,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { MailTransportNotice } from "@/components/mail-transport-notice";
 import { PageHeader, EmptyState } from "@/components/page-header";
 import { BatchStatusBadge } from "@/components/status-badge";
 import { useAppData } from "@/context/app-data";
+import { mailTransportStatusFn } from "@/functions/records.functions";
 import { useAuth } from "@/hooks/use-auth";
 import { hasPermission } from "@/lib/permissions";
 import { dateShort, taka, timeShort } from "@/lib/format";
@@ -32,10 +34,14 @@ export const Route = createFileRoute("/app/operator/publish")({
       },
     ],
   }),
+  // Where the booking email will go. Read here, before the button, so an operator on a server
+  // still pointed at the test inbox is told rather than left to hear it from colleagues.
+  loader: () => mailTransportStatusFn(),
   component: Publish,
 });
 
 function Publish() {
+  const transport = Route.useLoaderData();
   const { batches, deliveryPoints, setBatchStatus, deleteBatch } = useAppData();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -117,6 +123,8 @@ function Publish() {
           </div>
         </dl>
       </motion.div>
+
+      <MailTransportNotice transport={transport} className="mt-6" />
 
       <div className="mt-6 flex flex-wrap gap-3">
         <Button

@@ -2,7 +2,12 @@
 // roles here on the server; every write runs in one transaction (with its audit
 // entry and notifications) and returns a fresh snapshot for the caller.
 import { getDb, type Tx } from "./db/client.server";
-import { requirePermission, requireUser, type SessionUser } from "./auth/session.server";
+import {
+  rememberAppUrl,
+  requirePermission,
+  requireUser,
+  type SessionUser,
+} from "./auth/session.server";
 import { recordPublication } from "./auth/booking-links.server";
 import { enqueuePublication, mailLatecomersInBackground } from "./mail/mail-queue.server";
 import { AppError } from "@/lib/app-error";
@@ -533,6 +538,8 @@ export async function setBatchStatus({ batchNo, status }: BatchStatusInput) {
   // directory is a quarter of an hour of paced sending, which is nobody's page load.
   if (publicationId) {
     const id = publicationId as string;
+    // The worker has no request to read the site's address from; this request does.
+    rememberAppUrl();
     void enqueuePublication(id).catch((error: unknown) =>
       console.error("[mail] queueing booking links failed", error),
     );

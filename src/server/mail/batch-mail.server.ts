@@ -129,6 +129,9 @@ export function isTransientMailError(error: unknown): boolean {
   if (/\b(421|450|451|452|454|471)\b/.test(text)) return true;
   if (/too many|rate limit|throttl|try again later|temporarily/i.test(text)) return true;
   if (/ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|ESOCKET|EHOSTUNREACH/i.test(text)) return true;
+  // No APP_URL to build the link from (see appUrl). The address is fine; the server's settings
+  // are not, and a retry after they are corrected is what delivers the message.
+  if (/APP_URL/.test(text)) return true;
   return false;
 }
 

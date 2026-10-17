@@ -1,6 +1,21 @@
 // Shapes shared by the Publish Records and Email Records screens and the server that fills them.
 // Safe to import from client code: types only.
 
+/**
+ * Whether the email a publish queues will reach anybody, as the Publish screens show it.
+ *
+ * 'graph' and 'smtp' deliver. 'capture' is the bundled Mailpit test inbox, which keeps every
+ * message; 'none' is no transport at all. Both of those still record a publish as complete, which
+ * is exactly why the operator has to be told before pressing the button.
+ */
+export interface MailTransportStatus {
+  kind: "graph" | "smtp" | "capture" | "none";
+  /** True when messages leave the server for real mailboxes. */
+  delivers: boolean;
+  /** Where mail goes, in words and without secrets, e.g. "SMTP mail.example.net:25 from ...". */
+  description: string;
+}
+
 /** How a publish's mail run ended. 'sending' until the last message has been attempted. */
 export type PublishStatus = "sending" | "sent" | "partial" | "failed" | "no_recipients";
 

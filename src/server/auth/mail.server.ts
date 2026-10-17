@@ -6,7 +6,8 @@
 //                       the connection or the credentials is skipped instead of losing the email.
 //   3. Server log only  (nothing configured; links are printed so they still work in dev)
 // MAIL_CAPTURE=true marks the SMTP server as a local test inbox (Mailpit): messages are
-// recorded as 'captured', never as 'sent', because they don't reach real mailboxes.
+// recorded as 'captured', never as 'sent', because they don't reach real mailboxes. Left unset,
+// a host named after Mailpit counts as one; any other host counts as real.
 // Every message is recorded in email_outbox with its delivery status.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -30,6 +31,20 @@ const smtpHosts = (): string[] =>
     .map((h) => h.trim())
     .filter(Boolean);
 const sender = () => env("MAIL_FROM") ?? env("MS_SENDER_MAILBOX") ?? "no-reply@anwargroup.net";
+
+/**
+ * Whether the SMTP server is a test inbox that keeps mail rather than delivering it.
+ *
+ * MAIL_CAPTURE says so outright. Left unset, the host decides: the bundled Mailpit is what the
+ * compose file points at when nothing else is configured, and its names all contain "mailpit", so
+ * that case is still reported honestly as captured -- while a real server named in SMTP_HOST is
+ * no longer labelled "Captured locally" on every record because one flag was left at its default.
+ */
+const captureMode = () => {
+  const flag = env("MAIL_CAPTURE");
+  if (flag) return flag === "true";
+  return smtpHosts().some((host) => /mailpit/i.test(host));
+};
 
 export const escapeHtml = (value: unknown) =>
   String(value ?? "").replace(
@@ -68,7 +83,7 @@ export function mailTransport(): { kind: MailTransportKind; description: string 
   if (hosts.length) {
     const port = env("SMTP_PORT") ?? 587;
     const where = hosts.map((h) => `${h}:${port}`).join(", ");
-    if (env("MAIL_CAPTURE") === "true") {
+    if (captureMode()) {
       return {
         kind: "capture",
         description: `local test inbox at ${where} (not delivered to real mailboxes)`,

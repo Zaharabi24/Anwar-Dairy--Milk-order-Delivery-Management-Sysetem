@@ -49,11 +49,45 @@ export function clientIp(): string | null {
   return getRequestIP({ xForwardedFor: true }) ?? null;
 }
 
+/**
+ * The origin of the last request that built a link, for mail sent when there is no request.
+ *
+ * The batch mail worker runs from the queue, long after the publish that queued it has answered,
+ * and the in-process sender outlives its request the same way after the first message. Neither
+ * has a request to read a URL from, and asking anyway throws from inside AsyncLocalStorage -- which
+ * is how, with APP_URL unset, every booking email failed before it was ever handed to the mail
+ * server. Only link-building code records this, so a health check on 127.0.0.1 never does.
+ */
+let lastRequestOrigin: string | undefined;
+
 /** Base URL for links in emails: APP_URL when set, otherwise the URL the request came in on. */
 export function appUrl(): string {
   const configured = process.env["APP_URL"]?.trim();
   if (configured) return configured.replace(/\/+$/, "");
-  return getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin;
+  try {
+    lastRequestOrigin = getRequestUrl({ xForwardedHost: true, xForwardedProto: true }).origin;
+    return lastRequestOrigin;
+  } catch (error) {
+    if (lastRequestOrigin) return lastRequestOrigin;
+    throw new Error(
+      "APP_URL is not set, and this email is being sent outside a web request (from the mail " +
+        "queue), so there is no address to build its link from. Set APP_URL in the server's " +
+        "environment, e.g. https://agro.a1polymer.net.",
+      { cause: error },
+    );
+  }
+}
+
+/**
+ * Notes the current request's origin so mail sent later from the queue can still build links.
+ * Called where a request queues mail rather than sending it. Nothing to do when APP_URL is set.
+ */
+export function rememberAppUrl(): void {
+  try {
+    appUrl();
+  } catch {
+    // Not inside a request, or no request to read: there is nothing to remember.
+  }
 }
 
 function isHttps(): boolean {

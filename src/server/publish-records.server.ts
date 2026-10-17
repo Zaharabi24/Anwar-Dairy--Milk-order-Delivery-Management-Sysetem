@@ -6,6 +6,7 @@
 // not what would happen if it ran again today.
 import { getDb } from "./db/client.server";
 import { requirePermission } from "./auth/session.server";
+import { mailTransport } from "./auth/mail.server";
 import {
   enqueuePublication,
   isQueueEnabled,
@@ -13,12 +14,32 @@ import {
   resumePendingPublications,
 } from "./mail/mail-queue.server";
 import type { EmailRecordQuery } from "@/lib/records.schemas";
-import type { EmailRecordPage, EmailRecordRow, PublishRecord } from "@/lib/records-types";
+import type {
+  EmailRecordPage,
+  EmailRecordRow,
+  MailTransportStatus,
+  PublishRecord,
+} from "@/lib/records-types";
 
 type Row = Record<string, string | number | boolean | Date | null>;
 
 const iso = (value: unknown): string | null =>
   value ? new Date(value as string).toISOString() : null;
+
+/**
+ * Where the mail a publish queues will go.
+ *
+ * Until a real transport is configured, the compose file sends every message to the bundled
+ * Mailpit inbox. That is right for a first deployment and silent ever after: the publish reports
+ * hundreds of recipients, the records say "Captured locally" against each, and nobody's inbox has
+ * anything in it. The Publish screens read this so the operator hears it before the button rather
+ * than from colleagues.
+ */
+export async function mailTransportStatus(): Promise<MailTransportStatus> {
+  await requirePermission("batches.manage");
+  const { kind, description } = mailTransport();
+  return { kind, delivers: kind === "graph" || kind === "smtp", description };
+}
 
 /**
  * Every publish, newest first, with how the send went and how much was booked afterwards.

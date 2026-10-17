@@ -9,6 +9,11 @@ export const listPublishRecordsFn = createServerFn({ method: "GET" }).handler(as
   (await server()).listPublishRecords(),
 );
 
+/** Whether publishing will email anybody, or only the server's test inbox. */
+export const mailTransportStatusFn = createServerFn({ method: "GET" }).handler(async () =>
+  (await server()).mailTransportStatus(),
+);
+
 export const listEmailRecordsFn = createServerFn({ method: "POST" })
   .validator(emailRecordQuery)
   .handler(async ({ data }) => (await server()).listEmailRecords(data));

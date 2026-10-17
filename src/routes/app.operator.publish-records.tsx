@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MailTransportNotice } from "@/components/mail-transport-notice";
 import { EmptyState, PageHeader } from "@/components/page-header";
 import { StatCard } from "@/components/stat-card";
 import { Field, FilterBar, FilterRow } from "@/components/ui/field";
@@ -19,6 +20,7 @@ import { FILTER_CONTROL, FILTER_SEARCH } from "@/components/ui/control-styles";
 import {
   listBatchEmailsFn,
   listPublishRecordsFn,
+  mailTransportStatusFn,
   resendFailedBatchMailFn,
   resumePublicationMailFn,
 } from "@/functions/records.functions";
@@ -56,7 +58,13 @@ export const Route = createFileRoute("/app/operator/publish-records")({
       },
     ],
   }),
-  loader: () => listPublishRecordsFn(),
+  loader: async () => {
+    const [records, transport] = await Promise.all([
+      listPublishRecordsFn(),
+      mailTransportStatusFn(),
+    ]);
+    return { records, transport };
+  },
   component: PublishRecords,
 });
 
@@ -97,7 +105,7 @@ const EMAIL_TONE: Record<EmailStatus, string> = {
 };
 
 function PublishRecords() {
-  const records = Route.useLoaderData();
+  const { records, transport } = Route.useLoaderData();
   // "all" totals every batch; a batch number narrows the figures and the list to that batch.
   const [batch, setBatch] = useState("all");
   const batchNos = useMemo(() => [...new Set(records.map((r) => r.batchNo))], [records]);
@@ -115,6 +123,8 @@ function PublishRecords() {
         title="Publish records"
         description="Every batch published from here, who was emailed, and what was booked afterwards."
       />
+
+      <MailTransportNotice transport={transport} className="mb-6" />
 
       <div className="grid gap-4 sm:grid-cols-4">
         <StatCard
