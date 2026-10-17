@@ -1,19 +1,9 @@
 services:
-  db:
-    image: postgres:17-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB:-anwar_fresh}
-      POSTGRES_USER: ${POSTGRES_USER:-anwar}
-      # Required. Set it in Dokploy's Environment tab (URL-safe characters only).
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
-    volumes:
-      - db-data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
-      interval: 5s
-      timeout: 5s
-      retries: 20
+  # There is no database in this stack on purpose. PostgreSQL runs as its own Dokploy service (or
+  # any other Postgres you manage), and `web` reaches it over the Docker network through
+  # DATABASE_URL below. A Postgres inside this stack is a local-only affair: see
+  # docker-compose.override.yml, which `docker compose up` merges in automatically and Dokploy
+  # ignores.
 
   # Holds the batch mail queue. Publishing to the Employee Database is hundreds of messages that
   # Microsoft 365 only accepts 30 a minute of, so the send is a quarter of an hour of paced work;
@@ -37,8 +27,6 @@ services:
     image: anwar-fresh-web:latest
     restart: unless-stopped
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
       mailpit:
@@ -48,11 +36,17 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       TZ: ${TZ:-Asia/Dhaka}
-      # Leave this unset to use the bundled `db` service above. Set DATABASE_URL to point the app
-      # at a Postgres that is not part of this compose file (a managed or separately deployed
-      # database), for example:
-      #   DATABASE_URL=postgresql://anwar_agro:password@anwar-organic-anwar-agro-db-vd9zl4:5432/anwar-agro
-      DATABASE_URL: ${DATABASE_URL:-postgres://${POSTGRES_USER:-anwar}:${POSTGRES_PASSWORD:-}@db:5432/${POSTGRES_DB:-anwar_fresh}}
+      # The database lives outside this compose file. Either set DATABASE_URL outright, or set
+      # POSTGRES_HOST (the Dokploy database service's hostname), POSTGRES_USER, POSTGRES_PASSWORD
+      # and POSTGRES_DB and let the URL be assembled from them. The default host is the
+      # `anwar-agro` Postgres service in Dokploy, so with
+      #   POSTGRES_DB=anwar-agro  POSTGRES_USER=anwar_agro  POSTGRES_PASSWORD=<password>
+      # this becomes
+      #   postgresql://anwar_agro:<password>@anwar-organic-anwar-agro-db-vd9zl4:5432/anwar-agro
+      # The password is interpolated into a URL, so keep it to letters, digits, `-` and `_`.
+      # Without a password (or a DATABASE_URL) the app fails at start with a connection error:
+      # there is no bundled database to fall back on any more.
+      DATABASE_URL: ${DATABASE_URL:-postgresql://${POSTGRES_USER:-anwar_agro}:${POSTGRES_PASSWORD:-}@${POSTGRES_HOST:-anwar-organic-anwar-agro-db-vd9zl4}:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-anwar-agro}}
 
       # Batch mail queue. Without it the app still sends, in-process and at the same rate, but a
       # restart partway through a send has to be picked up again rather than simply carrying on.
@@ -129,5 +123,4 @@ services:
           - anwar-fresh-mailpit
 
 volumes:
-  db-data:
   redis-data:

@@ -1,11 +1,24 @@
 # Local only: `docker compose up` merges this automatically.
 # Dokploy runs `docker compose -f docker-compose.yml`, so it ignores this file.
 services:
+  # A throwaway PostgreSQL for development. Production never runs one in this stack: there the
+  # app connects to a separately deployed database through DATABASE_URL (see docker-compose.yml).
   db:
+    image: postgres:17-alpine
+    restart: unless-stopped
     environment:
+      POSTGRES_DB: ${POSTGRES_DB:-anwar_fresh}
+      POSTGRES_USER: ${POSTGRES_USER:-anwar}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-anwar_local_dev}
+    volumes:
+      - db-data:/var/lib/postgresql/data
     ports:
       - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   redis:
     ports:
@@ -21,6 +34,8 @@ services:
 
   web:
     depends_on:
+      db:
+        condition: service_healthy
       mailpit:
         condition: service_started
     environment:
@@ -34,3 +49,6 @@ services:
       DEMO_PASSWORD: ${DEMO_PASSWORD:-Demo@12345}
     ports:
       - "${APP_PORT:-3000}:3000"
+
+volumes:
+  db-data:

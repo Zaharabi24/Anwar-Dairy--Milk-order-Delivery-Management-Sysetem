@@ -1,21 +1,24 @@
 # Deployment (Docker Compose / Dokploy)
 
-The whole system runs as three containers:
+The app stack is three containers, and the database is deliberately **not** one of them:
 
 | Service | Image | Purpose |
 | --- | --- | --- |
 | `web` | built from `Dockerfile` | TanStack Start SSR app, server functions and authentication — Node on port **3000** |
-| `db` | `postgres:17-alpine` | PostgreSQL; data kept in the `db-data` volume |
+| `redis` | `redis:7-alpine` | Batch mail queue; data kept in the `redis-data` volume |
 | `mailpit` | `axllent/mailpit` | Test inbox that catches every email the app sends — web inbox on port **8025** |
 
-There's no Supabase or other backend service. By default every email goes to Mailpit. To deliver
-to real mailboxes, configure Microsoft Graph or an SMTP server instead.
+PostgreSQL runs separately — in production as its own Dokploy **Database** service (today the
+`anwar-agro` database), locally as a throwaway container from `docker-compose.override.yml` — and
+`web` reaches it through `DATABASE_URL`. See [The database](#the-database). There's no Supabase
+or other backend service. By default every email goes to Mailpit. To deliver to real mailboxes,
+configure Microsoft Graph or an SMTP server instead.
 
 | File | Purpose |
 | --- | --- |
 | `Dockerfile` | `bun install --frozen-lockfile` → `vite build` (`NITRO_PRESET=node-server`) → slim `node:24-alpine` runtime (non-root, healthcheck) |
-| `docker-compose.yml` | What Dokploy deploys: `web` + `db` + `mailpit`, no host ports, no demo data |
-| `docker-compose.override.yml` | Local only. Publishes ports (incl. Mailpit), turns demo data on. Dokploy runs `-f docker-compose.yml` and ignores it |
+| `docker-compose.yml` | What Dokploy deploys: `web` + `redis` + `mailpit`, no database, no host ports, no demo data |
+| `docker-compose.override.yml` | Local only. Adds a `db` Postgres container, publishes ports (incl. Mailpit), turns demo data on. Dokploy runs `-f docker-compose.yml` and ignores it |
 | `.env.example` | Settings for `bun run dev`. Copy to `.env.local` (gitignored, never read by compose) |
 
 > **Why `NITRO_PRESET=node-server`:** `@lovable.dev/vite-tanstack-config` builds for
@@ -202,25 +205,61 @@ The migration runs automatically the first time the app connects to a database t
 it — the new `anwar-agro` database included, where it runs after `0009` and leaves one directory in
 place. To *only* seed the directory of a fresh database, nothing else is needed.
 
-### Pointing the app at an external database
+### The database
 
-The bundled `db` service is used unless `DATABASE_URL` is set. To run the app against a Postgres
-that isn't part of `docker-compose.yml` — a managed instance, or a database created in another
-Dokploy project — set `DATABASE_URL` in the service's **Environment** tab and leave the rest as
-usual:
+`docker-compose.yml` starts no PostgreSQL. The database is a separate Dokploy service, so the app
+can be rebuilt, redeployed or torn down without touching the data, and the data has its own
+backups and lifecycle. `web` gets its connection from `DATABASE_URL`, which the compose file
+assembles from the `POSTGRES_*` values when it isn't set outright:
 
 ```
-DATABASE_URL=postgresql://anwar_agro:anwar-agro-420@anwar-organic-anwar-agro-db-vd9zl4:5432/anwar-agro
+postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
 ```
 
-On the next deploy the app connects to that database and applies every pending migration,
-including the October 2026 directory import above. The local `db` container is still started (it
-does nothing without `DATABASE_URL` pointing at it) and can be removed from `docker-compose.yml`
-once the external database is the only one in use.
+| Variable | Default | |
+| --- | --- | --- |
+| `POSTGRES_HOST` | `anwar-organic-anwar-agro-db-vd9zl4` | The Dokploy database service's hostname |
+| `POSTGRES_PORT` | `5432` | |
+| `POSTGRES_USER` | `anwar_agro` | |
+| `POSTGRES_PASSWORD` | — | **Required** unless `DATABASE_URL` is set. URL-safe characters only |
+| `POSTGRES_DB` | `anwar-agro` | |
 
-> The hostname in the example is a Docker/Dokploy service name. The app can only reach it from the
-> same Docker network, so it will not resolve from a developer laptop; run against it from the
-> deployed `web` container, not `bun run dev`.
+So the current production **Environment** tab
+
+```
+POSTGRES_DB=anwar-agro
+POSTGRES_USER=anwar_agro
+POSTGRES_PASSWORD=<the password set on the database service>
+```
+
+connects to `postgresql://anwar_agro:<password>@anwar-organic-anwar-agro-db-vd9zl4:5432/anwar-agro`.
+Setting `DATABASE_URL` itself overrides all of that, for a managed Postgres or any other host.
+
+On start the app applies every pending migration, including the October 2026 directory import
+above, so an empty database comes up ready. Nothing in the environment of `web` can create or
+reset the database itself.
+
+**Network.** The hostname is the database container's name on Dokploy's shared `dokploy-network`.
+Dokploy attaches compose services to that network when it deploys them, which is what lets `web`
+resolve it. If the `web` log shows `getaddrinfo ENOTFOUND anwar-organic-anwar-agro-db-vd9zl4`,
+the two services aren't on one network: in the compose service's **Advanced** settings make sure
+the project is attached to `dokploy-network`, or add it to `web` explicitly:
+
+```yaml
+services:
+  web:
+    networks: [default, dokploy-network]
+networks:
+  dokploy-network:
+    external: true
+```
+
+The name resolves only inside Docker on that host, so `bun run dev` on a laptop cannot use it;
+develop against the local `db` container from `docker-compose.override.yml` instead.
+
+**Password changes.** The password lives in the database service, not in this stack. Change it
+there (Dokploy's database settings, or `ALTER USER anwar_agro PASSWORD '...'`) and update
+`POSTGRES_PASSWORD` here in the same step, then redeploy `web`.
 
 ### Moving an existing database's data
 
@@ -244,42 +283,84 @@ The restore carries `schema_migrations` across, so the app only runs the migrati
 missing and never re-runs one already applied. `user_roles` and `employees.account_status` come
 with the data, so sign-in and role-based access keep working with no extra step.
 
+#### From a plain SQL dump (`backups/*.sql`)
+
+The local dumps in `backups/` and `DB Backup/` are plain `pg_dump` SQL, made as user `anwar`.
+Every table in them carries `OWNER TO anwar`, a role the new database doesn't have, so strip those
+lines first (and the `\restrict` guards, which only psql 17.6+ understands):
+
+```sh
+grep -v -E '^ALTER (TABLE|SEQUENCE|TYPE|FUNCTION|VIEW|SCHEMA) .* OWNER TO anwar;$|^\\(un)?restrict ' \
+  backups/backup.sql > backups/restore-anwar-agro.sql
+```
+
+The database host resolves only inside Docker on the Dokploy server, so run the restore there.
+Copy the file up, then feed it to `psql` inside the database container; the target must be
+**empty** (a freshly created database, or one you've dropped and recreated), because the dump
+creates every table:
+
+```sh
+scp backups/restore-anwar-agro.sql <server>:/tmp/
+ssh <server>
+docker ps --filter name=anwar-agro-db --format '{{.Names}}'          # the database container
+docker exec -i <container> psql -v ON_ERROR_STOP=1 -q -U anwar_agro -d anwar-agro \
+  < /tmp/restore-anwar-agro.sql
+docker exec <container> psql -U anwar_agro -d anwar-agro -c 'select count(*) from employees'
+rm /tmp/restore-anwar-agro.sql
+```
+
+Alternatively, give the database service an **external port** in Dokploy and run the same `psql`
+from your machine with `-h <server> -p <port>`; remove the port again afterwards.
+
+Then redeploy `web`. If the dump is as new as the code, the log shows no `[db] applied migration`
+lines and the home page answers at once. Checked on 2026-10-17 with `backups/backup.sql`
+(32 migrations, 546 employees, 86 orders): the restore runs clean with `ON_ERROR_STOP`, every
+table ends up owned by `anwar_agro`, and the app starts with nothing pending.
+
 ## Deploy on Dokploy
 
 1. Push the repo to GitHub, GitLab or Gitea.
-2. In Dokploy: **Create Service → Compose**, type **Docker Compose**.
-3. **Provider:** pick the repo and branch. **Compose Path:** `./docker-compose.yml`.
-4. **Environment** tab: at minimum set `POSTGRES_PASSWORD`, `APP_URL`, `SUPER_ADMIN_EMAIL`
-   (+ `SUPER_ADMIN_NAME`) and `MAILPIT_UI_AUTH` (`username:password` for the inbox). Leave the
-   `SMTP_*`, `MS_*` and `MAIL_CAPTURE` variables unset so email goes to Mailpit.
-5. Click **Deploy**.
-6. **Domains** tab: add a domain with service `web`, container port `3000`, HTTPS on with
+2. **The database first.** In Dokploy: **Create Service → Database → PostgreSQL** (version 17),
+   with the database name, user and password you'll give the app. Deploy it and note the
+   hostname Dokploy shows for it (for the current installation that is
+   `anwar-organic-anwar-agro-db-vd9zl4`). Skip this if the database already exists.
+3. **Create Service → Compose**, type **Docker Compose**.
+4. **Provider:** pick the repo and branch. **Compose Path:** `./docker-compose.yml`.
+5. **Environment** tab: set `POSTGRES_PASSWORD` (plus `POSTGRES_HOST`, `POSTGRES_USER` and
+   `POSTGRES_DB` if they differ from the defaults in [The database](#the-database)), `APP_URL`,
+   `SUPER_ADMIN_EMAIL` (+ `SUPER_ADMIN_NAME`) and `MAILPIT_UI_AUTH` (`username:password` for the
+   inbox). Leave the `SMTP_*`, `MS_*` and `MAIL_CAPTURE` variables unset so email goes to Mailpit.
+6. Click **Deploy**.
+7. **Domains** tab: add a domain with service `web`, container port `3000`, HTTPS on with
    Let's Encrypt. Add a second domain with service `mailpit`, container port `8025` for the
    inbox. Redeploy so the routing applies.
-7. Open the invitation email (or copy the link from the `web` logs) and accept it. You're signed in
+8. Open the invitation email (or copy the link from the `web` logs) and accept it. You're signed in
    as Super Admin; invite your team from **Team & invitations**.
 
-The `db-data` volume persists across redeploys. Back it up with Dokploy's volume backups, or run
-`docker exec <db-container> pg_dump -U anwar anwar_fresh > backup.sql`.
+The data lives in the database service's own volume and is untouched by redeploys of this stack.
+Back it up from that service (Dokploy's database backups to S3, or
+`docker exec <db-container> pg_dump -U anwar_agro anwar-agro > backup.sql`).
 
 ### Troubleshooting
 
-**`db` logs: "Database is uninitialized and superuser password is not specified"**, repeating as
-the container restarts. `POSTGRES_PASSWORD` isn't set in the **Environment** tab. Dokploy deploys
-only `docker-compose.yml`, which has no default password (the local one lives in
-`docker-compose.override.yml`). Set it (letters, digits, `-`, `_` only), save and redeploy.
+**`web` logs: `ECONNREFUSED` or `getaddrinfo ENOTFOUND <host>` on start**, and the home page
+answers 500. The app can't reach the database. Check, in order: the database service is running
+in Dokploy; `POSTGRES_HOST` (or the host in `DATABASE_URL`) is its current hostname; both
+services are on `dokploy-network` — see [The database](#the-database).
 
-Postgres keeps the password from its first successful start. Changing `POSTGRES_PASSWORD` later
-doesn't change it in an existing `db-data` volume, and `web` then fails to connect. Either change
-it inside the database (`ALTER USER anwar PASSWORD '...'`) to match, or remove the volume if it
-holds no data.
+**`web` logs: `password authentication failed for user "anwar_agro"`**. `POSTGRES_PASSWORD` in
+the **Environment** tab doesn't match the database. There is no `db` container in this stack any
+more, so the compose file never sets a password: change it in the database service, or correct the
+variable, and redeploy `web`.
 
 ## Environment variables
 
 | Variable | Default | Notes |
 | --- | --- | --- |
-| `POSTGRES_PASSWORD` | — | **Required.** URL-safe characters only (letters, digits, `-`, `_`) |
-| `POSTGRES_USER` / `POSTGRES_DB` | `anwar` / `anwar_fresh` | |
+| `DATABASE_URL` | assembled from `POSTGRES_*` | The external PostgreSQL. Set it outright for a managed database, or set the `POSTGRES_*` values below — see [The database](#the-database) |
+| `POSTGRES_PASSWORD` | — | **Required** unless `DATABASE_URL` is set. URL-safe characters only (letters, digits, `-`, `_`) |
+| `POSTGRES_HOST` / `POSTGRES_PORT` | `anwar-organic-anwar-agro-db-vd9zl4` / `5432` | The Dokploy database service's hostname |
+| `POSTGRES_USER` / `POSTGRES_DB` | `anwar_agro` / `anwar-agro` | |
 | `APP_URL` | request URL | Base for email links, e.g. `https://fresh.anwargroup.net` |
 | `SUPER_ADMIN_EMAIL` | — | First Super Admin (must be `@anwargroup.net`); see above |
 | `SUPER_ADMIN_NAME` | `Super Admin` | Pre-fills the invitation |
@@ -490,15 +571,17 @@ The settings that most often go wrong on a fresh deployment, and what each must 
 
 ### Database
 
-- [ ] Point the app at **exactly one** database:
-  - **bundled** Postgres — set `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD` and leave
-    `DATABASE_URL` unset; or
-  - an **external** Postgres — set `DATABASE_URL` (the `POSTGRES_*` values are then unused).
-- [ ] `POSTGRES_DB`/`POSTGRES_USER`/`POSTGRES_PASSWORD` take effect **only on an empty data
-  volume**. Changing them on an existing `db-data` volume does nothing, and the app then connects
-  to a database that isn't there. Remove the volume and redeploy when changing them.
+- [ ] The database is its **own Dokploy service**; `docker-compose.yml` never starts one. Point
+  the app at it in one of two ways, not both:
+  - `POSTGRES_HOST`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` (the host defaults to
+    the `anwar-agro` service), with `DATABASE_URL` unset; or
+  - `DATABASE_URL` outright (the `POSTGRES_*` values are then unused).
+- [ ] The `POSTGRES_*` values here only tell the app where to connect. They don't create or
+  change anything in the database service: a new user, database or password is set up there.
 - [ ] `POSTGRES_PASSWORD` uses URL-safe characters only (letters, digits, `-`, `_`): it is
   interpolated into the connection URL.
+- [ ] `web` and the database are on the same Docker network (`dokploy-network`); otherwise the
+  hostname doesn't resolve.
 - [ ] Migrations apply themselves on first start; watch the `web` log for `[db] applied migration`.
 
 ### First Super Admin
